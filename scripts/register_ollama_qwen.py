@@ -10,13 +10,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "apps" / "api"))
 
-from sqlalchemy import select
-from aegis_api.db.session import session_factory
-from aegis_api.db.base import utcnow
-from aegis_api.models.systems import AISystem, Provider
-from aegis_api.models.tenancy import Organization
-from engines.providers.ollama import OllamaProvider
-from engines.providers.base import GenerationRequest
+from sqlalchemy import select  # noqa: E402
+
+from aegis_api.db.base import utcnow  # noqa: E402
+from aegis_api.db.session import session_factory  # noqa: E402
+from aegis_api.models.systems import AISystem, Provider  # noqa: E402
+from aegis_api.models.tenancy import Organization  # noqa: E402
+from engines.providers.ollama import OllamaProvider  # noqa: E402
 
 
 def main():
@@ -34,9 +34,7 @@ def main():
 
         for org in orgs:
             # 1. Ensure Ollama Provider
-            prov = session.scalar(
-                select(Provider).where(Provider.organization_id == org.id, Provider.kind == "ollama")
-            )
+            prov = session.scalar(select(Provider).where(Provider.organization_id == org.id, Provider.kind == "ollama"))
             if prov is None:
                 prov = Provider(
                     organization_id=org.id,

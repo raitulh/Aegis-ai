@@ -4,19 +4,19 @@
 from __future__ import annotations
 
 import sys
-import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "apps" / "api"))
 
-from sqlalchemy import select
-from aegis_api.db.session import session_factory, set_tenant
-from aegis_api.models.systems import AISystem
-from aegis_api.models.audit import Audit
-from aegis_api.models.enums import AuditStatus
-from aegis_api.services import orchestrator
+from sqlalchemy import select  # noqa: E402
+
+from aegis_api.db.session import session_factory, set_tenant  # noqa: E402
+from aegis_api.models.audit import Audit  # noqa: E402
+from aegis_api.models.enums import AuditStatus  # noqa: E402
+from aegis_api.models.systems import AISystem  # noqa: E402
+from aegis_api.services import orchestrator  # noqa: E402
 
 
 def main():

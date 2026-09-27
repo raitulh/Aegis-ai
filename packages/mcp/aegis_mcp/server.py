@@ -19,7 +19,7 @@ from aegis_ai.errors import AegisError
 try:  # mcp >= 2.0
     from mcp.server.mcpserver import MCPServer as _Server
 except ImportError:  # pragma: no cover - mcp < 2.0 fallback
-    from mcp.server.fastmcp import FastMCP as _Server  # type: ignore[attr-defined,no-redef]
+    from mcp.server.fastmcp import FastMCP as _Server
 
 mcp = _Server("aegis-ai")
 

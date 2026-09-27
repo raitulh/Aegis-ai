@@ -13,7 +13,7 @@ concurrency:
 env:
   UV_VERSION: "0.5.11"
   PNPM_VERSION: "10.28.0"
-  NODE_VERSION: "20"
+  NODE_VERSION: "22"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -67,7 +67,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: mypy (type-check)
-        run: uv run mypy apps/api/aegis_api engines workers database/seed packages/sdk/python/aegis_ai packages/mcp/aegis_mcp
+        run: uv run mypy apps/api/aegis_api engines workers packages/sdk/python/aegis_ai packages/mcp/aegis_mcp
 
       - name: Provision app role
         run: |

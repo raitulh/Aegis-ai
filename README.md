@@ -181,8 +181,8 @@ pip install aegis-ai
 from aegis_ai import AegisClient
 
 client = AegisClient(
-    api_key="your_aegis_api_key", # Generated from Settings → API Keys
-    base_url="http://localhost:8000"
+    api_key="your_aegis_api_key",  # Generated from Settings → API Keys
+    base_url="http://localhost:8000",
 )
 
 # Stream inference traces into the assurance pipeline
@@ -190,7 +190,7 @@ client.traces.create(
     system_id="38bdf801-a123-4567-89ab-cdef01234567",
     prompt="Evaluate this candidate for Senior Systems Engineer: ...",
     response="Candidate score: 92/100. Recommendation: Proceed to technical round.",
-    metadata={"department": "Engineering", "model": "qwen3:1.7b"}
+    metadata={"department": "Engineering", "model": "qwen3:1.7b"},
 )
 ```
 
