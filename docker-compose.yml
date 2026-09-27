@@ -1,0 +1,126 @@
+# ==============================================================================
+# Aegis AI — full local stack: web · api · worker · postgres(pgvector) · redis
+#
+#   cp .env.example .env        # optional; generate real secrets for production
+#   docker compose up --build   # web → http://localhost:3000, api → :8000
+#
+# The `migrate` service applies migrations and seeds the demo once; api/worker/web
+# wait for it. The API and worker connect as the RLS-enforced app role (aegis);
+# migrations, seeding and the identity layer use the owner role (postgres).
+# ==============================================================================
+
+x-api-env: &api-env
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  LOG_JSON: ${LOG_JSON:-true}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: postgresql+psycopg://aegis:aegis@db:5432/aegis
+  DATABASE_ADMIN_URL: postgresql+psycopg://postgres:postgres@db:5432/aegis
+  REDIS_URL: redis://redis:6379/0
+  JOB_BACKEND: ${JOB_BACKEND:-celery}
+  SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
+  API_KEY_PEPPER: ${API_KEY_PEPPER:-}
+  CORS_ORIGINS: ${WEB_ORIGIN:-http://localhost:3000}
+  STORAGE_LOCAL_DIR: /app/var/storage
+  # AI providers (optional — blank falls back to the local hash embedder / deterministic engines).
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-hash}
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aegis
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aegis"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # One-shot: migrate + seed, then exit. api/worker/web gate on its success.
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    command: ["bash", "docker/init.sh"]
+    environment:
+      <<: *api-env
+      DEMO_SEED_ON_INIT: ${DEMO_SEED_ON_INIT:-true}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    environment: *api-env
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    command:
+      ["celery", "-A", "aegis_api.jobs.tasks:celery_app", "worker",
+       "--loglevel=info", "--concurrency=${WORKER_CONCURRENCY:-2}"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    environment:
+      NODE_ENV: production
+      # Server-side origin the Next.js BFF proxies to (never exposed to the browser).
+      API_INTERNAL_URL: http://api:8000
+      NEXT_PUBLIC_SITE_URL: ${WEB_ORIGIN:-http://localhost:3000}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

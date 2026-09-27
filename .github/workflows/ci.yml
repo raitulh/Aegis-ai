@@ -1,0 +1,213 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.5.11"
+  PNPM_VERSION: "10.28.0"
+  NODE_VERSION: "20"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend: lint, type-check, migrate and test the Python API + engines.
+  # ---------------------------------------------------------------------------
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aegis_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://aegis:aegis@127.0.0.1:5432/aegis_test
+      DATABASE_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/aegis_test
+      TEST_DATABASE_URL: postgresql://aegis:aegis@127.0.0.1:5432/aegis_test
+      TEST_DATABASE_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/aegis_test
+      PGPASSWORD: postgres
+      ENVIRONMENT: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Ruff (lint)
+        run: uv run ruff check .
+
+      - name: Ruff (format check)
+        run: uv run ruff format --check .
+
+      - name: mypy (type-check)
+        run: uv run mypy apps/api/aegis_api engines workers database/seed packages/sdk/python/aegis_ai packages/mcp/aegis_mcp
+
+      - name: Provision app role
+        run: |
+          psql "$DATABASE_ADMIN_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE EXTENSION IF NOT EXISTS vector;
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='aegis_app') THEN CREATE ROLE aegis_app NOLOGIN; END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='aegis') THEN CREATE ROLE aegis LOGIN PASSWORD 'aegis'; END IF;
+            GRANT aegis_app TO aegis;
+          END $$;
+          SQL
+
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      - name: Pytest (unit, integration, evaluation)
+        run: uv run pytest --cov --cov-report=term-missing
+
+  # ---------------------------------------------------------------------------
+  # Frontend: lint, type-check, unit-test and build the Next.js app.
+  # ---------------------------------------------------------------------------
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: ESLint
+        run: pnpm --filter @aegis/web lint
+
+      - name: TypeScript
+        run: pnpm --filter @aegis/web typecheck
+
+      - name: Vitest
+        run: pnpm --filter @aegis/web test
+
+      - name: Build
+        run: pnpm --filter @aegis/web build
+        env:
+          NEXT_OUTPUT_TRACING_ROOT: ${{ github.workspace }}
+
+  # ---------------------------------------------------------------------------
+  # End-to-end: real API + web, driven by Playwright (manages both servers).
+  # ---------------------------------------------------------------------------
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, web]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aegis_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+    env:
+      E2E_DATABASE_URL: postgresql://aegis:aegis@127.0.0.1:5432/aegis_e2e
+      E2E_DATABASE_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/aegis_e2e
+      DATABASE_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/aegis_e2e
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install 3.12
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install web deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Provision app role + migrate
+        run: |
+          psql "$DATABASE_ADMIN_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE EXTENSION IF NOT EXISTS vector;
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='aegis_app') THEN CREATE ROLE aegis_app NOLOGIN; END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='aegis') THEN CREATE ROLE aegis LOGIN PASSWORD 'aegis'; END IF;
+            GRANT aegis_app TO aegis;
+          END $$;
+          SQL
+          uv run alembic upgrade head
+
+      - name: Build web
+        run: pnpm --filter @aegis/web build
+        env:
+          NEXT_OUTPUT_TRACING_ROOT: ${{ github.workspace }}
+
+      - name: Install Playwright browser
+        run: pnpm --filter @aegis/web exec playwright install --with-deps chromium
+
+      - name: Run E2E
+        run: pnpm --filter @aegis/web test:e2e
+
+  # ---------------------------------------------------------------------------
+  # Docker: verify both images build (no push).
+  # ---------------------------------------------------------------------------
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.api
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.web
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

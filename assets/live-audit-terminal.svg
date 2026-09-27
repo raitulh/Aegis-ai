@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 340" width="100%" height="100%" style="background: transparent; border-radius: 12px; overflow: hidden;">
+  <defs>
+    <style>
+      @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+      @keyframes step1 { 0% { opacity: 0; } 10%, 100% { opacity: 1; } }
+      @keyframes step2 { 0%, 15% { opacity: 0; } 25%, 100% { opacity: 1; } }
+      @keyframes step3 { 0%, 35% { opacity: 0; } 45%, 100% { opacity: 1; } }
+      @keyframes step4 { 0%, 55% { opacity: 0; } 65%, 100% { opacity: 1; } }
+      @keyframes step5 { 0%, 75% { opacity: 0; } 85%, 100% { opacity: 1; } }
+      
+      .cursor { animation: blink 1s infinite; fill: #38bdf8; }
+      .line-1 { animation: step1 12s infinite; }
+      .line-2 { animation: step2 12s infinite; }
+      .line-3 { animation: step3 12s infinite; }
+      .line-4 { animation: step4 12s infinite; }
+      .line-5 { animation: step5 12s infinite; }
+    </style>
+  </defs>
+
+  <!-- Terminal Window Background -->
+  <rect width="900" height="340" rx="12" fill="#090d16" stroke="#1e293b" stroke-width="1.5" />
+  
+  <!-- Terminal Title Bar -->
+  <rect width="900" height="38" rx="12" fill="#0f172a" />
+  <circle cx="24" cy="19" r="6" fill="#ef4444" />
+  <circle cx="44" cy="19" r="6" fill="#f59e0b" />
+  <circle cx="64" cy="19" r="6" fill="#10b981" />
+  <text x="450" y="24" fill="#94a3b8" font-family="'JetBrains Mono', 'Fira Code', monospace" font-size="12" font-weight="600" text-anchor="middle">
+    aegis-cli · live assurance run (qwen3:1.7b)
+  </text>
+
+  <!-- Terminal Content -->
+  <g transform="translate(28, 70)" font-family="'JetBrains Mono', 'Fira Code', monospace" font-size="13">
+    <!-- Prompt Command -->
+    <text x="0" y="0" fill="#38bdf8" font-weight="600">$ aegis audit run --target local-ollama --model Qwen3:1.7B --intensity standard</text>
+    
+    <!-- Step 1: Probe Generation -->
+    <g class="line-1" transform="translate(0, 32)">
+      <text x="0" y="0" fill="#94a3b8">✔ Generating 18 adversarial &amp; counterfactual probes across 6 categories</text>
+      <text x="730" y="0" fill="#34d399">100% [================]</text>
+    </g>
+
+    <!-- Step 2: Inference & Execution -->
+    <g class="line-2" transform="translate(0, 64)">
+      <text x="0" y="0" fill="#94a3b8">✦ Executing live inference on http://localhost:11434 (think: False)</text>
+      <text x="730" y="0" fill="#38bdf8">18/18 verified (2.1s)</text>
+    </g>
+
+    <!-- Step 3: Pure Engine Verification -->
+    <g class="line-3" transform="translate(0, 96)">
+      <text x="0" y="0" fill="#94a3b8">✦ Running Deterministic Engines: Fairness (EEOC) · Grounding · Privacy · Safety</text>
+    </g>
+
+    <!-- Step 4: Evidence Hash Chain -->
+    <g class="line-4" transform="translate(0, 134)">
+      <rect x="0" y="-18" width="844" height="42" rx="6" fill="#042f2e" stroke="#059669" stroke-width="1" />
+      <text x="16" y="8" fill="#34d399" font-weight="700">✔ EVIDENCE SEALED:</text>
+      <text x="175" y="8" fill="#a7f3d0">sha256:7f9a2b8... (18 immutable records written to PostgreSQL trigger vault)</text>
+    </g>
+
+    <!-- Step 5: Summary Output -->
+    <g class="line-5" transform="translate(0, 205)">
+      <text x="0" y="0" fill="#f8fafc" font-weight="700">Audit Verdict: <tspan fill="#34d399">PASSED (Score: 94.4/100)</tspan></text>
+      <text x="0" y="24" fill="#94a3b8">Active Findings: <tspan fill="#fbbf24">1 Low Risk (PII phone disclosure heuristic)</tspan> · Remediations Ready</text>
+      <text x="0" y="48" fill="#38bdf8">Dashboard URL: <tspan text-decoration="underline">http://localhost:3000/dashboard/audits/084a9eeb-5aee</tspan></text>
+    </g>
+
+    <!-- Blinking Cursor -->
+    <rect x="520" y="-13" width="8" height="16" class="cursor" />
+  </g>
+</svg>

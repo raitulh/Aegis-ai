@@ -1,0 +1,48 @@
+# VCS / tooling
+.git
+.github
+.gitignore
+.editorconfig
+
+# dependencies & virtualenvs (reinstalled inside the image)
+node_modules
+**/node_modules
+.venv
+.pnpm-store
+__pycache__
+**/__pycache__
+*.py[cod]
+*.egg-info
+
+# build output
+.next
+**/.next
+out
+dist
+build
+*.tsbuildinfo
+
+# caches
+.mypy_cache
+.ruff_cache
+.pytest_cache
+coverage
+.coverage
+htmlcov
+playwright-report
+test-results
+blob-report
+
+# local env & data (never bake secrets into an image)
+.env
+.env.*
+!.env.example
+var
+storage
+*.log
+.DS_Store
+
+# docs & meta not needed at runtime
+docs
+*.md
+!README.md

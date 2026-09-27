@@ -1,0 +1,145 @@
+@import "tailwindcss";
+
+/*
+  Aegis AI design tokens. Dark, calm, technical. Near-black surfaces, restrained blue accent,
+  distinct severity colors that never rely on color alone (paired with icons + labels in the UI).
+*/
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-bg: #07090e;
+  --color-bg-elevated: #0c0f16;
+  --color-surface: #111520;
+  --color-surface-2: #161b28;
+  --color-surface-3: #1c2333;
+  --color-border: #1e2534;
+  --color-border-strong: #2b3348;
+  --color-text: #e7ebf3;
+  --color-text-muted: #9aa4b8;
+  --color-text-subtle: #6b7488;
+
+  --color-accent: #4c8dff;
+  --color-accent-bright: #6ba3ff;
+  --color-accent-dim: #1a2c4d;
+
+  --color-critical: #ff5c6c;
+  --color-high: #ff8a4c;
+  --color-medium: #f5c451;
+  --color-low: #4c8dff;
+  --color-info: #7a8699;
+  --color-success: #3ecf8e;
+  --color-warning: #f5c451;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle grid + noise backdrop used on marketing and command-center surfaces. */
+.aegis-grid {
+  background-image:
+    linear-gradient(to right, rgba(76, 141, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(76, 141, 255, 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.aegis-radial {
+  background: radial-gradient(1200px 600px at 50% -10%, rgba(76, 141, 255, 0.12), transparent 60%);
+}
+.aegis-noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--color-bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4358;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes dash {
+  to { stroke-dashoffset: -1000; }
+}
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface-2);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+  animation: shimmer 1.6s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.font-georgia,
+.font-georgia * {
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+}
+.font-georgia .font-mono,
+.font-georgia .font-mono * {
+  font-family: var(--font-mono);
+}

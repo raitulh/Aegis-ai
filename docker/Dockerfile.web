@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1.7
+# ==============================================================================
+# Aegis AI — web image (Next.js 16 standalone, Node 20 + pnpm)
+# Builds the App Router frontend and ships the minimal standalone server bundle.
+# ==============================================================================
+
+FROM node:20-slim AS base
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    NEXT_TELEMETRY_DISABLED=1
+RUN corepack enable
+
+# ---- dependencies ------------------------------------------------------------
+FROM base AS deps
+WORKDIR /repo
+# Workspace manifests + lockfile only, so installs are cached across source edits.
+# apps/web is the only JS workspace package with a manifest; packages/{ui,types,config}
+# are placeholder members (no package.json) and contribute nothing to the install.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/web/package.json apps/web/
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile
+
+# ---- build -------------------------------------------------------------------
+FROM base AS build
+WORKDIR /repo
+COPY --from=deps /repo/node_modules ./node_modules
+COPY --from=deps /repo/apps/web/node_modules ./apps/web/node_modules
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/web apps/web
+# Standalone output + tracing root (repo root) so the pruned bundle traces workspace deps.
+ENV NEXT_BUILD_STANDALONE=1 \
+    NEXT_OUTPUT_TRACING_ROOT=/repo
+RUN pnpm --filter @aegis/web build
+
+# ---- runtime -----------------------------------------------------------------
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && addgroup --system --gid 10001 nodejs \
+    && adduser --system --uid 10001 nextjs
+
+# Standalone output already contains a pruned node_modules and server.js.
+COPY --from=build --chown=nextjs:nodejs /repo/apps/web/.next/standalone ./
+COPY --from=build --chown=nextjs:nodejs /repo/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build --chown=nextjs:nodejs /repo/apps/web/public ./apps/web/public
+
+USER nextjs
+EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl -fsS http://localhost:3000/ || exit 1
+
+# server.js lives beside the app in the traced standalone tree.
+CMD ["node", "apps/web/server.js"]

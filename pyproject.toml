@@ -1,0 +1,107 @@
+[project]
+name = "aegis-platform"
+version = "1.0.0"
+description = "Aegis AI — Continuous AI Assurance & Governance Platform (API, engines, workers)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.8",
+  "pydantic-settings>=2.4",
+  "email-validator>=2.2",
+  "sqlalchemy>=2.0.30",
+  "alembic>=1.13",
+  "psycopg[binary]>=3.2",
+  "pgvector>=0.3",
+  "redis>=5.0,<6.0",
+  "celery>=5.4",
+  "httpx>=0.27",
+  "structlog>=24.4",
+  "pyjwt[crypto]>=2.9",
+  "cryptography>=43",
+  "argon2-cffi>=23.1",
+  "python-multipart>=0.0.9",
+  "pypdf>=5.0",
+  "python-docx>=1.1",
+  "pyyaml>=6.0",
+  "numpy>=2.0",
+  "reportlab>=4.2",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "types-PyYAML>=6.0",
+  "celery-types>=0.22",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/sdk/python", "packages/mcp"]
+
+[tool.uv.sources]
+aegis-ai = { workspace = true }
+aegis-mcp = { workspace = true }
+
+# ---------------------------------------------------------------------------
+# Tooling
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["apps/web", "node_modules", ".venv", "database/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "S", "C4", "SIM", "RUF", "PTH", "T20"]
+ignore = [
+  "E501",   # line length is enforced by the formatter; long descriptive strings are exempt
+  "S101",   # assert used in tests
+  "B008",   # FastAPI Depends() in defaults is idiomatic
+  "RUF012", # mutable class attrs on SQLAlchemy/Pydantic models
+  "S311",   # random is used for deterministic, seeded test generation only
+  "N818",   # exception naming
+  "RUF001", # ambiguous unicode (em dash / bullet) in UI-facing strings is intentional
+  "RUF002",
+  "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108", "S113", "N802", "T20"]
+"scripts/**" = ["T20"]
+# The SDK targets Python >=3.10, so it keeps typing.Generic instead of PEP 695 syntax.
+"packages/sdk/python/**" = ["UP046", "UP047"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["aegis_api", "engines", "workers", "database", "aegis_ai", "aegis_mcp"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = ["$MYPY_CONFIG_FILE_DIR", "$MYPY_CONFIG_FILE_DIR/apps/api"]
+explicit_package_bases = true
+namespace_packages = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_incomplete_defs = false
+exclude = ["apps/web", "database/migrations/versions", "node_modules", ".venv", "packages/sdk/python/build"]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "apps/api", "packages/sdk/python", "packages/mcp"]
+testpaths = ["tests/unit", "tests/integration", "tests/evaluation"]
+addopts = "-q --strict-markers"
+markers = [
+  "db: requires a PostgreSQL database (TEST_DATABASE_URL)",
+  "redis: requires Redis (REDIS_URL)",
+]
+filterwarnings = ["ignore::DeprecationWarning:celery.*", "ignore::DeprecationWarning:kombu.*", "ignore::DeprecationWarning:starlette.*"]
+
+[tool.coverage.run]
+source = ["apps/api/aegis_api", "engines", "workers"]

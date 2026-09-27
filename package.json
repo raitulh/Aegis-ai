@@ -1,0 +1,35 @@
+{
+  "name": "aegis-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aegis AI \u2014 Continuous AI Assurance & Governance Platform",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "pnpm --filter @aegis/web dev",
+    "dev:api": "bash scripts/run-api.sh",
+    "dev:worker": "bash scripts/run-worker.sh",
+    "build": "pnpm --filter @aegis/web build",
+    "lint": "pnpm -r --if-present lint && pnpm lint:py",
+    "lint:py": "uv run ruff check . && uv run ruff format --check .",
+    "typecheck": "pnpm -r --if-present typecheck && pnpm typecheck:py",
+    "typecheck:py": "uv run mypy apps/api/aegis_api engines workers packages/sdk/python/aegis_ai packages/mcp/aegis_mcp",
+    "test": "pnpm test:py && pnpm test:web",
+    "test:py": "uv run pytest",
+    "test:web": "pnpm --filter @aegis/web test",
+    "test:e2e": "pnpm --filter @aegis/web test:e2e",
+    "db:migrate": "bash scripts/migrate.sh",
+    "db:seed": "uv run python scripts/seed_demo.py",
+    "gen:types": "uv run python scripts/export_openapi.py && pnpm --filter @aegis/types generate",
+    "format": "uv run ruff format . && pnpm -r --if-present format"
+  },
+  "pnpm": {
+    "overrides": {
+      "motion-dom": "12.23.23",
+      "motion-utils": "12.23.6"
+    }
+  }
+}

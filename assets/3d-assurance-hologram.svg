@@ -1,0 +1,311 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 460" width="100%" height="100%" style="background: transparent; border-radius: 16px; overflow: hidden;">
+  <defs>
+    <!-- Background Gradients -->
+    <radialGradient id="bg-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e3a8a" stop-opacity="0.35" />
+      <stop offset="45%" stop-color="#0f172a" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#020617" stop-opacity="0.95" />
+    </radialGradient>
+    <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.9" />
+      <stop offset="40%" stop-color="#3b82f6" stop-opacity="0.6" />
+      <stop offset="80%" stop-color="#1d4ed8" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="emerald-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="1" />
+      <stop offset="60%" stop-color="#059669" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#059669" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Linear Gradients for 3D Beams -->
+    <linearGradient id="beam-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#1e3a8a" stop-opacity="0.1" />
+    </linearGradient>
+    <linearGradient id="beam-emerald" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#064e3b" stop-opacity="0.1" />
+    </linearGradient>
+    <linearGradient id="beam-rose" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb7185" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#881337" stop-opacity="0.1" />
+    </linearGradient>
+    <linearGradient id="beam-purple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#581c87" stop-opacity="0.1" />
+    </linearGradient>
+    <linearGradient id="beam-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fcd34d" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#78350f" stop-opacity="0.1" />
+    </linearGradient>
+
+    <!-- Filters for Bloom and Neon Glow -->
+    <filter id="bloom" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="soft-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <style>
+      /* Keyframe 3D Animations */
+      @keyframes spin3D-1 {
+        0% { transform: rotate(0deg) scaleY(0.42); }
+        100% { transform: rotate(360deg) scaleY(0.42); }
+      }
+      @keyframes spin3D-2 {
+        0% { transform: rotate(60deg) scaleY(0.38); }
+        100% { transform: rotate(420deg) scaleY(0.38); }
+      }
+      @keyframes spin3D-3 {
+        0% { transform: rotate(-55deg) scaleY(0.46); }
+        100% { transform: rotate(305deg) scaleY(0.46); }
+      }
+      @keyframes pulseCore {
+        0%, 100% { transform: scale(1); opacity: 0.85; filter: drop-shadow(0 0 18px #38bdf8); }
+        50% { transform: scale(1.1); opacity: 1; filter: drop-shadow(0 0 35px #60a5fa); }
+      }
+      @keyframes floatSlow {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-7px); }
+      }
+      @keyframes floatReverse {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(6px); }
+      }
+      @keyframes radarWave {
+        0% { r: 12px; opacity: 0.9; stroke-width: 2px; }
+        100% { r: 38px; opacity: 0; stroke-width: 0.5px; }
+      }
+      @keyframes photonDash {
+        to { stroke-dashoffset: -120; }
+      }
+      @keyframes blinkStatus {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+      }
+
+      .center-transform {
+        transform-origin: 500px 220px;
+      }
+      .ring-1 {
+        animation: spin3D-1 14s linear infinite;
+        transform-origin: 500px 220px;
+      }
+      .ring-2 {
+        animation: spin3D-2 20s linear infinite reverse;
+        transform-origin: 500px 220px;
+      }
+      .ring-3 {
+        animation: spin3D-3 16s linear infinite;
+        transform-origin: 500px 220px;
+      }
+      .quantum-sphere {
+        animation: pulseCore 4s ease-in-out infinite;
+        transform-origin: 500px 220px;
+      }
+      .beam-line {
+        stroke-dasharray: 6 12;
+        animation: photonDash 2s linear infinite;
+      }
+      .node-float-1 { animation: floatSlow 5s ease-in-out infinite; }
+      .node-float-2 { animation: floatReverse 6s ease-in-out infinite; }
+      .radar-circle {
+        animation: radarWave 2.8s cubic-bezier(0.2, 0.8, 0.4, 1) infinite;
+      }
+      .radar-circle-delay {
+        animation: radarWave 2.8s cubic-bezier(0.2, 0.8, 0.4, 1) infinite 1.4s;
+      }
+      .status-dot {
+        animation: blinkStatus 1.5s ease-in-out infinite;
+      }
+    </style>
+  </defs>
+
+  <!-- Container Box with Deep Cyber Glass Background -->
+  <rect width="1000" height="460" rx="16" fill="#030712" stroke="#1e293b" stroke-width="1.5" />
+  <rect width="1000" height="460" rx="16" fill="url(#bg-glow)" />
+
+  <!-- Subtle Perspective Grid Lines -->
+  <g stroke="#1e293b" stroke-width="0.7" opacity="0.35">
+    <line x1="0" y1="220" x2="1000" y2="220" stroke-dasharray="4 8" />
+    <line x1="500" y1="0" x2="500" y2="460" stroke-dasharray="4 8" />
+    <circle cx="500" cy="220" r="160" fill="none" stroke-dasharray="2 6" />
+    <circle cx="500" cy="220" r="280" fill="none" stroke-dasharray="3 9" />
+  </g>
+
+  <!-- Dynamic HUD Header -->
+  <g transform="translate(24, 28)">
+    <!-- Active Status Badge -->
+    <rect x="0" y="0" width="220" height="32" rx="16" fill="#090d16" stroke="#0284c7" stroke-width="1" opacity="0.9" />
+    <circle cx="16" cy="16" r="4.5" fill="#34d399" class="status-dot" filter="url(#soft-glow)" />
+    <text x="30" y="20" fill="#bae6fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" letter-spacing="1.2">
+      AEGIS NEURAL CORE · ACTIVE
+    </text>
+  </g>
+
+  <g transform="translate(680, 28)">
+    <!-- Right Telemetry Badge -->
+    <rect x="0" y="0" width="296" height="32" rx="16" fill="#090d16" stroke="#334155" stroke-width="1" opacity="0.8" />
+    <text x="14" y="20" fill="#94a3b8" font-family="'JetBrains Mono', 'Fira Code', monospace" font-size="10" font-weight="500">
+      SHA-256 PROOF CHAIN · 6 EVALUATORS
+    </text>
+  </g>
+
+  <!-- ==================== 3D CONNECTION BEAMS ==================== -->
+  <g>
+    <!-- Fairness (Top Left) -->
+    <path d="M 500 220 Q 320 180 180 110" fill="none" stroke="#3b82f6" stroke-width="1.8" class="beam-line" opacity="0.8" />
+    <!-- Grounding (Top Right) -->
+    <path d="M 500 220 Q 680 170 820 110" fill="none" stroke="#10b981" stroke-width="1.8" class="beam-line" opacity="0.8" />
+    <!-- Safety (Bottom Right) -->
+    <path d="M 500 220 Q 690 270 830 330" fill="none" stroke="#f43f5e" stroke-width="1.8" class="beam-line" opacity="0.8" />
+    <!-- Security (Bottom Left) -->
+    <path d="M 500 220 Q 310 270 170 330" fill="none" stroke="#a855f7" stroke-width="1.8" class="beam-line" opacity="0.8" />
+    <!-- Privacy (Top Center) -->
+    <path d="M 500 220 Q 480 130 500 68" fill="none" stroke="#38bdf8" stroke-width="1.8" class="beam-line" opacity="0.8" />
+    <!-- Governance (Bottom Center) -->
+    <path d="M 500 220 Q 520 310 500 375" fill="none" stroke="#f59e0b" stroke-width="1.8" class="beam-line" opacity="0.8" />
+
+    <!-- Inter-Node Web Mesh -->
+    <path d="M 180 110 L 500 68 L 820 110 L 830 330 L 500 375 L 170 330 Z" fill="none" stroke="#334155" stroke-width="1" stroke-dasharray="3 6" opacity="0.4" />
+  </g>
+
+  <!-- ==================== 3D GYROSCOPIC QUANTUM CORE ==================== -->
+  <g class="center-transform">
+    <!-- Ambient Core Backlight -->
+    <circle cx="500" cy="220" r="95" fill="url(#core-glow)" />
+
+    <!-- Gyroscopic Rings -->
+    <!-- Ring 1 (Horizontal Inclined) -->
+    <g class="ring-1">
+      <ellipse cx="500" cy="220" rx="145" ry="145" fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="28 14 6 14" opacity="0.85" filter="url(#soft-glow)" />
+      <circle cx="645" cy="220" r="3.5" fill="#e0f2fe" filter="url(#bloom)" />
+      <circle cx="355" cy="220" r="3" fill="#bae6fd" />
+    </g>
+
+    <!-- Ring 2 (Tilted 60 deg) -->
+    <g class="ring-2">
+      <ellipse cx="500" cy="220" rx="165" ry="165" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="24 16" opacity="0.75" filter="url(#soft-glow)" />
+      <circle cx="665" cy="220" r="3.5" fill="#a7f3d0" />
+    </g>
+
+    <!-- Ring 3 (Tilted -55 deg) -->
+    <g class="ring-3">
+      <ellipse cx="500" cy="220" rx="180" ry="180" fill="none" stroke="#c084fc" stroke-width="1.4" stroke-dasharray="32 20 8 16" opacity="0.65" />
+      <circle cx="680" cy="220" r="3" fill="#f3e8ff" />
+    </g>
+
+    <!-- Wireframe Rotating Outer Cage -->
+    <g class="ring-1" opacity="0.4">
+      <polygon points="500,165 548,193 548,247 500,275 452,247 452,193" fill="none" stroke="#93c5fd" stroke-width="1.5" />
+    </g>
+
+    <!-- Central Pulsing Hologram Core -->
+    <g class="quantum-sphere">
+      <circle cx="500" cy="220" r="44" fill="url(#core-glow)" filter="url(#bloom)" />
+      <circle cx="500" cy="220" r="32" fill="#0284c7" opacity="0.8" />
+      <circle cx="500" cy="220" r="22" fill="#38bdf8" opacity="0.95" />
+      <circle cx="500" cy="220" r="12" fill="#ffffff" filter="url(#soft-glow)" />
+    </g>
+  </g>
+
+  <!-- ==================== 6 ORBITING ASSURANCE DOMAIN NODES ==================== -->
+
+  <!-- NODE 1: FAIRNESS (Top Left) -->
+  <g class="node-float-1" transform="translate(180, 110)">
+    <circle cx="0" cy="0" r="16" fill="none" stroke="#3b82f6" class="radar-circle" />
+    <circle cx="0" cy="0" r="16" fill="none" stroke="#60a5fa" class="radar-circle-delay" />
+    <circle cx="0" cy="0" r="14" fill="#1e3a8a" stroke="#60a5fa" stroke-width="2.5" filter="url(#soft-glow)" />
+    <circle cx="0" cy="0" r="6" fill="#93c5fd" />
+    <!-- HUD Card -->
+    <g transform="translate(-130, -38)">
+      <rect width="120" height="42" rx="8" fill="#090d16" stroke="#1d4ed8" stroke-width="1" opacity="0.9" />
+      <text x="12" y="17" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="11" font-weight="700">Fairness</text>
+      <text x="12" y="32" fill="#60a5fa" font-family="monospace" font-size="10" font-weight="600">0.0% Disparity</text>
+    </g>
+  </g>
+
+  <!-- NODE 2: GROUNDING / NLI (Top Right) -->
+  <g class="node-float-2" transform="translate(820, 110)">
+    <circle cx="0" cy="0" r="16" fill="none" stroke="#10b981" class="radar-circle" />
+    <circle cx="0" cy="0" r="16" fill="none" stroke="#34d399" class="radar-circle-delay" />
+    <circle cx="0" cy="0" r="14" fill="#064e3b" stroke="#34d399" stroke-width="2.5" filter="url(#soft-glow)" />
+    <circle cx="0" cy="0" r="6" fill="#a7f3d0" />
+    <!-- HUD Card -->
+    <g transform="translate(22, -38)">
+      <rect width="130" height="42" rx="8" fill="#090d16" stroke="#059669" stroke-width="1" opacity="0.9" />
+      <text x="12" y="17" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="11" font-weight="700">Grounding</text>
+      <text x="12" y="32" fill="#34d399" font-family="monospace" font-size="10" font-weight="600">100% Evidenced</text>
+    </g>
+  </g>
+
+  <!-- NODE 3: SAFETY / HARMFUL REFUSAL (Bottom Right) -->
+  <g class="node-float-1" transform="translate(830, 330)">
+    <circle cx="0" cy="0" r="16" fill="none" stroke="#f43f5e" class="radar-circle" />
+    <circle cx="0" cy="0" r="14" fill="#881337" stroke="#fb7185" stroke-width="2.5" filter="url(#soft-glow)" />
+    <circle cx="0" cy="0" r="6" fill="#fecdd3" />
+    <!-- HUD Card -->
+    <g transform="translate(22, -6)">
+      <rect width="138" height="42" rx="8" fill="#090d16" stroke="#e11d48" stroke-width="1" opacity="0.9" />
+      <text x="12" y="17" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="11" font-weight="700">Safety</text>
+      <text x="12" y="32" fill="#fb7185" font-family="monospace" font-size="10" font-weight="600">99.8% Containment</text>
+    </g>
+  </g>
+
+  <!-- NODE 4: SECURITY / PROMPT INJECTION (Bottom Left) -->
+  <g class="node-float-2" transform="translate(170, 330)">
+    <circle cx="0" cy="0" r="16" fill="none" stroke="#a855f7" class="radar-circle" />
+    <circle cx="0" cy="0" r="14" fill="#581c87" stroke="#c084fc" stroke-width="2.5" filter="url(#soft-glow)" />
+    <circle cx="0" cy="0" r="6" fill="#e9d5ff" />
+    <!-- HUD Card -->
+    <g transform="translate(-130, -6)">
+      <rect width="120" height="42" rx="8" fill="#090d16" stroke="#9333ea" stroke-width="1" opacity="0.9" />
+      <text x="12" y="17" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="11" font-weight="700">Security</text>
+      <text x="12" y="32" fill="#c084fc" font-family="monospace" font-size="10" font-weight="600">Zero Leakage</text>
+    </g>
+  </g>
+
+  <!-- NODE 5: PRIVACY / PII (Top Center) -->
+  <g class="node-float-1" transform="translate(500, 68)">
+    <circle cx="0" cy="0" r="15" fill="none" stroke="#38bdf8" class="radar-circle" />
+    <circle cx="0" cy="0" r="12" fill="#075985" stroke="#38bdf8" stroke-width="2.5" filter="url(#soft-glow)" />
+    <circle cx="0" cy="0" r="5" fill="#e0f2fe" />
+    <!-- HUD Card -->
+    <g transform="translate(-65, -42)">
+      <rect width="130" height="34" rx="6" fill="#090d16" stroke="#0284c7" stroke-width="1" opacity="0.9" />
+      <text x="10" y="15" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="10" font-weight="700">Privacy · PII Nullified</text>
+      <text x="10" y="27" fill="#38bdf8" font-family="monospace" font-size="9">Redaction Active</text>
+    </g>
+  </g>
+
+  <!-- NODE 6: GOVERNANCE / COMPLIANCE (Bottom Center) -->
+  <g class="node-float-2" transform="translate(500, 375)">
+    <circle cx="0" cy="0" r="15" fill="none" stroke="#f59e0b" class="radar-circle" />
+    <circle cx="0" cy="0" r="12" fill="#78350f" stroke="#fbbf24" stroke-width="2.5" filter="url(#soft-glow)" />
+    <circle cx="0" cy="0" r="5" fill="#fef3c7" />
+    <!-- HUD Card -->
+    <g transform="translate(-75, 18)">
+      <rect width="150" height="34" rx="6" fill="#090d16" stroke="#d97706" stroke-width="1" opacity="0.9" />
+      <text x="10" y="15" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="10" font-weight="700">Governance &amp; Controls</text>
+      <text x="10" y="27" fill="#fbbf24" font-family="monospace" font-size="9">NIST · ISO 42001 · EU AI</text>
+    </g>
+  </g>
+
+  <!-- Bottom Interactive Telemetry Banner -->
+  <g transform="translate(340, 422)">
+    <text x="160" y="16" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="10.5" font-weight="600" text-anchor="middle" letter-spacing="1">
+      ✦ CONTINUOUS MULTI-MODAL EVALUATIONS AT ENTERPRISE SCALE ✦
+    </text>
+  </g>
+</svg>
