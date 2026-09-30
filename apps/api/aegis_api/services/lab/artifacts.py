@@ -25,7 +25,7 @@ from aegis_api.models.lab import Artifact, ArtifactVersion
 from aegis_api.security.context import Principal
 from aegis_api.services import audit_log
 from aegis_api.services.lab import usage
-from aegis_api.services.lab.access import accessible_project_ids, get_scoped
+from aegis_api.services.lab.access import accessible_project_ids, get_scoped, scoped_ref
 
 RETENTION_CLASSES = frozenset({"standard", "evidence", "ephemeral"})
 SCAN_INLINE_MAX = 25 * 1024 * 1024
@@ -165,6 +165,10 @@ def upload(
 ) -> tuple[Artifact, ArtifactVersion]:
     """User upload. The caller commits its transaction before calling (no transaction across the upload)."""
     principal.require("artifact:upload")
+    if mission_id is not None:
+        from aegis_api.models.lab import Mission
+
+        scoped_ref(db, principal, Mission, mission_id, project_id=project_id, label="Mission")
     settings = get_settings()
     scope = str(project_id)
     tmp_key = object_key(principal.organization_id, "uploads", scope, uuid.uuid4().hex)

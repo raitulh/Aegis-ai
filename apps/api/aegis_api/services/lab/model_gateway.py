@@ -177,7 +177,12 @@ class ModelGateway:
                         mission=mission,
                         extra={
                             "budget": budget,
-                            "model": {"provider": decision.candidate.provider, "model": decision.candidate.model}
+                            "model": {
+                                "provider": decision.candidate.provider,
+                                "model": decision.candidate.model,
+                                "tier": decision.candidate.tier.value,
+                                "external": decision.candidate.data_leaves_organization,
+                            }
                             if decision.candidate
                             else {},
                             "task_type": task_type,
@@ -221,12 +226,19 @@ class ModelGateway:
         )
         if request.response_schema is not None:
             request = request.model_copy(update={"response_schema": inline_refs(request.response_schema)})
-        candidates = [plan.decision.candidate] + [
-            c for c in plan.registry.available_candidates() if c.key in plan.decision.alternatives
-        ]
+        by_key = {c.key: c for c in plan.registry.available_candidates()}
+        # Keep the router's ranking for failover (not registry order).
+        ranked = [plan.decision.candidate] + [by_key[k] for k in plan.decision.alternatives if k in by_key]
+        remaining: list[ModelCandidate] = [c for c in ranked if c is not None]
         attempts: list[dict[str, Any]] = []
         last_error: LLMError | None = None
-        for candidate in [c for c in candidates if c is not None][: MAX_FAILOVERS + 1]:
+        failed_providers: set[str] = set()
+        for _ in range(MAX_FAILOVERS + 1):
+            if not remaining:
+                break
+            # After a provider exhausted its retries, prefer a different provider (outages are provider-wide).
+            candidate = next((c for c in remaining if c.provider not in failed_providers), remaining[0])
+            remaining.remove(candidate)
             provider = plan.registry.provider(candidate.provider)
             started = time.perf_counter()
             try:
@@ -273,6 +285,7 @@ class ModelGateway:
                 latency = int((time.perf_counter() - started) * 1000)
                 self._record(ctx, request, candidate, plan.decision, None, latency, None, "", exc.code, prompt_hash)
                 attempts.append({"model": candidate.key, "outcome": exc.kind.value})
+                failed_providers.add(candidate.provider)
                 last_error = exc
                 if not exc.retryable:
                     raise

@@ -26,6 +26,8 @@ class Principal:
     scopes: list[str] = field(default_factory=list)
     # Service accounts may be restricted to specific projects (empty = all projects in the org).
     project_ids: frozenset[str] = frozenset()
+    # For workflow principals: the identity that originally launched the automation (kept through nesting).
+    delegated_actor_id: str | None = None
 
     @property
     def actor_type(self) -> str:
@@ -81,7 +83,7 @@ class Principal:
             "role": self.role,
             "permissions": sorted(self.permissions),
             "actor_type": self.actor_type,
-            "actor_id": self.actor_id,
+            "actor_id": self.delegated_actor_id or self.actor_id,
             "actor_label": self.actor_label,
             "project_ids": sorted(self.project_ids),
         }
@@ -107,4 +109,5 @@ def principal_from_snapshot(snapshot: dict[str, object], *, request_id: str | No
         auth_method="workflow",
         request_id=request_id,
         project_ids=frozenset(str(p) for p in projects) if isinstance(projects, list) else frozenset(),
+        delegated_actor_id=str(snapshot.get("actor_id") or snapshot["user_id"]),
     )

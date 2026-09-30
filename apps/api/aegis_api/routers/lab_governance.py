@@ -53,7 +53,7 @@ from aegis_api.security.context import Principal
 from aegis_api.services import audit_log, quota_service, webhook_service
 from aegis_api.services.lab import approvals, benchmarks, billing, mcp, retention, usage
 from aegis_api.services.lab import policy as lab_policy
-from aegis_api.services.lab.access import get_scoped
+from aegis_api.services.lab.access import get_project, get_scoped
 from aegis_api.services.lab.tools import BUILTIN_TOOLS
 from aegis_api.workflows import client as workflow_client
 from engines.lab.enums import WEBHOOK_EVENT_NAMES
@@ -577,13 +577,14 @@ def start_benchmark(
 ) -> Any:
     if idem.replay_response is not None:
         return idem.replay_response
+    project = get_project(db, principal, body.project_id) if body.project_id else None
     run = benchmarks.create_run(db, principal, suite_key=body.suite_key, subject_ref=body.subject_ref)
     wf = workflow_client.start(
         db,
         organization_id=principal.organization_id,
         workflow="benchmark",
         business_key=f"benchmark:{run.id}",
-        payload={"benchmark_run_id": str(run.id), "project_id": body.project_id},
+        payload={"benchmark_run_id": str(run.id), "project_id": str(project.id) if project else None},
         principal=principal,
     )
     payload = Accepted(id=str(run.id), status=run.status, workflow_run_id=str(wf.id)).model_dump()

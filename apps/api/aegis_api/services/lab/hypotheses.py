@@ -16,11 +16,11 @@ from sqlalchemy.orm import Session
 
 from aegis_api.db.session import session_scope
 from aegis_api.errors import ValidationFailed
-from aegis_api.models.lab import Hypothesis, HypothesisEvidence, ResearchSource
+from aegis_api.models.lab import Hypothesis, HypothesisEvidence, Mission, ResearchSource
 from aegis_api.security.context import Principal
 from aegis_api.services import audit_log
 from aegis_api.services.lab import events, graph
-from aegis_api.services.lab.access import accessible_project_ids, get_project, get_scoped
+from aegis_api.services.lab.access import accessible_project_ids, get_project, get_scoped, scoped_ref
 from aegis_api.services.lab.common import Actor
 from engines.lab.agents.schemas import HypothesisCritiques, HypothesisSet
 from engines.lab.enums import HypothesisStatus, LabEventType
@@ -212,10 +212,14 @@ def create(db: Session, principal: Principal, data: dict[str, Any]) -> Hypothesi
     prediction = data.get("measurable_prediction") or {}
     if not prediction.get("metric") or prediction.get("direction") not in ("increase", "decrease", "no_change"):
         raise ValidationFailed("measurable_prediction needs 'metric' and 'direction' (increase|decrease|no_change)")
+    mission = scoped_ref(db, principal, Mission, data.get("mission_id"), project_id=project.id, label="Mission")
+    parent = scoped_ref(
+        db, principal, Hypothesis, data.get("parent_hypothesis_id"), project_id=project.id, label="Hypothesis"
+    )
     h = Hypothesis(
         organization_id=principal.organization_id,
         project_id=project.id,
-        mission_id=data.get("mission_id"),
+        mission_id=mission.id if mission else None,
         statement=data["statement"],
         rationale=data.get("rationale"),
         expected_outcome=data.get("expected_outcome"),
@@ -226,7 +230,7 @@ def create(db: Session, principal: Principal, data: dict[str, Any]) -> Hypothesi
         confidence=data.get("confidence"),
         parameters=data.get("parameters") or {},
         status=HypothesisStatus.GENERATED,
-        parent_hypothesis_id=data.get("parent_hypothesis_id"),
+        parent_hypothesis_id=parent.id if parent else None,
         created_by_id=principal.user_id if principal.is_human else None,
     )
     db.add(h)

@@ -1177,7 +1177,7 @@ def discovery_create(actx: ActivityContext, p: dict[str, Any]) -> dict[str, Any]
             claim_id=_uuid(p["claim_id"]),
             actor=actx.actor,
             workflow_run_id=actx.run_id,
-            on_behalf_of=actx.principal.actor_id,
+            on_behalf_of=actx.launcher_actor_id,
         )
         return {
             "discovery_id": str(d.id),

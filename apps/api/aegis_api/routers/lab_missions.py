@@ -43,8 +43,7 @@ from aegis_api.security.context import Principal
 from aegis_api.services.lab import agents as agent_service
 from aegis_api.services.lab import events as event_service
 from aegis_api.services.lab import evidence, missions, prompts
-from aegis_api.services.lab.access import accessible_project_ids, get_scoped
-from aegis_api.services.lab.common import parse_uuid
+from aegis_api.services.lab.access import accessible_project_ids, get_project, get_scoped
 from engines.lab.agents.roles import ROLE_SPECS
 from engines.lab.autonomy import LEVEL_DESCRIPTIONS
 from engines.lab.enums import AutonomyLevel
@@ -335,6 +334,7 @@ def list_agents(principal: Principal = Depends(require("agent:read")), db: Sessi
 def create_agent(
     body: AgentIn, principal: Principal = Depends(require("agent:manage")), db: Session = Depends(get_db)
 ) -> AgentOut:
+    project = get_project(db, principal, body.project_id) if body.project_id else None
     agent, _version = agent_service.create_agent(
         db,
         principal,
@@ -342,7 +342,7 @@ def create_agent(
         name=body.name,
         description=body.description,
         config=body.config,
-        project_id=parse_uuid(body.project_id, "Project") if body.project_id else None,
+        project_id=project.id if project else None,
     )
     return AgentOut.model_validate(agent)
 

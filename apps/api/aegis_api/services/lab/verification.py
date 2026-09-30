@@ -41,6 +41,7 @@ from aegis_api.models.lab import (
     ExperimentMetric,
     ExperimentRun,
     ExperimentVersion,
+    Mission,
     ScientificClaim,
     Verification,
     VerificationRun,
@@ -48,7 +49,7 @@ from aegis_api.models.lab import (
 from aegis_api.security.context import Principal
 from aegis_api.services.lab import artifacts as artifact_service
 from aegis_api.services.lab import events, evidence, graph
-from aegis_api.services.lab.access import accessible_project_ids, get_scoped
+from aegis_api.services.lab.access import accessible_project_ids, get_scoped, scoped_ref
 from aegis_api.services.lab.common import Actor
 from engines.lab.enums import ClaimStatus, ExperimentStatus, LabEventType, RunKind
 from engines.lab.evaluation.base import EvaluationContext
@@ -163,12 +164,16 @@ def create_manual_claim(db: Session, principal: Principal, data: dict[str, Any])
     from aegis_api.services.lab.common import sha256_json
 
     project = get_project(db, principal, data["project_id"])
+    mission = scoped_ref(db, principal, Mission, data.get("mission_id"), project_id=project.id, label="Mission")
+    experiment = scoped_ref(
+        db, principal, Experiment, data.get("experiment_id"), project_id=project.id, label="Experiment"
+    )
     flags = overclaiming_terms(data["statement"])
     claim = ScientificClaim(
         organization_id=principal.organization_id,
         project_id=project.id,
-        mission_id=data.get("mission_id"),
-        experiment_id=data.get("experiment_id"),
+        mission_id=mission.id if mission else None,
+        experiment_id=experiment.id if experiment else None,
         statement=data["statement"],
         claim_type=data.get("claim_type") or "assertion",
         metric=data.get("metric"),

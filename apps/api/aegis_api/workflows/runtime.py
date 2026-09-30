@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy.exc import DBAPIError, OperationalError
+from sqlalchemy.exc import DataError, DBAPIError, IntegrityError, OperationalError, ProgrammingError
 
 from aegis_api.errors import AppError
 from aegis_api.security.context import Principal, principal_from_snapshot
@@ -29,6 +29,7 @@ class ActivityContext:
     workflow: str
     attempt: int = 1
     heartbeat: Callable[[dict[str, Any]], None] = field(default=lambda _details: None)
+    launcher_actor_id: str = ""  # the human/API identity that launched the automation (separation of duties)
 
     @property
     def actor(self) -> Actor:
@@ -86,6 +87,11 @@ def classify(exc: BaseException) -> ActivityError:
         return ActivityError(str(exc), code="execution_error", retryable=exc.transient)
     if isinstance(exc, StorageError):
         return ActivityError(str(exc), code="storage_error", retryable=exc.transient)
+    if isinstance(exc, IntegrityError | ProgrammingError | DataError):
+        # Constraint/trigger/privilege violations are deterministic: replaying the activity cannot succeed.
+        return ActivityError(
+            f"database rejected the change: {type(exc).__name__}", code="database_rejected", retryable=False
+        )
     if isinstance(exc, OperationalError | DBAPIError):
         return ActivityError(f"database error: {type(exc).__name__}", code="database_error", retryable=True)
     if isinstance(exc, KeyError | ValueError | TypeError | AssertionError):
@@ -105,6 +111,7 @@ def build_context(
         run_id=uuid.UUID(str(meta["run_id"])),
         workflow=str(meta.get("workflow", "")),
         attempt=attempt,
+        launcher_actor_id=str(dict(meta["principal"]).get("actor_id") or principal.user_id),
     )
     if heartbeat is not None:
         actx.heartbeat = heartbeat

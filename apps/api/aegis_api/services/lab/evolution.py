@@ -31,6 +31,7 @@ from aegis_api.models.lab import (
     Experiment,
     ExperimentRun,
     ExperimentVersion,
+    Mission,
     Strategy,
     StrategyMutation,
     StrategyVersion,
@@ -41,7 +42,7 @@ from aegis_api.services.lab import events
 from aegis_api.services.lab import experiments as experiment_service
 from aegis_api.services.lab import policy as lab_policy
 from aegis_api.services.lab import strategies as strategy_service
-from aegis_api.services.lab.access import get_scoped
+from aegis_api.services.lab.access import get_scoped, scoped_ref
 from aegis_api.services.lab.common import Actor
 from engines.lab.benchmarks.functions import FUNCTIONS
 from engines.lab.enums import LabEventType, RunKind, StrategyStatus
@@ -90,10 +91,11 @@ def create_run(
         raise ValidationFailed(f"invalid evolution config: {exc}") from exc
     if strategy.project_id is None:
         raise ValidationFailed("evolution runs need a project-scoped strategy")
+    mission = scoped_ref(db, principal, Mission, mission_id, project_id=strategy.project_id, label="Mission")
     run = EvolutionRun(
         organization_id=principal.organization_id,
         project_id=strategy.project_id,
-        mission_id=mission_id,
+        mission_id=mission.id if mission else None,
         strategy_id=strategy.id,
         config={
             "engine": cfg.model_dump(mode="json"),

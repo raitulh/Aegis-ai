@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aegis_api.errors import NotFound
+from aegis_api.errors import NotFound, ValidationFailed
 from aegis_api.models import Project, ProjectMember
 from aegis_api.security.context import Principal
 
@@ -65,6 +65,28 @@ def get_scoped[T](
         project = db.get(Project, project_id)
         if project is None or not can_access_project(db, principal, project):
             raise NotFound(f"{name} not found")
+    return row
+
+
+def scoped_ref[T](
+    db: Session,
+    principal: Principal,
+    model: type[T],
+    ref_id: uuid.UUID | str | None,
+    *,
+    project_id: uuid.UUID | None,
+    label: str,
+) -> T | None:
+    """Validate an optional caller-supplied reference before storing it on a new row.
+
+    Foreign-key checks run without Row Level Security, so an unchecked id could point at another tenant's row.
+    The referenced row must be visible to the principal and, when project-scoped, belong to ``project_id``."""
+    if ref_id is None:
+        return None
+    row = get_scoped(db, principal, model, ref_id, label=label)
+    row_project = getattr(row, "project_id", None)
+    if project_id is not None and row_project is not None and row_project != project_id:
+        raise ValidationFailed(f"{label} belongs to a different project")
     return row
 
 

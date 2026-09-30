@@ -23,6 +23,7 @@ from aegis_api.models.lab import (
     GraphNode,
     Hypothesis,
     Memory,
+    Mission,
     ResearchTask,
 )
 from aegis_api.routers._helpers import paginate
@@ -73,7 +74,7 @@ from aegis_api.services.lab import (
 )
 from aegis_api.services.lab import experiments as experiment_service
 from aegis_api.services.lab import memory as memory_service
-from aegis_api.services.lab.access import accessible_project_ids, get_project, get_scoped
+from aegis_api.services.lab.access import accessible_project_ids, get_project, get_scoped, scoped_ref
 from aegis_api.services.lab.common import Actor, parse_uuid
 from aegis_api.services.lab.reproducibility import manifest_report
 from aegis_api.workflows import client as workflow_client
@@ -323,6 +324,9 @@ def propose_memory(
     project_id = parse_uuid(body.project_id, "Project") if body.project_id else None
     if project_id:
         get_project(db, principal, project_id)
+    mission = scoped_ref(db, principal, Mission, body.mission_id, project_id=project_id, label="Mission")
+    if mission is not None:
+        project_id = mission.project_id
     vectors, model = knowledge.embed_texts(principal.organization_id, [body.content])
     mem = memory_service.propose(
         db,
@@ -335,7 +339,7 @@ def propose_memory(
         source_ref=body.source_ref,
         title=body.title,
         project_id=project_id,
-        mission_id=parse_uuid(body.mission_id, "Mission") if body.mission_id else None,
+        mission_id=mission.id if mission else None,
         confidence=body.confidence,
         sensitivity=body.sensitivity,
         embedding=vectors[0] if vectors else None,

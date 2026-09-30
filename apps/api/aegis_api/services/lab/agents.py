@@ -145,6 +145,10 @@ def _resolve(db: Any, task: AgentTask, mission: Mission | None) -> _Resolved:
             config = {k: v for k, v in (version.config or {}).items() if k in AGENT_CONFIG_KEYS}
             agent_id, version_id = agent.id, version.id
     tools = set(spec.default_tools)
+    if spec.mcp_allowed and mission is not None:
+        # MCP tools are never a role default: only a human can grant them, per mission. The broker still
+        # requires an approved server + approved tool + policy on every call.
+        tools |= {t for t in mission.allowed_tools or [] if str(t).startswith("mcp:")}
     if "tools" in config:
         tools &= set(config["tools"])  # agent versions can only narrow the role's tools
     if mission is not None and mission.allowed_tools:

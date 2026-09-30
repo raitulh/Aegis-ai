@@ -45,7 +45,10 @@ class ScriptedProvider(LLMProvider):
             payload = self._answer(role, request)
         if isinstance(payload, ToolCallRequest):
             return LLMResponse(
-                text="", tool_calls=[payload], provider=self.name, model=model,
+                text="",
+                tool_calls=[payload],
+                provider=self.name,
+                model=model,
                 usage=Usage(input_tokens=100, output_tokens=10),
             )
         text = json.dumps(payload)
@@ -55,30 +58,69 @@ class ScriptedProvider(LLMProvider):
 
     def _answer(self, role: str, request: LLMRequest) -> dict[str, Any]:
         if role == "quest":
-            return {"restated_objective": "Beat random search on Rastrigin", "measurable_success_criteria": ["≥10% lower value"]}
+            return {
+                "restated_objective": "Beat random search on Rastrigin",
+                "measurable_success_criteria": ["≥10% lower value"],
+            }
         if role == "planner":
-            return {"summary": "Pilot comparison then verification", "phases": [{"name": "experiments", "goal": "compare"}],
-                    "search_queries": ["simulated annealing rastrigin"], "hypothesis_directions": ["annealing"]}
+            return {
+                "summary": "Pilot comparison then verification",
+                "phases": [{"name": "experiments", "goal": "compare"}],
+                "search_queries": ["simulated annealing rastrigin"],
+                "hypothesis_directions": ["annealing"],
+            }
         if role == "literature":
             return {"queries": ["q"], "findings": [], "gaps": [], "contradictions": []}
         if role == "hypothesis":
-            return {"hypotheses": [
-                {"statement": "Simulated annealing with 4 restarts reaches lower Rastrigin values than random search",
-                 "rationale": "Local refinement exploits structure", "expected_outcome": "lower objective_value",
-                 "measurable_prediction": {"metric": "objective_value", "direction": "decrease", "magnitude": 0.2},
-                 "feasibility": 0.9, "confidence": 0.6, "parameters": ANNEAL},
-                {"statement": "Very high temperature annealing behaves like random search on Rastrigin",
-                 "rationale": "High temperature accepts almost everything", "expected_outcome": "no improvement",
-                 "measurable_prediction": {"metric": "objective_value", "direction": "no_change"},
-                 "feasibility": 0.8, "confidence": 0.4, "parameters": {**ANNEAL, "temperature": 49.0}},
-            ]}
+            return {
+                "hypotheses": [
+                    {
+                        "statement": "Simulated annealing with 4 restarts reaches lower Rastrigin values than random search",
+                        "rationale": "Local refinement exploits structure",
+                        "expected_outcome": "lower objective_value",
+                        "measurable_prediction": {
+                            "metric": "objective_value",
+                            "direction": "decrease",
+                            "magnitude": 0.2,
+                        },
+                        "feasibility": 0.9,
+                        "confidence": 0.6,
+                        "parameters": ANNEAL,
+                    },
+                    {
+                        "statement": "Very high temperature annealing behaves like random search on Rastrigin",
+                        "rationale": "High temperature accepts almost everything",
+                        "expected_outcome": "no improvement",
+                        "measurable_prediction": {"metric": "objective_value", "direction": "no_change"},
+                        "feasibility": 0.8,
+                        "confidence": 0.4,
+                        "parameters": {**ANNEAL, "temperature": 49.0},
+                    },
+                ]
+            }
         if role == "hypothesis_critic":
-            return {"critiques": [
-                {"hypothesis_index": 0, "falsifiable": True, "novelty": 0.3, "feasibility": 0.9, "risk": 0.1,
-                 "score": 0.8, "recommendation": "select"},
-                {"hypothesis_index": 1, "falsifiable": True, "novelty": 0.2, "feasibility": 0.8, "risk": 0.1,
-                 "score": 0.4, "recommendation": "revise"},
-            ]}
+            return {
+                "critiques": [
+                    {
+                        "hypothesis_index": 0,
+                        "falsifiable": True,
+                        "novelty": 0.3,
+                        "feasibility": 0.9,
+                        "risk": 0.1,
+                        "score": 0.8,
+                        "recommendation": "select",
+                    },
+                    {
+                        "hypothesis_index": 1,
+                        "falsifiable": True,
+                        "novelty": 0.2,
+                        "feasibility": 0.8,
+                        "risk": 0.1,
+                        "score": 0.4,
+                        "recommendation": "revise",
+                    },
+                ]
+            }
         if role == "statistical_analyst":
             return {"interpretation": "The difference is consistent across seeds.", "caveats": ["single function"]}
         if role == "failure_analyzer":
@@ -86,7 +128,11 @@ class ScriptedProvider(LLMProvider):
         if role == "verifier":
             return {"assessment": "supports", "reasons": ["reproduced"], "confidence": 0.7}
         if role == "report":
-            return {"executive_summary": "The mission compared two optimizers.", "sections": {}, "cited_evidence_ids": []}
+            return {
+                "executive_summary": "The mission compared two optimizers.",
+                "sections": {},
+                "cited_evidence_ids": [],
+            }
         if role == "scientific_reviewer":
             return {"checks": [], "overall": "acceptable", "overclaiming_flags": []}
         raise AssertionError(f"no scripted answer for role {role}")

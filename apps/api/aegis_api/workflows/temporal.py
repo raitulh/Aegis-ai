@@ -150,38 +150,63 @@ class TemporalContext:
         return list(await asyncio.gather(*aws))
 
 
+class LabWorkflowBase:
+    """Shared body of every lab workflow type: one generic signal handler and the run protocol that keeps the
+    lab database (``lab.workflow_runs``) the system of record."""
+
+    definition: WorkflowDefinition
+
+    def __init__(self) -> None:
+        self.signals: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
+    @workflow.signal(name=SIGNAL_NAME)
+    def lab_signal(self, name: str, payload: dict[str, Any]) -> None:
+        self.signals[name].append(payload)
+
+    async def execute(self, envelope: dict[str, Any]) -> dict[str, Any]:
+        defn = self.definition
+        ctx = TemporalContext(self, envelope, defn.name)
+        await ctx.activity("workflow.mark", {"status": "running"}, key="mark-running")
+        try:
+            result = await defn.fn(ctx)
+        except ActivityFailure as exc:
+            await ctx.activity(
+                "workflow.mark",
+                {"status": "failed", "error": str(exc), "result": {"failure": exc.to_dict()}},
+                key="mark-failed",
+            )
+            raise ApplicationError(str(exc), type=exc.code, non_retryable=True) from None
+        except asyncio.CancelledError:
+            await asyncio.shield(
+                asyncio.ensure_future(ctx.activity("workflow.mark", {"status": "cancelled"}, key="mark-cancelled"))
+            )
+            raise
+        await ctx.activity("workflow.mark", {"status": "completed", "result": result}, key="mark-completed")
+        return result
+
+
+_CLASSES: dict[str, type] = {}
+
+
 def _make_workflow_class(defn: WorkflowDefinition) -> type:
-    class _LabWorkflow:
-        def __init__(self) -> None:
-            self.signals: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    """Build (once) a module-level Temporal workflow type for a definition. Temporal requires workflow classes
+    to be globally referenceable, so the class gets a top-level qualname and is registered in this module."""
+    cached = _CLASSES.get(defn.name)
+    if cached is not None and cached.definition is defn:  # type: ignore[attr-defined]
+        return cached
+    cls_name = "LabWorkflow_" + "".join(ch if ch.isalnum() else "_" for ch in defn.name)
 
-        @workflow.signal(name=SIGNAL_NAME)
-        def lab_signal(self, name: str, payload: dict[str, Any]) -> None:
-            self.signals[name].append(payload)
+    async def run(self: LabWorkflowBase, envelope: dict[str, Any]) -> dict[str, Any]:
+        return await self.execute(envelope)
 
-        @workflow.run
-        async def run(self, envelope: dict[str, Any]) -> dict[str, Any]:
-            ctx = TemporalContext(self, envelope, defn.name)
-            await ctx.activity("workflow.mark", {"status": "running"}, key="mark-running")
-            try:
-                result = await defn.fn(ctx)
-            except ActivityFailure as exc:
-                await ctx.activity(
-                    "workflow.mark",
-                    {"status": "failed", "error": str(exc), "result": {"failure": exc.to_dict()}},
-                    key="mark-failed",
-                )
-                raise ApplicationError(str(exc), type=exc.code, non_retryable=True) from None
-            except asyncio.CancelledError:
-                await asyncio.shield(
-                    asyncio.ensure_future(ctx.activity("workflow.mark", {"status": "cancelled"}, key="mark-cancelled"))
-                )
-                raise
-            await ctx.activity("workflow.mark", {"status": "completed", "result": result}, key="mark-completed")
-            return result
-
-    _LabWorkflow.__name__ = _LabWorkflow.__qualname__ = f"LabWorkflow_{defn.name.replace('.', '_')}"
-    return workflow.defn(name=defn.name, sandboxed=False)(_LabWorkflow)
+    run.__name__ = "run"
+    run.__qualname__ = f"{cls_name}.run"
+    cls = type(cls_name, (LabWorkflowBase,), {"definition": defn, "run": workflow.run(run), "__module__": __name__})
+    cls.__qualname__ = cls_name
+    defined = workflow.defn(name=defn.name, sandboxed=False)(cls)
+    globals()[cls_name] = defined
+    _CLASSES[defn.name] = defined
+    return defined
 
 
 def workflow_classes() -> list[type]:

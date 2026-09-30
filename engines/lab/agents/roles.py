@@ -26,6 +26,8 @@ class AgentRoleSpec:
     timeout_seconds: int = 300
     readable_memory: tuple[MemoryScope, ...] = (MemoryScope.MISSION, MemoryScope.PROJECT)
     can_propose_memory: bool = False
+    # Whether MCP tools a human explicitly granted on the mission (``mcp:<server>.<tool>``) may reach this role.
+    mcp_allowed: bool = False
 
 
 ROLE_SPECS: dict[AgentRole, AgentRoleSpec] = {
@@ -56,6 +58,7 @@ ROLE_SPECS: dict[AgentRole, AgentRoleSpec] = {
             max_steps=6,
             timeout_seconds=900,
             can_propose_memory=True,
+            mcp_allowed=True,
         ),
         AgentRoleSpec(
             AgentRole.KNOWLEDGE,
@@ -65,6 +68,7 @@ ROLE_SPECS: dict[AgentRole, AgentRoleSpec] = {
             s.KnowledgeSynthesis,
             ("file_search", "memory_search"),
             can_propose_memory=True,
+            mcp_allowed=True,
         ),
         AgentRoleSpec(
             AgentRole.HYPOTHESIS,

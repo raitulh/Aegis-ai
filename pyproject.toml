@@ -121,6 +121,9 @@ addopts = "-q --strict-markers"
 markers = [
   "db: requires a PostgreSQL database (TEST_DATABASE_URL)",
   "redis: requires Redis (REDIS_URL)",
+  "docker: requires a Docker engine (sandboxed execution)",
+  "temporal: requires a Temporal server on 127.0.0.1:7233",
+  "e2e: end-to-end research loop",
 ]
 filterwarnings = ["ignore::DeprecationWarning:celery.*", "ignore::DeprecationWarning:kombu.*", "ignore::DeprecationWarning:starlette.*"]
 

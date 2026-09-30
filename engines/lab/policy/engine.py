@@ -449,12 +449,12 @@ BASELINE_POLICY = PolicySet(
             when={
                 "any": [
                     {"fact": "memory.injection_score", "op": "gte", "value": 0.5},
-                    {"fact": "actor.type", "op": "in", "value": ["agent", "workflow"]},
+                    {"fact": "actor.type", "op": "not_in", "value": ["user"]},
                 ]
             },
             effect=PolicyDecision.REQUIRE_APPROVAL,
             approval_kind=ApprovalKind.MEMORY_PROMOTION,
-            reason="Agent-originated or suspicious content needs review before entering durable memory.",
+            reason="Automation-originated or suspicious content needs review before entering durable memory.",
         ),
     ],
 )
