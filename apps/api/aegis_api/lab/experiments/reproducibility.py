@@ -236,9 +236,7 @@ def _run_entries(db: Session, version: ExperimentVersion) -> list[dict[str, Any]
     return out
 
 
-def _docker_command(
-    image: str, digest: str | None, command: list[str], env: dict[str, str], user: str
-) -> str:
+def _docker_command(image: str, digest: str | None, command: list[str], env: dict[str, str], user: str) -> str:
     ref = image if (digest is None or "@" in image) else f"{image.split('@', 1)[0]}@{digest}"
     parts = [
         "docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges",
@@ -575,6 +573,7 @@ def lineage_for_run(db: Session, run_id: uuid.UUID | str, *, actor: Actor | None
 
     With ``actor`` the run is ownership-checked; without it the (RLS-scoped) session decides visibility.
     """
+    run: ExperimentRun | None
     if actor is not None:
         run = get_owned(db, ExperimentRun, run_id, actor, label="Experiment run")
     else:
@@ -582,8 +581,8 @@ def lineage_for_run(db: Session, run_id: uuid.UUID | str, *, actor: Actor | None
             run = db.get(ExperimentRun, uuid.UUID(str(run_id)))
         except ValueError:
             run = None
-        if run is None:
-            raise NotFound("Experiment run not found")
+    if run is None:
+        raise NotFound("Experiment run not found")
     experiment = db.get(Experiment, run.experiment_id)
     version = db.get(ExperimentVersion, run.experiment_version_id)
     if experiment is None or version is None:

@@ -362,7 +362,7 @@ def design_to_spec(design: Mapping[str, Any], parameters: Mapping[str, Any]) -> 
         "datasets": datasets,
         "parameters": design_parameters,
     }
-    context = {
+    context: dict[str, Any] = {
         "dataset_versions": {DESIGN_DATASET_ID: {"splits": {"train": {}, "validation": {}, "test": {}}}},
     }
     return spec, context
@@ -485,7 +485,9 @@ def claim_checks_to_engine(claim: Mapping[str, Any]) -> tuple[CriteriaProfile | 
         evaluators=evaluators,
         provenance=None
         if provenance_state is None
-        else ProvenanceReport(complete=provenance_state == "passed", missing=[] if provenance_state == "passed" else ["lineage"]),
+        else ProvenanceReport(
+            complete=provenance_state == "passed", missing=[] if provenance_state == "passed" else ["lineage"]
+        ),
         verifier=verifier,
         supporting_evidence_count=max(0, evidence_count),
         contradicting_evidence_count=None if contradiction_state is None else int(contradiction_state == "failed"),
@@ -743,7 +745,7 @@ def optimizer_output(case: Mapping[str, Any], parameters: Mapping[str, Any]) -> 
         axis = [i / (per_dim - 1) for i in range(per_dim)] if per_dim > 1 else [0.5]
         solutions: list[list[float]] = [[]]
         for _ in range(dims):
-            solutions = [s + [v] for s in solutions for v in axis]
+            solutions = [[*s, v] for s in solutions for v in axis]
         return {"solutions": solutions[:_MAX_SOLUTIONS]}
     rng = random.Random(_case_seed(case, parameters))
     return {"solutions": [[rng.random() for _ in range(dims)] for _ in range(budget)]}

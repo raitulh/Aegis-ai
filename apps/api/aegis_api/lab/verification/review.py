@@ -41,9 +41,11 @@ from aegis_api.lab.models import (
 )
 from aegis_api.lab.verification.common import anchor, clean_text, comparison_result, get_many, jsonable, parse_spec
 from aegis_api.lab.verification.schemas import ReviewOut
+from aegis_api.lab.verification.verification import claim_context
 from aegis_api.schemas.common import Page, PageParams
 from engines.lab.design_validator import ValidationReport
 from engines.lab.review import (
+    CHECKS,
     REVIEW_ENGINE_VERSION,
     ClaimSummary,
     HypothesisSummary,
@@ -148,8 +150,6 @@ def _fill_mission(db: Session, scope: ReviewScope, mission: Mission, *, include_
 
 
 def _fill_claims(db: Session, scope: ReviewScope, claims: Sequence[ScientificClaim]) -> None:
-    from aegis_api.lab.verification.verification import claim_context
-
     scope.claims = list(claims)
     experiments: dict[uuid.UUID, Experiment] = {}
     comparisons: dict[uuid.UUID, ExperimentComparison] = {}
@@ -528,7 +528,7 @@ def latest_rule_review(db: Session, subject_type: str, subject_id: uuid.UUID) ->
     )
     if row is None:
         return None
-    checks = {k: v for k, v in (row.checks or {}).items() if k in REVIEW_CHECK_KEYS}
+    checks = {k: v for k, v in (row.checks or {}).items() if k in CHECKS}
     try:
         return ReviewResult.model_validate(
             {
@@ -541,19 +541,3 @@ def latest_rule_review(db: Session, subject_type: str, subject_id: uuid.UUID) ->
         )
     except ValidationError:
         return None
-
-
-REVIEW_CHECK_KEYS = frozenset(
-    {
-        "novelty_reasoning",
-        "baseline_quality",
-        "experiment_design",
-        "statistical_validity",
-        "leakage",
-        "reproducibility",
-        "unsupported_claims",
-        "missing_controls",
-        "contradictory_evidence",
-        "overclaiming",
-    }
-)

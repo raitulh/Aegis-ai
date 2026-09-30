@@ -268,17 +268,21 @@ def resolve_subject(
             if active is not None:
                 parameters = dict(active.parameters)
                 if params:
-                    strategy = db.get(Strategy, active.strategy_id)
-                    assert strategy is not None
+                    owner = db.get(Strategy, active.strategy_id)
+                    assert owner is not None
                     merged = {**parameters, **dict(params)}
-                    enforce_guardrails(active.definition, merged, ParameterSchema.from_dict(strategy.parameter_schema))
+                    enforce_guardrails(active.definition, merged, ParameterSchema.from_dict(owner.parameter_schema))
                     parameters = merged
             elif params:
                 raise ValidationFailed(f"No active {kind} strategy to apply parameter overrides to")
         elif params:
             raise ValidationFailed(f"{suite_key} measures a fixed component and takes no parameters")
         context = SubjectContext(
-            suite_key=suite_key, subject_type=subject_type, subject_id=subject_id, strategy_kind=kind, parameters=parameters
+            suite_key=suite_key,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            strategy_kind=kind,
+            parameters=parameters,
         )
         return ResolvedSubject(subject_type, subject_id, context)
     # experiment
@@ -382,7 +386,10 @@ def create_benchmark_run(
 
 def _lock_run(db: Session, run_id: uuid.UUID) -> BenchmarkRun:
     run = db.execute(
-        select(BenchmarkRun).where(BenchmarkRun.id == run_id).with_for_update().execution_options(populate_existing=True)
+        select(BenchmarkRun)
+        .where(BenchmarkRun.id == run_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if run is None:
         raise NotFound("Benchmark run not found")
@@ -471,9 +478,7 @@ def find_baseline_run(db: Session, run: BenchmarkRun) -> tuple[BenchmarkRun | No
         incumbent = incumbent_version(db, strategy)
         if incumbent is None or incumbent.id == version.id:
             return None, None
-        stmt = base.where(
-            BenchmarkRun.subject_type == "strategy_version", BenchmarkRun.subject_id == str(incumbent.id)
-        )
+        stmt = base.where(BenchmarkRun.subject_type == "strategy_version", BenchmarkRun.subject_id == str(incumbent.id))
         baseline_subject = str(incumbent.id)
     else:
         stmt = base.where(
@@ -611,9 +616,7 @@ def run_benchmark_job(session: Session, run_id: str, actor_payload: dict[str, An
                 run.completed_at = utcnow()
 
 
-def queue_benchmark_run(
-    db: Session, actor: Actor, suite_key: str, data: schemas.BenchmarkRunCreate
-) -> BenchmarkRun:
+def queue_benchmark_run(db: Session, actor: Actor, suite_key: str, data: schemas.BenchmarkRunCreate) -> BenchmarkRun:
     """Create a PENDING run and execute it in the background after commit (HTTP 202)."""
     from aegis_api.lab.workflows.registry import actor_to_payload
 

@@ -57,7 +57,14 @@ _TIER_DEFAULTS: dict[str, str] = {
 
 
 def _float(lo: float, hi: float, default: float, description: str, scale: float = 0.1) -> dict[str, Any]:
-    return {"type": "float", "min": lo, "max": hi, "default": default, "mutation_scale": scale, "description": description}
+    return {
+        "type": "float",
+        "min": lo,
+        "max": hi,
+        "default": default,
+        "mutation_scale": scale,
+        "description": description,
+    }
 
 
 def _int(lo: int, hi: int, default: int, description: str) -> dict[str, Any]:

@@ -68,8 +68,8 @@ from engines.lab.design_validator import (
     ValidationReport,
 )
 from engines.lab.evaluators import BUILTIN_EVALUATOR_KEYS, ExperimentView
-from engines.lab.evaluators.code_quality import CodeQualityEvaluator
 from engines.lab.evaluators.base import EvalContext
+from engines.lab.evaluators.code_quality import CodeQualityEvaluator
 from engines.lab.experiment_spec import (
     BASELINE_ONLY_COMPARATORS,
     EXPERIMENT_SPEC_VERSION,
@@ -232,7 +232,9 @@ def _dataset_context(
         splits: dict[str, SplitInfo] = {}
         for name, info in (row.splits or {}).items():
             visibility = info.get("visibility") if isinstance(info, dict) else None
-            splits[str(name)] = SplitInfo(visibility="evaluator_only" if visibility == "evaluator_only" else "experiment")
+            splits[str(name)] = SplitInfo(
+                visibility="evaluator_only" if visibility == "evaluator_only" else "experiment"
+            )
         infos[use.dataset_version_id] = DatasetVersionInfo(splits=splits)
         rows[use.dataset_version_id] = row
     return infos, rows
@@ -253,7 +255,9 @@ def merge_report(report: ValidationReport, extra: Sequence[Issue]) -> Validation
         codes = sorted({i.code for i in issues})
         state = "failed" if errors else "passed with warnings"
         summary = f"Design {state}: {len(errors)} error(s), {len(warnings)} warning(s) ({', '.join(codes)})."
-    return ValidationReport(passed=not errors, issues=issues, summary=summary, validator_version=report.validator_version)
+    return ValidationReport(
+        passed=not errors, issues=issues, summary=summary, validator_version=report.validator_version
+    )
 
 
 def _code_quality(spec: ExperimentSpec) -> dict[str, Any] | None:
@@ -549,9 +553,7 @@ def prepare_version(
     snapshot: CodeSnapshot | None = None
     snapshot_problems: list[str] = []
     if spec.code.files:
-        bundle = code_module.bundle_code(
-            spec.code.files, entrypoint=spec.code.entrypoint or "", git=spec.code.git
-        )
+        bundle = code_module.bundle_code(spec.code.files, entrypoint=spec.code.entrypoint or "", git=spec.code.git)
         # Unsafe paths are reported by the design validator; collisions are a platform finding.
         snapshot_problems = [p for p in bundle.problems if "collides" in p]
         if not bundle.problems:
@@ -781,7 +783,9 @@ def _mission_in_project(db: Session, actor: Actor, mission_id: uuid.UUID | str, 
     return mission
 
 
-def _in_project[T](db: Session, actor: Actor, model: type[T], row_id: uuid.UUID | str, project: Project, label: str) -> T:
+def _in_project[T](
+    db: Session, actor: Actor, model: type[T], row_id: uuid.UUID | str, project: Project, label: str
+) -> T:
     row = get_owned(db, model, row_id, actor, label=label)
     if getattr(row, "project_id", None) != project.id:
         raise ValidationFailed(f"{label} belongs to a different project")
@@ -975,9 +979,7 @@ def validate_experiment(db: Session, actor: Actor, experiment_id: uuid.UUID | st
     version = require_current_version(db, experiment)
     project = load_project(db, actor, experiment.project_id)
     hypothesis = db.get(Hypothesis, experiment.hypothesis_id) if experiment.hypothesis_id else None
-    prepared = prepare_version(
-        db, actor, project, version_spec(version), experiment=experiment, hypothesis=hypothesis
-    )
+    prepared = prepare_version(db, actor, project, version_spec(version), experiment=experiment, hypothesis=hypothesis)
     created = False
     if (
         not _same_outcome(version.validation_report or {}, prepared.report)
@@ -1266,7 +1268,9 @@ def ensure_baseline(
 # =============================================================================================
 # Execution requests
 # =============================================================================================
-def _policy_context(experiment: Experiment, version: ExperimentVersion, actor: Actor, mission: Mission | None) -> dict[str, Any]:
+def _policy_context(
+    experiment: Experiment, version: ExperimentVersion, actor: Actor, mission: Mission | None
+) -> dict[str, Any]:
     network = version.network_policy or {}
     resources = version.resource_request or {}
     hosts: list[str] = []

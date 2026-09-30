@@ -391,6 +391,7 @@ def create_version(
     strategy = load_strategy(db, actor, strategy_id, "strategy:create")
     if strategy.status != "active":
         raise Conflict("The strategy is not active", code="strategy_inactive")
+    parent: StrategyVersion | None
     if data.parent_version_id:
         parent = get_owned(db, StrategyVersion, data.parent_version_id, actor, label="Parent version")
         if parent.strategy_id != strategy.id:

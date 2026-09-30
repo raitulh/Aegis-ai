@@ -42,9 +42,7 @@ ASSUMED_POWER = 0.8
 COMPARISON_TYPE_BY_KIND = {"ablation": "ablation", "sensitivity": "sensitivity"}
 
 
-def _run_values(
-    db: Session, version: ExperimentVersion, metric: str
-) -> tuple[list[dict[str, Any]], list[str], int]:
+def _run_values(db: Session, version: ExperimentVersion, metric: str) -> tuple[list[dict[str, Any]], list[str], int]:
     """Final values of ``metric`` for successful runs of ``version`` → (values, run ids, runs lacking it)."""
     runs = list(
         db.scalars(
@@ -67,7 +65,9 @@ def _run_values(
     missing = 0
     for run in runs:
         finals = final_values(per_run.get(run.id, []))
-        chosen = next(((source, finals[(metric, source)]) for source in SOURCE_PREFERENCE if (metric, source) in finals), None)
+        chosen = next(
+            ((source, finals[(metric, source)]) for source in SOURCE_PREFERENCE if (metric, source) in finals), None
+        )
         if chosen is None:
             missing += 1
             continue
@@ -117,7 +117,9 @@ def power_assessment(plan: StatisticalPlan, n_baseline: int, n_candidate: int) -
         out["reason"] = "no pre-registered minimum effect size; a null result cannot be interpreted"
         return out
     try:
-        required = required_seeds_estimate(plan.min_effect_size, plan.alpha, ASSUMED_POWER, paired=plan.test == "paired_t")
+        required = required_seeds_estimate(
+            plan.min_effect_size, plan.alpha, ASSUMED_POWER, paired=plan.test == "paired_t"
+        )
     except StatisticsError as exc:
         out["reason"] = f"power could not be computed: {exc}"
         return out
@@ -193,9 +195,7 @@ def compare(
             "them, so they cannot verify a claim on their own"
         )
     if b_missing or c_missing:
-        warnings.append(
-            f"{b_missing} baseline and {c_missing} candidate successful run(s) did not report {metric!r}"
-        )
+        warnings.append(f"{b_missing} baseline and {c_missing} candidate successful run(s) did not report {metric!r}")
     if candidate.baseline_experiment_id is not None and candidate.baseline_experiment_id != baseline.id:
         warnings.append("the baseline is not the candidate's declared baseline experiment")
     if not any(config_diff[k] for k in ("added", "removed", "changed")):
@@ -264,7 +264,9 @@ def compare(
             "n_candidate": stats.get("n_candidate"),
             "baseline_run_ids": b_run_ids,
             "candidate_run_ids": c_run_ids,
-            "config_diff_paths": sorted({*config_diff["added"], *config_diff["removed"], *config_diff["changed"]})[:200],
+            "config_diff_paths": sorted({*config_diff["added"], *config_diff["removed"], *config_diff["changed"]})[
+                :200
+            ],
             "engine_version": result.engine_version,
         },
     )

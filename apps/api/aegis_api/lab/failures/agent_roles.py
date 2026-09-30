@@ -216,7 +216,9 @@ def _check_suggestion(
         try:
             ExperimentSpec.model_validate(merge_patch(spec, patch))
         except PydanticValidationError as exc:
-            violations = [f"patched spec is invalid: {e['msg']} at {'.'.join(map(str, e['loc']))}" for e in exc.errors()]
+            violations = [
+                f"patched spec is invalid: {e['msg']} at {'.'.join(map(str, e['loc']))}" for e in exc.errors()
+            ]
     return violations[:20]
 
 
@@ -250,8 +252,9 @@ def apply_diagnosis(db: Session, actor: Actor, run: AgentRun, output: BaseModel)
             "recorded_at": recorded_at,
         }
     agrees = diagnosis.suggested_failure_type in (None, failure.failure_type)
-    model_doc = {
-        "root_cause": service.redact_text(diagnosis.root_cause, 4000),
+    model_root_cause = service.redact_text(diagnosis.root_cause, 4000)
+    model_doc: dict[str, Any] = {
+        "root_cause": model_root_cause,
         "confidence": diagnosis.confidence,
         "contributing_factors": list(diagnosis.contributing_factors),
         "evidence": list(diagnosis.evidence),
@@ -268,7 +271,7 @@ def apply_diagnosis(db: Session, actor: Actor, run: AgentRun, output: BaseModel)
     failure.classification = {**rule, "model": model_doc}
     used_model_root_cause = False
     if rule_confidence < RULE_CONFIDENCE_FLOOR and failure.root_cause_source in (None, "rule", "model"):
-        failure.root_cause = model_doc["root_cause"]
+        failure.root_cause = model_root_cause
         failure.root_cause_source = "model"
         used_model_root_cause = True
     if recovery_doc is not None:

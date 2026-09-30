@@ -68,7 +68,6 @@ from aegis_api.lab.models import (
 )
 from aegis_api.schemas.common import Page, PageParams
 from engines.lab.experiment_spec import check_criterion
-from engines.lab.statistics import StatisticsError, required_seeds_estimate
 from engines.lab.states import (
     MISSION_TERMINAL,
     AgentRole,
@@ -77,6 +76,7 @@ from engines.lab.states import (
     assert_transition,
     can_transition,
 )
+from engines.lab.statistics import StatisticsError, required_seeds_estimate
 
 log = structlog.get_logger("aegis.lab.hypotheses")
 
@@ -155,8 +155,8 @@ def _scoped_query(
     project_id: uuid.UUID | str | None,
     mission_id: uuid.UUID | str | None,
     statuses: Sequence[str] | None,
-) -> Select[tuple[Hypothesis]]:
-    stmt = select(Hypothesis).where(Hypothesis.organization_id == actor.organization_id)
+) -> Select[Any]:
+    stmt: Select[Any] = select(Hypothesis).where(Hypothesis.organization_id == actor.organization_id)
     if mission_id is not None:
         mission = get_owned(db, Mission, mission_id, actor, label="Mission")
         load_project(db, actor, mission.project_id, "hypothesis:read")
@@ -186,9 +186,7 @@ def list_hypotheses(
     sort: str | None = None,
     mapper: Callable[[Hypothesis], Any] | None = None,
 ) -> Page[Any]:
-    stmt = _scoped_query(
-        db, actor, project_id=project_id, mission_id=mission_id, statuses=[status] if status else None
-    )
+    stmt = _scoped_query(db, actor, project_id=project_id, mission_id=mission_id, statuses=[status] if status else None)
     order = sort_clause(Hypothesis, sort, SORTABLE)
     stmt = stmt.order_by(order.nulls_last(), Hypothesis.id)
     return paginate(db, stmt, params, mapper or (lambda h: h))
@@ -218,7 +216,9 @@ def require_falsifiable(statement: str, prediction: MeasurablePrediction | None)
     words = [w for w in statement.split() if w.strip()]
     problems: list[str] = []
     if len(words) < MIN_STATEMENT_WORDS:
-        problems.append(f"the statement is too short to be a testable hypothesis (at least {MIN_STATEMENT_WORDS} words)")
+        problems.append(
+            f"the statement is too short to be a testable hypothesis (at least {MIN_STATEMENT_WORDS} words)"
+        )
     if prediction is None:
         problems.append("measurable_prediction is missing")
     if problems:
@@ -419,9 +419,7 @@ def create_hypothesis(
     return hypothesis
 
 
-def update_hypothesis(
-    db: Session, actor: Actor, hypothesis_id: uuid.UUID | str, data: HypothesisUpdate
-) -> Hypothesis:
+def update_hypothesis(db: Session, actor: Actor, hypothesis_id: uuid.UUID | str, data: HypothesisUpdate) -> Hypothesis:
     """Edit a hypothesis that has not been selected yet (``GENERATED``/``CRITIQUED``)."""
     hypothesis = _load(db, actor, hypothesis_id, "hypothesis:update")
     if data.lock_version is not None and data.lock_version != hypothesis.lock_version:
@@ -721,7 +719,9 @@ def select_hypotheses(db: Session, actor: Actor, mission_id: uuid.UUID | str, to
     mission = get_owned(db, Mission, mission_id, actor, label="Mission")
     load_project(db, actor, mission.project_id, "hypothesis:update")
     advisory_xact_lock(db, f"hypothesis-select:{mission.id}")
-    strategy = active_strategy_version(db, actor.organization_id, "hypothesis", project_id=mission.project_id, mission=mission)
+    strategy = active_strategy_version(
+        db, actor.organization_id, "hypothesis", project_id=mission.project_id, mission=mission
+    )
     weights, notes = scoring.ScoringWeights.from_parameters(strategy.parameters if strategy is not None else None)
     rows = list(
         db.scalars(
@@ -805,7 +805,11 @@ def assess_comparison(prediction: MeasurablePrediction, comparison: ExperimentCo
         "comparison_type": comparison.comparison_type,
     }
     if comparison.metric != prediction.metric:
-        return {**base, "outcome": "not_applicable", "reason": f"measures {comparison.metric!r}, not the predicted metric"}
+        return {
+            **base,
+            "outcome": "not_applicable",
+            "reason": f"measures {comparison.metric!r}, not the predicted metric",
+        }
     if comparison.comparison_type != "baseline":
         return {
             **base,
@@ -843,7 +847,11 @@ def assess_comparison(prediction: MeasurablePrediction, comparison: ExperimentCo
         return {**base, "outcome": "contradicts", "reason": "statistically significant change against the prediction"}
     if verdict == "improved":
         if check.satisfied is True:
-            return {**base, "outcome": "supports", "reason": f"significant improvement meeting the threshold ({check.reason})"}
+            return {
+                **base,
+                "outcome": "supports",
+                "reason": f"significant improvement meeting the threshold ({check.reason})",
+            }
         if check.satisfied is False:
             if powered:
                 return {

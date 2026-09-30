@@ -42,10 +42,10 @@ from aegis_api.lab.core.pagination import CursorPage, CursorParams, paginate, pa
 from aegis_api.lab.experiments import code as code_module
 from aegis_api.lab.experiments.schemas import RUN_ROLES
 from aegis_api.lab.experiments.service import (
-    set_status,
     compute_prices,
     load_experiment,
     require_current_version,
+    set_status,
     version_spec,
 )
 from aegis_api.lab.models import (
@@ -65,7 +65,6 @@ from aegis_api.lab.usage.recorder import increment_mission_spend
 from aegis_api.schemas.common import Page, PageParams
 from engines.lab.compute_cost import estimate_cost
 from engines.lab.experiment_spec import MAX_SEED_VALUE, ExperimentSpec
-from engines.lab.statistics import describe
 from engines.lab.states import (
     EXECUTION_TERMINAL,
     MISSION_TERMINAL,
@@ -75,6 +74,7 @@ from engines.lab.states import (
     allowed_transitions,
     assert_transition,
 )
+from engines.lab.statistics import describe
 
 log = structlog.get_logger("aegis.lab.experiments.runs")
 
@@ -177,7 +177,9 @@ def list_run_metrics(
         if source not in METRIC_SOURCES:
             raise ValidationFailed(f"source must be one of {', '.join(METRIC_SOURCES)}")
         stmt = stmt.where(ExperimentMetric.source == source)
-    stmt = stmt.order_by(ExperimentMetric.name, ExperimentMetric.source, ExperimentMetric.step.nulls_first(), ExperimentMetric.id)
+    stmt = stmt.order_by(
+        ExperimentMetric.name, ExperimentMetric.source, ExperimentMetric.step.nulls_first(), ExperimentMetric.id
+    )
     return paginate(db, stmt, params, mapper or (lambda m: m))
 
 
@@ -429,11 +431,11 @@ def schedule_runs(
             run.compute_job_id = job.id
             if job.approval_id is not None:
                 run.status_reason = f"awaiting_approval:{job.approval_id}"
-        job = db.get(ComputeJob, run.compute_job_id)
-        if job is not None:
-            job_ids.append(str(job.id))
-            if job.approval_id is not None and job.status == E.QUEUED:
-                approvals.append(str(job.approval_id))
+        stored_job = db.get(ComputeJob, run.compute_job_id)
+        if stored_job is not None:
+            job_ids.append(str(stored_job.id))
+            if stored_job.approval_id is not None and stored_job.status == E.QUEUED:
+                approvals.append(str(stored_job.approval_id))
         runs.append(run)
     db.flush()
     if first_for_version and mission is not None:
@@ -515,9 +517,7 @@ def _platform_values(result: Any) -> dict[str, float]:
     return values
 
 
-def complete_run(
-    db: Session, actor: Actor, run_id: uuid.UUID | str, job_result: Mapping[str, Any]
-) -> ExperimentRun:
+def complete_run(db: Session, actor: Actor, run_id: uuid.UUID | str, job_result: Mapping[str, Any]) -> ExperimentRun:
     """Record a finished job's outcome on its run (idempotent once the run is terminal).
 
     When the run's compute job is finished in the database, the stored job result is authoritative; the supplied
@@ -589,7 +589,12 @@ def complete_run(
     spec = version_spec(version)
     primary = spec.primary_metric
     reason = result.reason
-    if target == E.SUCCEEDED and primary is not None and primary.source == "self_reported" and primary.name not in self_reported:
+    if (
+        target == E.SUCCEEDED
+        and primary is not None
+        and primary.source == "self_reported"
+        and primary.name not in self_reported
+    ):
         reason = f"missing_primary_metric: {primary.name!r} was not reported in metrics.json"
     run.status_reason = reason[:2000] if reason else None
     expected_digest = (run.environment_manifest or {}).get("expected_image_digest")

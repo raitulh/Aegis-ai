@@ -121,9 +121,7 @@ def build_archive(files: Mapping[str, bytes]) -> bytes:
     return raw.getvalue()
 
 
-def snapshot_hash(
-    manifest: Mapping[str, Mapping[str, Any]], entrypoint: str, language: str, git: GitRef | None
-) -> str:
+def snapshot_hash(manifest: Mapping[str, Mapping[str, Any]], entrypoint: str, language: str, git: GitRef | None) -> str:
     doc = {
         "files": {path: meta["sha256"] for path, meta in sorted(manifest.items())},
         "entrypoint": entrypoint,
@@ -229,10 +227,10 @@ def read_snapshot_files(snapshot: CodeSnapshot, *, max_bytes: int = MAX_SNAPSHOT
             if not member.isfile():
                 raise CodeSnapshotError(f"Code snapshot {snapshot.id} contains a non-regular member")
             try:
-                path = normalize_member_path(member.name)
+                member_path = normalize_member_path(member.name)
             except UnsafeArchiveMember as exc:
                 raise CodeSnapshotError(f"Code snapshot {snapshot.id} contains an unsafe path: {exc.reason}") from exc
-            if path is None:
+            if member_path is None:
                 continue
             if len(out) >= MAX_SNAPSHOT_FILES:
                 raise CodeSnapshotError(f"Code snapshot {snapshot.id} has too many files")
@@ -241,7 +239,7 @@ def read_snapshot_files(snapshot: CodeSnapshot, *, max_bytes: int = MAX_SNAPSHOT
                 raise CodeSnapshotError(f"Code snapshot {snapshot.id} exceeds {max_bytes} bytes")
             fh = tar.extractfile(member)
             content = fh.read() if fh is not None else b""
-            out[path.as_posix()] = content
+            out[member_path.as_posix()] = content
     manifest = snapshot.files_manifest or {}
     if manifest:
         for path, meta in manifest.items():

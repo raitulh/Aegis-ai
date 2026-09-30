@@ -105,7 +105,9 @@ class GateResult:
         return schemas.PromotionDecisionOut(
             eligible=self.decision.eligible,
             reasons=list(self.decision.reasons),
-            checks=[schemas.PromotionCheckOut(name=c.name, passed=c.passed, detail=c.detail) for c in self.decision.checks],
+            checks=[
+                schemas.PromotionCheckOut(name=c.name, passed=c.passed, detail=c.detail) for c in self.decision.checks
+            ],
             statistics=_finite_json(self.decision.statistics) or {},
             incumbent_version_id=str(self.incumbent.id) if self.incumbent is not None else None,
             benchmark_suites=self.suites,
@@ -162,8 +164,10 @@ def _first_promotion_decision(gate: PromotionGate, candidate: Mapping[str, Seque
     checks = [c for c in reference.checks if c.name in ("sample_size", "feasibility")]
     eligible = all(c.passed for c in checks)
     reasons = (
-        ["no incumbent exists for this kind; sample size and safety feasibility hold — governance and human "
-         "approval still apply"]
+        [
+            "no incumbent exists for this kind; sample size and safety feasibility hold — governance and human "
+            "approval still apply"
+        ]
         if eligible
         else [f"{c.name}: {c.detail}" for c in checks if not c.passed]
     )
@@ -251,9 +255,7 @@ def _check_promotable(version: StrategyVersion) -> None:
     if version.status == StrategyStatus.PROMOTED:
         raise Conflict("This version is already promoted", code="strategy_already_promoted")
     if version.status == StrategyStatus.RETIRED:
-        raise Conflict(
-            "A retired version returns to service only through a rollback", code="invalid_state_transition"
-        )
+        raise Conflict("A retired version returns to service only through a rollback", code="invalid_state_transition")
     if version.status not in PROMOTABLE:
         assert_transition("strategy", version.status, StrategyStatus.PROMOTED)  # raises InvalidTransitionError
 
