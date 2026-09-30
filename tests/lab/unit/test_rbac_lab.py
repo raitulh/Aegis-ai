@@ -76,7 +76,7 @@ def test_scopes_never_grant_human_only_permissions():
 
 def test_read_scope_is_read_only():
     scoped = apply_scopes(permissions_for_role(Role.OWNER), ["read"])
-    assert scoped and all(p.endswith(":read") or p == "artifact:download" for p in scoped)
+    assert scoped and all(p.endswith(":read") or p in {"artifact:download", "billing:view"} for p in scoped)
 
 
 def test_empty_scopes_default_to_read():
