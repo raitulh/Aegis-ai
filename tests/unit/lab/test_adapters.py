@@ -342,3 +342,13 @@ def test_objective_harness_matches_platform_benchmark_functions(monkeypatch) -> 
     for name, fn in functions.FUNCTIONS.items():
         for x in points:
             assert module.FUNCTIONS[name](x) == pytest.approx(fn(x), rel=1e-12, abs=1e-12), name
+
+
+def test_mission_tool_names_match_the_broker_and_roles() -> None:
+    from aegis_api.services.lab.missions import KNOWN_TOOLS
+    from aegis_api.services.lab.tools import BUILTIN_TOOLS
+    from engines.lab.agents.roles import ROLE_SPECS
+
+    assert set(BUILTIN_TOOLS) == KNOWN_TOOLS  # no advertised tool without an implementation
+    for spec in ROLE_SPECS.values():
+        assert set(spec.default_tools) <= KNOWN_TOOLS, spec.role

@@ -12,8 +12,8 @@ from aegis_api.workflows.temporal import run_worker
 
 
 def main() -> None:
-    setup("temporal-worker")
-    asyncio.run(run_worker())
+    stopper = setup("temporal-worker")
+    asyncio.run(run_worker(stop=stopper.event))
 
 
 if __name__ == "__main__":

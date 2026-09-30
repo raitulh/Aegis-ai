@@ -78,8 +78,8 @@ def _providers() -> tuple[bool, str]:
 
 @router.get("/health/ready")
 def ready_detailed() -> JSONResponse:
-    """Readiness: required dependencies (PostgreSQL, object storage, the workflow engine) must be healthy;
-    optional ones (Redis, execution backend, model providers) are reported but do not fail readiness."""
+    """Readiness: required dependencies (PostgreSQL, object storage, Temporal when it is the engine, Redis when
+    configured) must be healthy; optional ones (execution backend, model providers) are reported only."""
     settings = get_settings()
     required = [("postgres", _postgres), ("object_storage", _storage)]
     optional = [("model_providers", _providers)]

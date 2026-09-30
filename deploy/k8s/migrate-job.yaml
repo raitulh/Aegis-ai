@@ -1,0 +1,40 @@
+# Apply database migrations before rolling out a new version (run once per release, e.g. as a Helm/Argo
+# pre-sync hook). Uses DATABASE_ADMIN_URL (owner role); the app pods use the RLS-enforced role.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aegis-migrate
+  namespace: aegis
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: aegis-migrate, app.kubernetes.io/part-of: aegis, aegis.io/tier: worker}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: aegis-api
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: migrate
+          image: aegis-api:latest
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef: {name: aegis-config}
+            - secretRef: {name: aegis-secrets}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {sizeLimit: 128Mi}}

@@ -1,0 +1,30 @@
+# Hard ceilings for the sandbox namespace, independent of per-run limits enforced by the application.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sandbox-quota
+  namespace: aegis-sandbox
+spec:
+  hard:
+    pods: "50"
+    count/jobs.batch: "100"
+    count/configmaps: "120"
+    requests.cpu: "64"
+    limits.cpu: "64"
+    requests.memory: 256Gi
+    limits.memory: 256Gi
+    requests.ephemeral-storage: 500Gi
+    limits.ephemeral-storage: 500Gi
+    requests.nvidia.com/gpu: "0"      # raise only when FEATURE_GPU_EXECUTION is enabled
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: sandbox-limits
+  namespace: aegis-sandbox
+spec:
+  limits:
+    - type: Container
+      max: {cpu: "8", memory: 16Gi, ephemeral-storage: 20Gi}
+      default: {cpu: "1", memory: 1Gi, ephemeral-storage: 1Gi}
+      defaultRequest: {cpu: 250m, memory: 256Mi, ephemeral-storage: 256Mi}

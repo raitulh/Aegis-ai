@@ -342,11 +342,24 @@ def health() -> tuple[bool, str]:
         return False, f"temporal unavailable: {type(exc).__name__}"
 
 
-async def run_worker(*, max_concurrent_activities: int = 16) -> None:
-    """Temporal worker process entrypoint (``python -m aegis_api.processes.temporal_worker``)."""
+async def run_worker(*, max_concurrent_activities: int = 16, stop: threading.Event | None = None) -> None:
+    """Temporal worker process entrypoint (``python -m aegis_api.processes.temporal_worker``).
+
+    Retries the initial connection with backoff (the server may still be starting) and shuts down gracefully
+    when ``stop`` is set (SIGTERM): polling stops and in-flight activities are allowed to finish."""
     from temporalio.worker import Worker
 
-    client = await connect()
+    delay = 1.0
+    while True:
+        try:
+            client = await connect()
+            break
+        except Exception as exc:
+            if stop is not None and stop.is_set():
+                return
+            log.warning("temporal_connect_retry", error=type(exc).__name__, retry_in=delay)
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 30.0)
     with ThreadPoolExecutor(max_workers=max_concurrent_activities, thread_name_prefix="lab-activity") as pool:
         worker = Worker(
             client,
@@ -355,6 +368,14 @@ async def run_worker(*, max_concurrent_activities: int = 16) -> None:
             activities=[lab_activity],
             activity_executor=pool,
             max_concurrent_activities=max_concurrent_activities,
+            graceful_shutdown_timeout=timedelta(seconds=60),
         )
         log.info("temporal_worker_started", task_queue=get_settings().temporal_task_queue)
-        await worker.run()
+        run_task = asyncio.ensure_future(worker.run())
+        while not run_task.done():
+            if stop is not None and stop.is_set():
+                log.info("temporal_worker_stopping")
+                await worker.shutdown()
+                break
+            await asyncio.sleep(0.5)
+        await run_task

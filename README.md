@@ -60,12 +60,32 @@ Most AI governance exists only as static paperwork, spreadsheets, and manual que
 | Capability | What it Delivers |
 | :--- | :--- |
 | 🎯 **Pure Assurance Engines** | 6 dedicated evaluators covering **Fairness** (Counterfactual parity, EEOC 4/5ths rule), **Grounding** (RAG claim NLI entailment), **Safety** (Harm & refusal probes), **Privacy** (Automated PII redaction & leak checks), **Security** (Prompt injection & jailbreak detection), and **Autonomous Agent Auditing** (Unauthorized tool calls & boundary violations). |
-| 🔐 **Cryptographic Evidence Vault** | Every test result is sealed into an append-only **SHA-256 hash chain**. Database triggers reject any `UPDATE` or `DELETE` on evidence rows, delivering court-admissible, tamper-evident audit trails. |
+| 🔐 **Cryptographic Evidence Vault** | Every test result is sealed into an append-only **SHA-256 hash chain**. Database triggers reject any `UPDATE` or `DELETE` on evidence rows, delivering tamper-evident audit trails. |
 | 📜 **Policy-as-Code Compiler** | Ingest any legal, compliance, or company standard (PDF, DOCX, Markdown). Aegis compiles natural language requirements into executable test controls linked to **NIST AI RMF**, **ISO/IEC 42001**, **EU AI Act**, and **OWASP LLM Top 10**. |
 | 🦙 **100% Offline & Local-First** | Native zero-cost evaluations via local **Ollama** (`Qwen3:1.7B`, `Llama 3`, `Mistral`) with automatic chain-of-thought suppression (`think: False`). Data never leaves your machine. Also supports OpenAI, Anthropic, Gemini, or custom HTTP endpoints. |
 | 🤖 **Agent Tool Call Interception** | Full observability into autonomous multi-agent pipelines. Detects unauthorized API invocations, parameters exceeding safety thresholds, and plan-execution divergence. |
 | 🔌 **Model Context Protocol (MCP)** | Built-in Anthropic MCP server (`packages/mcp`). Enables **Claude Desktop**, **Cursor**, and external IDE agents to directly inspect audit health, run evaluations, and retrieve compliance status. |
 | 📊 **World-Class 3D Holographic UI** | Built with Next.js 16, React 19, Tailwind CSS 4, and Three.js / React Three Fiber. Features an interactive 3D Neural Assurance Hologram, real-time SSE audit telemetry, and auto-generated PDF/CSV compliance dossiers. |
+
+---
+
+## 🔬 AI Scientist Evolution Lab
+
+An autonomous, auditable R&D backend inside Aegis: a **mission** states an objective; bounded automation plans
+research, generates falsifiable hypotheses, designs and runs **sandboxed experiments** measured by
+platform-owned harnesses, verifies claims (including independent reproductions) and routes candidate
+discoveries to **human review**. Strategies can be evolved inside an immutable governance envelope and a
+statistical promotion gate.
+
+- **Durable workflows** (12 + benchmark) on **Temporal** or a replaying inline engine — mission, research, hypothesis, experiment, experiment batch, evaluation, verification, evolution, discovery, report, dataset and artifact processing.
+- **17 agent roles** with persisted state machines, schema-validated outputs, a ModelGateway (Gemini-first routing, consent, budgets, failover) and a ToolBroker (allowlists, policy, approvals, MCP, audit).
+- **Execution fabric**: Docker or Kubernetes (gVisor) sandboxes — no network, no credentials, non-root, read-only — with a separate harness container that measures results.
+- **Governance**: autonomy levels L0–L5 (human-set, org-capped), deny-overrides policy engine with a platform baseline, human approvals with separation of duties, budgets, append-only hash-chained evidence.
+- **Science**: hybrid memory with review, knowledge ingestion and graph, Welch/Holm statistics, 7-check verification, evidence-cited reports, reproducibility packages and replay.
+
+Docs: [`docs/lab/`](docs/lab/README.md) · Deploy: `docker compose up --build` (Temporal, MinIO, sandbox included) or
+[`deploy/k8s`](deploy/k8s). A verified claim means the platform's checks passed on recorded evidence — not that a
+result is scientifically settled.
 
 ---
 
@@ -251,18 +271,20 @@ aegis-ai/
 │   ├── privacy/               # Regex + NER PII scanners, automated redaction verification
 │   ├── security/              # Prompt injection, indirect injection, and canary leakage detection
 │   ├── agent/                 # Tool-use validation, unauthorized action prevention
-│   └── policy/                # Natural language compiler (PDF/DOCX → executable controls)
+│   ├── policy/                # Natural language compiler (PDF/DOCX → executable controls)
+│   └── lab/                   # Scientist Lab rules: autonomy, policy, statistics, verification, evolution, routing
+├── deploy/k8s/                # Kustomize base: API, lab workers, sandbox namespace, NetworkPolicies, quotas
 ├── packages/
 │   ├── sdk/python/            # Official Python SDK (`aegis-ai`)
 │   └── mcp/                   # Anthropic Model Context Protocol server (`aegis-mcp`)
 ├── database/
-│   └── migrations/            # Alembic migrations (61 tables, RLS policies, vector indexes, hash triggers)
-└── docs/                      # Comprehensive technical architecture & security documentation
+│   └── migrations/            # Alembic migrations (incl. the `lab` schema: RLS, append-only triggers, vector/FTS indexes)
+└── docs/                      # Architecture & security docs; docs/lab/ for the Scientist Lab
 ```
 
 ---
 
-## 🛡️ Enterprise Security & Integrity Guarantees
+## 🛡️ Enterprise Security & Integrity Controls
 
 1. **Pure Engine Isolation:** Code under `engines/` never touches the database, FastAPI, or app services. Engines receive plain data and return plain mathematical outputs.
 2. **PostgreSQL Row-Level Security (RLS):** All tenant data queries execute through RLS-scoped sessions (`get_db`). Tenant data cross-contamination is prevented at the database engine level.

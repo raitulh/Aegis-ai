@@ -80,10 +80,22 @@ jobs:
           END $$;
           SQL
 
-      - name: Apply migrations
-        run: uv run alembic upgrade head
+      - name: Apply migrations (and verify the latest downgrade)
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade -1
+          uv run alembic upgrade head
 
-      - name: Pytest (unit, integration, evaluation)
+      # Real dependencies for the lab's sandbox and durable-workflow tests (markers: docker, temporal, e2e).
+      - name: Start Temporal dev server
+        run: |
+          docker run -d --name temporal -p 7233:7233 temporalio/temporal:latest server start-dev --ip 0.0.0.0
+          for i in $(seq 1 60); do (echo > /dev/tcp/127.0.0.1/7233) 2>/dev/null && break; sleep 1; done
+
+      - name: Pre-pull the sandbox image
+        run: docker pull python:3.12-alpine
+
+      - name: Pytest (unit, integration, security, e2e, evaluation)
         run: uv run pytest --cov --cov-report=term-missing
 
   # ---------------------------------------------------------------------------
@@ -194,6 +206,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate compose file
+        run: docker compose --profile observability --profile inline config -q
+      - name: Validate Kubernetes manifests (schemas, 1.31)
+        run: |
+          pipx run kubernetes-validate -k 1.31.0 --strict deploy/k8s/namespaces.yaml deploy/k8s/runtimeclass.yaml \
+            deploy/k8s/rbac.yaml deploy/k8s/configmap.yaml deploy/k8s/migrate-job.yaml deploy/k8s/api.yaml \
+            deploy/k8s/lab-workers.yaml deploy/k8s/networkpolicies.yaml deploy/k8s/sandbox-quota.yaml
       - uses: docker/setup-buildx-action@v3
       - name: Build API image
         uses: docker/build-push-action@v6

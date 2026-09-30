@@ -1,0 +1,151 @@
+# Scientist Lab background processes. Only the Temporal worker (activities) and the scheduler (sandbox reaper)
+# use the aegis-lab-worker ServiceAccount, which can manage Jobs in aegis-sandbox and nothing else.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-lab-temporal-worker
+  namespace: aegis
+  labels: {app.kubernetes.io/name: aegis-lab-temporal-worker, app.kubernetes.io/part-of: aegis}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app.kubernetes.io/name: aegis-lab-temporal-worker}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: aegis-lab-temporal-worker, app.kubernetes.io/part-of: aegis, aegis.io/tier: worker}
+    spec:
+      serviceAccountName: aegis-lab-worker
+      terminationGracePeriodSeconds: 90   # the worker drains in-flight activities (graceful_shutdown_timeout 60s)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: worker
+          image: aegis-api:latest
+          command: ["python", "-m", "aegis_api.processes.temporal_worker"]
+          envFrom:
+            - configMapRef: {name: aegis-config}
+            - secretRef: {name: aegis-secrets}
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: var, mountPath: /app/var}
+      volumes:
+        - {name: tmp, emptyDir: {sizeLimit: 2Gi}}
+        - {name: var, emptyDir: {sizeLimit: 1Gi}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aegis-lab-temporal-worker
+  namespace: aegis
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: aegis-lab-temporal-worker}
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aegis-lab-temporal-worker
+  namespace: aegis
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: aegis-lab-temporal-worker}
+---
+# Scheduler: approval expiry, Temporal reconciliation, stale-work recovery, sandbox reaping, retention and
+# billing roll-ups. Runs as a singleton (it also takes a database advisory lock).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-lab-scheduler
+  namespace: aegis
+  labels: {app.kubernetes.io/name: aegis-lab-scheduler, app.kubernetes.io/part-of: aegis}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: aegis-lab-scheduler}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: aegis-lab-scheduler, app.kubernetes.io/part-of: aegis, aegis.io/tier: worker}
+    spec:
+      serviceAccountName: aegis-lab-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: scheduler
+          image: aegis-api:latest
+          command: ["python", "-m", "aegis_api.processes.scheduler"]
+          envFrom:
+            - configMapRef: {name: aegis-config}
+            - secretRef: {name: aegis-secrets}
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {sizeLimit: 256Mi}}
+---
+# Event consumer: signed webhook delivery (outbox, retries with backoff).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-lab-event-consumer
+  namespace: aegis
+  labels: {app.kubernetes.io/name: aegis-lab-event-consumer, app.kubernetes.io/part-of: aegis}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: aegis-lab-event-consumer}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: aegis-lab-event-consumer, app.kubernetes.io/part-of: aegis, aegis.io/tier: worker}
+    spec:
+      serviceAccountName: aegis-api
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: consumer
+          image: aegis-api:latest
+          command: ["python", "-m", "aegis_api.processes.event_consumer"]
+          envFrom:
+            - configMapRef: {name: aegis-config}
+            - secretRef: {name: aegis-secrets}
+          env:
+            - {name: EXECUTION_BACKEND, value: disabled}
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {sizeLimit: 256Mi}}

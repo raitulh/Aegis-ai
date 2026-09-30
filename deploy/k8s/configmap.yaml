@@ -1,0 +1,37 @@
+# Non-secret configuration. Secrets live in the `aegis-secrets` Secret (see secrets.example.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aegis-config
+  namespace: aegis
+data:
+  ENVIRONMENT: production
+  LOG_JSON: "true"
+  LOG_LEVEL: INFO
+  CORS_ORIGINS: https://aegis.example.com
+  JOB_BACKEND: celery
+  EMBEDDING_PROVIDER: hash
+  # Durable workflows
+  WORKFLOW_ENGINE: temporal
+  TEMPORAL_ADDRESS: temporal-frontend.temporal.svc:7233
+  TEMPORAL_NAMESPACE: default
+  TEMPORAL_TASK_QUEUE: aegis-lab
+  # Object storage (S3 / MinIO)
+  OBJECT_STORAGE_BACKEND: s3
+  OBJECT_STORAGE_ENDPOINT: http://minio.aegis.svc:9000
+  OBJECT_STORAGE_PUBLIC_ENDPOINT: https://objects.aegis.example.com
+  OBJECT_STORAGE_BUCKET: aegis-lab
+  OBJECT_STORAGE_REGION: us-east-1
+  # Sandboxed execution: one hardened Job per run in the aegis-sandbox namespace
+  EXECUTION_BACKEND: kubernetes
+  KUBERNETES_API_URL: https://kubernetes.default.svc
+  KUBERNETES_NAMESPACE: aegis-sandbox
+  KUBERNETES_RUNTIME_CLASS: gvisor
+  EXECUTION_REQUIRE_DIGEST_PINNED_IMAGES: "true"
+  EXECUTION_DEFAULT_IMAGE: python:3.12-alpine@sha256:REPLACE_WITH_PINNED_DIGEST
+  # Governance
+  LAB_PLATFORM_MAX_AUTONOMY: L4_CLOSED_LOOP_EVOLUTION
+  # Observability
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc:4318   # OTLP/HTTP
+  OTEL_SERVICE_NAME: aegis-api
+  METRICS_ENABLED: "true"

@@ -533,6 +533,12 @@ def validate_experiment_spec(
     return report
 
 
+@router.get("/experiments/contract")
+def experiment_contract(_: Principal = Depends(require("experiment:read"))) -> dict[str, Any]:
+    """The sandbox I/O contract and the JSON schema experiment specs are validated against."""
+    return {"io_contract": experiment_service.IO_CONTRACT, "spec_schema": experiment_service.spec_contract()}
+
+
 @router.get("/experiments/{experiment_id}", response_model=ExperimentOut)
 def get_experiment(
     experiment_id: uuid.UUID, principal: Principal = Depends(require("experiment:read")), db: Session = Depends(get_db)

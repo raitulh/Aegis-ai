@@ -1,0 +1,20 @@
+# kubectl apply -k deploy/k8s   (after creating the aegis-secrets Secret — see secrets.example.yaml)
+#
+# External dependencies are expected as managed services or their own charts: PostgreSQL 16 + pgvector,
+# Redis, Temporal (namespace `temporal`), S3/MinIO, an ingress controller, and optionally an OTel collector.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml
+  - runtimeclass.yaml
+  - rbac.yaml
+  - configmap.yaml
+  - migrate-job.yaml
+  - api.yaml
+  - lab-workers.yaml
+  - networkpolicies.yaml
+  - sandbox-quota.yaml
+images:
+  - name: aegis-api
+    newName: ghcr.io/your-org/aegis-api
+    newTag: "1.0.0"

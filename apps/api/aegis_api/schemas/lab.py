@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from aegis_api.schemas.common import ORMModel
+from engines.lab.enums import AutonomyLevel
 
 
 class _In(BaseModel):
@@ -132,7 +133,7 @@ class MissionIn(_In):
     deadline: datetime | None = None
     allowed_tools: list[str] = Field(default_factory=list, max_length=40)
     risk_level: Literal["low", "medium", "high", "critical"] = "medium"
-    autonomy_level: str | None = None
+    autonomy_level: AutonomyLevel | None = None
     approval_policy: dict[str, Any] = Field(default_factory=dict)
     config: dict[str, Any] = Field(default_factory=dict)
     max_cycles: int = Field(default=1, ge=1, le=50)
@@ -156,7 +157,7 @@ class MissionUpdate(_In):
 
 
 class AutonomyIn(_In):
-    autonomy_level: str
+    autonomy_level: AutonomyLevel
     reason: str = Field(min_length=3, max_length=2000)
 
 

@@ -98,3 +98,9 @@ Browser → /bff/api/v1/... (Next route handler)
         → RLS-scoped session (org/user set) → service → engines / DB
         → response envelope (+ Set-Cookie / SSE relayed back through the BFF)
 ```
+
+## AI Scientist Evolution Lab
+
+The lab (`lab` schema, `services/lab`, `workflows/`, `engines/lab`) extends this architecture with durable
+workflows (Temporal or the inline engine), a sandboxed execution fabric, a governed agent runtime and a
+verification pipeline. See [`docs/lab/architecture.md`](lab/architecture.md) and the [lab documentation map](lab/README.md).

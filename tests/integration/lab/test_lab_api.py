@@ -121,7 +121,7 @@ def test_autonomy_rules_for_humans_and_api_keys(client, workspace, lab):
     mission_id = r.json()["id"]
     r = client.post(
         f"/api/v1/missions/{mission_id}/autonomy",
-        json={"autonomy_level": "L2_HUMAN_APPROVED_EXECUTION", "reason": "raise"},
+        json={"autonomy_level": "L2_AUTOMATED_EXPERIMENT_DESIGN", "reason": "raise"},
         headers=bearer,
     )
     assert r.status_code == 403  # never raised by automation
@@ -136,6 +136,10 @@ def test_autonomy_rules_for_humans_and_api_keys(client, workspace, lab):
         json={"autonomy_level": "L3_AUTOMATED_EXECUTION", "reason": "sandboxed"},
     )
     assert r.status_code == 200 and r.json()["autonomy_level"] == "L3_AUTOMATED_EXECUTION"
+    bogus = workspace.post(
+        f"/api/v1/missions/{mission_id}/autonomy", json={"autonomy_level": "L9_GOD_MODE", "reason": "x"}
+    )
+    assert bogus.status_code == 422
     levels = workspace.get("/api/v1/autonomy-levels").json()
     assert [lvl["level"] for lvl in levels][:2] == ["L0_ASSISTED", "L1_RESEARCH_AUTOMATION"]
 
@@ -320,6 +324,12 @@ def test_health_readiness_metrics_and_system_info(client, lab):
     assert metrics.status_code == 200 and "aegis_" in metrics.text
     info = client.get("/api/v1/system/info").json()
     assert "disclaimer" in info and "compliant" not in info["disclaimer"].lower().replace("non-compliant", "")
+
+
+def test_experiment_contract_is_published(workspace, lab):
+    contract = workspace.get("/api/v1/experiments/contract").json()
+    assert contract["io_contract"]["network"] == "none"
+    assert "properties" in contract["spec_schema"]
 
 
 def test_openapi_documents_lab_surface(client):

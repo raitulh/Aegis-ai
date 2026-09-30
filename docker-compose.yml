@@ -1,12 +1,25 @@
 # ==============================================================================
-# Aegis AI — full local stack: web · api · worker · postgres(pgvector) · redis
+# Aegis AI — full local stack
 #
-#   cp .env.example .env        # optional; generate real secrets for production
-#   docker compose up --build   # web → http://localhost:3000, api → :8000
+#   Assurance:  web · api · worker(celery) · postgres(pgvector) · redis
+#   Scientist Lab: temporal (+ its own postgres) · temporal-ui · minio (S3) ·
+#                  lab-temporal-worker · lab-scheduler · lab-event-consumer ·
+#                  sandbox (isolated Docker-in-Docker daemon for generated code)
+#   Optional (profile "observability"): otel-collector · prometheus · grafana
+#   Optional (profile "inline"):        lab-worker (inline engine instead of Temporal)
 #
-# The `migrate` service applies migrations and seeds the demo once; api/worker/web
-# wait for it. The API and worker connect as the RLS-enforced app role (aegis);
-# migrations, seeding and the identity layer use the owner role (postgres).
+#   cp .env.example .env                 # optional; generate real secrets for production
+#   docker compose up --build            # web :3000 · api :8000 · temporal-ui :8080 · minio console :9001
+#   docker compose --profile observability up --build
+#
+# Security notes
+# * The API and workers connect as the RLS-enforced app role (aegis); migrations, seeding and the identity
+#   layer use the owner role (postgres).
+# * Generated research code NEVER runs in the API container. The lab worker submits it to the `sandbox`
+#   daemon (mutual TLS, on a network only the job-submitting workers join). Sandboxed containers run with
+#   no network, no credentials, a read-only root filesystem, dropped capabilities and resource limits.
+#   `sandbox` is privileged (Docker-in-Docker); for production use EXECUTION_BACKEND=kubernetes with gVisor.
+# * Default credentials below are development-only.
 # ==============================================================================
 
 x-api-env: &api-env
@@ -19,14 +32,58 @@ x-api-env: &api-env
   JOB_BACKEND: ${JOB_BACKEND:-celery}
   SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
   API_KEY_PEPPER: ${API_KEY_PEPPER:-}
+  JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
+  AGENT_MESSAGE_SIGNING_KEY: ${AGENT_MESSAGE_SIGNING_KEY:-}
   CORS_ORIGINS: ${WEB_ORIGIN:-http://localhost:3000}
   STORAGE_LOCAL_DIR: /app/var/storage
   # AI providers (optional — blank falls back to the local hash embedder / deterministic engines).
   OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  GEMINI_DEFAULT_MODEL: ${GEMINI_DEFAULT_MODEL:-}
+  GEMINI_REASONING_MODEL: ${GEMINI_REASONING_MODEL:-}
+  GEMINI_FAST_MODEL: ${GEMINI_FAST_MODEL:-}
+  GEMINI_DEEP_RESEARCH_AGENT: ${GEMINI_DEEP_RESEARCH_AGENT:-}
+  GEMINI_TIMEOUT_SECONDS: ${GEMINI_TIMEOUT_SECONDS:-120}
+  GEMINI_MAX_RETRIES: ${GEMINI_MAX_RETRIES:-3}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-hash}
+  # Scientist Lab: durable workflows, object storage, sandbox.
+  WORKFLOW_ENGINE: ${WORKFLOW_ENGINE:-temporal}
+  TEMPORAL_ADDRESS: temporal:7233
+  TEMPORAL_NAMESPACE: default
+  TEMPORAL_TASK_QUEUE: aegis-lab
+  OBJECT_STORAGE_BACKEND: s3
+  OBJECT_STORAGE_ENDPOINT: http://minio:9000
+  OBJECT_STORAGE_PUBLIC_ENDPOINT: ${OBJECT_STORAGE_PUBLIC_ENDPOINT:-http://localhost:9000}
+  OBJECT_STORAGE_BUCKET: aegis-lab
+  OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-aegis}
+  OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-aegis-dev-secret}
+  EXECUTION_BACKEND: docker
+  EXECUTION_DEFAULT_IMAGE: ${EXECUTION_DEFAULT_IMAGE:-python:3.12-alpine}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+
+# Only the processes that submit sandbox jobs get the sandbox daemon address and client certificates.
+x-sandbox-env: &sandbox-env
+  DOCKER_HOST: tcp://sandbox:2376
+  DOCKER_TLS_CERT_DIR: /certs/client
+
+x-lab-process: &lab-process
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.api
+  depends_on:
+    db:
+      condition: service_healthy
+    minio-init:
+      condition: service_completed_successfully
+    migrate:
+      condition: service_completed_successfully
+    temporal:
+      condition: service_started
+  restart: unless-stopped
+  networks: [default]
 
 services:
   db:
@@ -59,6 +116,102 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # --- object storage (S3 API) ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:${MINIO_VERSION:-RELEASE.2025-04-22T22-12-26Z}
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aegis}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aegis-dev-secret}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # One-shot: create the private lab bucket (no anonymous access).
+  minio-init:
+    image: minio/mc:${MINIO_MC_VERSION:-RELEASE.2025-04-16T18-13-26Z}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing local/aegis-lab &&
+        mc anonymous set none local/aegis-lab
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aegis}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aegis-dev-secret}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+  # --- Temporal (durable workflows) --------------------------------------------------------------------------
+  temporal-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    volumes:
+      - temporaldata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  temporal:
+    image: temporalio/auto-setup:${TEMPORAL_VERSION:-1.27.2}
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: temporal-db
+    ports:
+      - "${TEMPORAL_PORT:-7233}:7233"
+    depends_on:
+      temporal-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  temporal-ui:
+    image: temporalio/ui:${TEMPORAL_UI_VERSION:-2.36.0}
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "${TEMPORAL_UI_PORT:-8080}:8080"
+    depends_on:
+      - temporal
+    restart: unless-stopped
+
+  # --- sandbox: isolated Docker daemon for generated code ---------------------------------------------------
+  sandbox:
+    image: docker:27-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - sandbox-certs:/certs
+      - sandbox-data:/var/lib/docker
+    networks: [sandbox]
+    healthcheck:
+      test:
+        ["CMD", "docker", "--tlsverify", "--tlscacert", "/certs/client/ca.pem", "--tlscert", "/certs/client/cert.pem",
+         "--tlskey", "/certs/client/key.pem", "-H", "tcp://127.0.0.1:2376", "info"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
   # One-shot: migrate + seed, then exit. api/worker/web gate on its success.
   migrate:
     build:
@@ -71,6 +224,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     restart: "no"
 
   api:
@@ -85,6 +240,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -106,6 +263,52 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # --- Scientist Lab processes ---------------------------------------------------------------------------------
+  lab-temporal-worker:
+    <<: *lab-process
+    command: ["python", "-m", "aegis_api.processes.temporal_worker"]
+    environment:
+      <<: [*api-env, *sandbox-env]
+    volumes:
+      - sandbox-certs:/certs:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_started
+      sandbox:
+        condition: service_healthy
+    networks: [default, sandbox]
+
+  lab-scheduler:
+    <<: *lab-process
+    command: ["python", "-m", "aegis_api.processes.scheduler"]
+    environment:
+      <<: [*api-env, *sandbox-env]
+    volumes:
+      - sandbox-certs:/certs:ro
+    networks: [default, sandbox]  # reaps orphaned sandbox containers
+
+  lab-event-consumer:
+    <<: *lab-process
+    command: ["python", "-m", "aegis_api.processes.event_consumer"]
+    environment: *api-env
+
+  # Inline engine alternative (no Temporal): `WORKFLOW_ENGINE=inline docker compose --profile inline up`.
+  lab-worker:
+    <<: *lab-process
+    profiles: ["inline"]
+    command: ["python", "-m", "aegis_api.processes.worker"]
+    environment:
+      <<: [*api-env, *sandbox-env]
+    volumes:
+      - sandbox-certs:/certs:ro
+    networks: [default, sandbox]
+
   web:
     build:
       context: .
@@ -122,5 +325,48 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # --- observability (optional) ----------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION:-0.123.0}
+    profiles: ["observability"]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./docker/observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.3.0}
+    profiles: ["observability"]
+    volumes:
+      - ./docker/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-11.6.0}
+    profiles: ["observability"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-aegis-dev-only}
+    volumes:
+      - ./docker/observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - prometheus
+
+networks:
+  default:
+  # Only the sandbox daemon and the job-submitting workers join this network; the daemon additionally requires
+  # mutual TLS. (Not `internal`: the daemon must be able to pull runner images. Sandboxed job containers
+  # themselves always run with network=none.)
+  sandbox:
+
 volumes:
   pgdata:
+  miniodata:
+  temporaldata:
+  sandbox-certs:
+  sandbox-data:

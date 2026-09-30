@@ -162,6 +162,8 @@ class Settings(BaseSettings):
     # --- execution fabric -------------------------------------------------------------------------
     execution_backend: Literal["docker", "kubernetes", "disabled"] = "docker"
     docker_host: str | None = None
+    # Directory with ca.pem/cert.pem/key.pem for a TLS-protected remote daemon (e.g. the compose dind sandbox).
+    docker_tls_cert_dir: str | None = None
     execution_default_image: str = "python:3.12-alpine"
     execution_workdir_root: str = "var/sandbox"
     execution_user: str = "65534:65534"

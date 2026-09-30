@@ -20,7 +20,10 @@ def get_backend() -> ExecutionBackend:
         from aegis_api.infrastructure.execution.docker_backend import LocalDockerBackend
 
         return LocalDockerBackend(
-            docker_host=settings.docker_host, user=settings.execution_user, tmpfs_mb=settings.execution_tmpfs_mb
+            docker_host=settings.docker_host,
+            user=settings.execution_user,
+            tmpfs_mb=settings.execution_tmpfs_mb,
+            tls_cert_dir=settings.docker_tls_cert_dir,
         )
     if settings.execution_backend == "kubernetes":
         from aegis_api.infrastructure.execution.kubernetes_backend import KubernetesBackend

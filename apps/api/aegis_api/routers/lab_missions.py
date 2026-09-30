@@ -117,7 +117,7 @@ def change_autonomy(
     db: Session = Depends(get_db),
 ) -> MissionOut:
     return MissionOut.model_validate(
-        missions.change_autonomy(db, principal, mission_id, body.autonomy_level, body.reason)
+        missions.change_autonomy(db, principal, mission_id, body.autonomy_level.value, body.reason)
     )
 
 

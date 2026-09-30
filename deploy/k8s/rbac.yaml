@@ -1,0 +1,73 @@
+# The API has no Kubernetes permissions and no token. Only the lab workers may manage sandbox Jobs, and
+# only inside aegis-sandbox (no secrets, no exec, no other namespaces).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aegis-api
+  namespace: aegis
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aegis-lab-worker
+  namespace: aegis
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sandbox-job-runner
+  namespace: aegis-sandbox
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sandbox-job-runner
+  namespace: aegis-sandbox
+subjects:
+  - kind: ServiceAccount
+    name: aegis-lab-worker
+    namespace: aegis
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sandbox-job-runner
+---
+# Namespaces are cluster-scoped: reading the sandbox namespace (backend health check) needs a ClusterRole,
+# restricted to that single object.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aegis-sandbox-namespace-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    resourceNames: ["aegis-sandbox"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aegis-sandbox-namespace-reader
+subjects:
+  - kind: ServiceAccount
+    name: aegis-lab-worker
+    namespace: aegis
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aegis-sandbox-namespace-reader

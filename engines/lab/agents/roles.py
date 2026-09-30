@@ -54,7 +54,7 @@ ROLE_SPECS: dict[AgentRole, AgentRoleSpec] = {
             TaskClass.RESEARCH,
             "literature.review",
             s.LiteratureReview,
-            ("paper_search", "web_search", "url_fetch", "memory_search"),
+            ("paper_search", "url_fetch", "memory_search"),
             max_steps=6,
             timeout_seconds=900,
             can_propose_memory=True,

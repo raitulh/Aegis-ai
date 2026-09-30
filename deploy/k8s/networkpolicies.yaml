@@ -1,0 +1,133 @@
+# ---------------------------------------------------------------------------------------------------------
+# Platform namespace: default-deny ingress; only the ingress controller reaches the API. Egress is limited
+# to DNS, the platform's data services and HTTPS (model providers, literature APIs, webhooks — every outbound
+# URL is additionally SSRF-validated by the application).
+# ---------------------------------------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: aegis
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-from-ingress
+  namespace: aegis
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: aegis-api}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: ingress-nginx}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: observability}   # Prometheus scrape of /metrics
+      ports:
+        - {protocol: TCP, port: 8000}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: platform-egress
+  namespace: aegis
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: aegis.io/tier, operator: In, values: [api, worker]}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - podSelector: {}   # in-namespace data services (Postgres, Redis, MinIO)
+      ports:
+        - {protocol: TCP, port: 5432}
+        - {protocol: TCP, port: 6379}
+        - {protocol: TCP, port: 9000}
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: temporal}
+      ports:
+        - {protocol: TCP, port: 7233}
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: observability}
+      ports:
+        - {protocol: TCP, port: 4318}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+      ports:
+        - {protocol: TCP, port: 443}
+---
+# Only the processes that manage sandbox Jobs may reach the Kubernetes API. Replace the CIDR with your API
+# server endpoint (kubectl get endpoints kubernetes -n default) to tighten further.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lab-workers-to-kubernetes-api
+  namespace: aegis
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: app.kubernetes.io/name, operator: In, values: [aegis-lab-temporal-worker, aegis-lab-scheduler]}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 0.0.0.0/0}
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}
+---
+# ---------------------------------------------------------------------------------------------------------
+# Sandbox namespace: deny everything. Generated code gets no ingress and no egress — not even DNS.
+# The only exception is the output collector's upload to object storage (a single-object presigned PUT);
+# the main container shares the pod network but holds no credentials, and the bucket denies anonymous
+# writes. Pods labelled aegis.io/egress=allowlist (approved network access) must additionally be routed
+# through an egress gateway that enforces the per-run allowlist (see docs/deployment.md).
+# ---------------------------------------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: aegis-sandbox
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: output-upload-to-object-storage
+  namespace: aegis-sandbox
+spec:
+  podSelector:
+    matchLabels: {aegis.io/sandbox: "true"}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: aegis}
+          podSelector:
+            matchLabels: {app: minio}
+      ports:
+        - {protocol: TCP, port: 9000}
+    # DNS is only needed when the presign endpoint is a hostname. Prefer a ClusterIP endpoint and delete this
+    # rule to also close DNS as a covert channel.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {protocol: UDP, port: 53}

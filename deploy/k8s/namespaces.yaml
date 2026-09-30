@@ -1,0 +1,20 @@
+# Two namespaces: the platform (API, workers) and an isolated sandbox for generated research code.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aegis
+  labels:
+    app.kubernetes.io/part-of: aegis
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aegis-sandbox
+  labels:
+    app.kubernetes.io/part-of: aegis
+    aegis.io/role: sandbox
+    # Sandbox pods run non-root, read-only, all capabilities dropped, seccomp RuntimeDefault.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest

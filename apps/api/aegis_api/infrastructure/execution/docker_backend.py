@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -68,8 +69,16 @@ class LocalDockerBackend(ExecutionBackend):
     supports_egress_allowlist = False
     supports_gpu = False
 
-    def __init__(self, *, docker_host: str | None = None, user: str = "65534:65534", tmpfs_mb: int = 256) -> None:
+    def __init__(
+        self,
+        *,
+        docker_host: str | None = None,
+        user: str = "65534:65534",
+        tmpfs_mb: int = 256,
+        tls_cert_dir: str | None = None,
+    ) -> None:
         self.docker_host = docker_host
+        self.tls_cert_dir = tls_cert_dir
         self.user = user
         self.tmpfs_mb = tmpfs_mb
         self._client: Any = None
@@ -82,11 +91,20 @@ class LocalDockerBackend(ExecutionBackend):
             import docker
 
             try:
-                self._client = (
-                    docker.DockerClient(base_url=self.docker_host, timeout=60)
-                    if self.docker_host
-                    else docker.from_env(timeout=60)
-                )
+                if self.docker_host:
+                    tls: Any = None
+                    if self.tls_cert_dir:
+                        from docker.tls import TLSConfig
+
+                        certs = Path(self.tls_cert_dir)
+                        tls = TLSConfig(
+                            client_cert=(str(certs / "cert.pem"), str(certs / "key.pem")),
+                            ca_cert=str(certs / "ca.pem"),
+                            verify=True,
+                        )
+                    self._client = docker.DockerClient(base_url=self.docker_host, tls=tls, timeout=60)
+                else:
+                    self._client = docker.from_env(timeout=60)
             except Exception as exc:
                 raise ExecutionError(f"Docker daemon unavailable: {type(exc).__name__}", transient=True) from exc
         return self._client

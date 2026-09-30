@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 import httpx
@@ -34,28 +34,61 @@ class _Transport:
             headers={"Authorization": f"Bearer {api_key}", "User-Agent": USER_AGENT, "Accept": "application/json"},
         )
 
-    def request(self, method: str, path: str, *, params: dict | None = None, json: Any = None) -> Any:
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict | None = None,
+        json: Any = None,
+        headers: dict[str, str] | None = None,
+        files: Any = None,
+        data: dict | None = None,
+        raw: bool = False,
+    ) -> Any:
+        """Send a request with bounded retries. A POST without an ``Idempotency-Key`` is retried only when it
+        provably never reached the server (connection failures); otherwise a retry could repeat a side effect.
+        ``raw=True`` returns the response bytes."""
         last_exc: Exception | None = None
-        for attempt in range(self.max_retries + 1):
+        retries = self.max_retries
+        replay_safe = method.upper() != "POST" or bool(headers and "Idempotency-Key" in headers)
+        for attempt in range(retries + 1):
             try:
-                response = self._client.request(method, path, params=_clean(params), json=json)
-            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+                response = self._client.request(
+                    method, path, params=_clean(params), json=json, headers=headers, files=files, data=data
+                )
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:  # not sent: always safe to retry
                 last_exc = exc
-                if attempt < self.max_retries:
+                if attempt < retries:
                     time.sleep(0.5 * (attempt + 1))
                     continue
                 raise AegisConnectionError(f"Could not reach Aegis API at {self.base_url}: {exc}") from exc
-            if response.status_code in RETRY_STATUSES and attempt < self.max_retries:
+            except httpx.ReadTimeout as exc:  # may have been processed
+                last_exc = exc
+                if replay_safe and attempt < retries:
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+                raise AegisConnectionError(f"Timed out waiting for the Aegis API at {self.base_url}: {exc}") from exc
+            if response.status_code in RETRY_STATUSES and replay_safe and attempt < retries:
                 time.sleep(0.75 * (attempt + 1))
                 continue
-            if response.status_code == 429 and attempt < self.max_retries:
+            if response.status_code == 429 and attempt < retries:
                 time.sleep(int(response.headers.get("Retry-After", 1)))
                 continue
             if response.status_code >= 400:
                 body = _safe_json(response)
                 raise_for_response(response.status_code, body, retry_after=int(response.headers.get("Retry-After", 60)))
+            if raw:
+                return response.content
             return _safe_json(response) if response.content else None
         raise AegisConnectionError("Request failed after retries") from last_exc
+
+    def stream_lines(self, path: str, *, headers: dict[str, str] | None = None) -> Iterator[str]:
+        with self._client.stream("GET", path, headers=headers, timeout=None) as response:
+            if response.status_code >= 400:
+                response.read()
+                raise_for_response(response.status_code, _safe_json(response))
+            yield from response.iter_lines()
 
     def close(self) -> None:
         self._client.close()
@@ -326,6 +359,9 @@ class Aegis:
         self.agents = Agents(self._t)
         self.monitoring = Monitoring(self._t)
         self.providers = Providers(self._t)
+        from aegis_ai.lab import Lab
+
+        self.lab = Lab(self._t)
 
     def overview(self) -> dict[str, Any]:
         return self._t.request("GET", "/api/v1/overview")

@@ -57,18 +57,10 @@ DEFINITION_FIELDS = (
     "max_cycles",
 )
 EDITABLE_STATUSES = frozenset({MissionStatus.DRAFT, MissionStatus.PLANNED, MissionStatus.PAUSED, MissionStatus.FAILED})
+# Tools a mission may allow (the ToolBroker's built-ins; MCP tools are named ``mcp:<server>.<tool>``). Code
+# execution is deliberately not a tool: generated code only runs through experiments in the sandbox.
 KNOWN_TOOLS = frozenset(
-    {
-        "paper_search",
-        "web_search",
-        "url_fetch",
-        "memory_search",
-        "file_search",
-        "dataset_search",
-        "object_storage",
-        "python_execution",
-        "experiment_run",
-    }
+    {"paper_search", "url_fetch", "memory_search", "file_search", "dataset_search", "object_storage"}
 )
 CONFIG_KEYS = frozenset(
     {
