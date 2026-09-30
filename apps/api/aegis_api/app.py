@@ -20,8 +20,14 @@ from aegis_api.routers import (
     findings,
     health,
     identity,
+    lab_governance,
+    lab_missions,
+    lab_org,
+    lab_science,
+    lab_verification,
     operations,
     policies,
+    system,
     systems,
     workspace,
 )
@@ -55,6 +61,20 @@ TAGS_METADATA = [
     {"name": "Operations", "description": "Agent traces, red team, monitoring and alerts."},
     {"name": "Workspace", "description": "Overview, search, team, API keys, integrations and notifications."},
     {"name": "Demo", "description": "Public demo endpoints (no authentication)."},
+    {"name": "Organization", "description": "Organization, users, workspaces, projects and teams."},
+    {
+        "name": "Missions",
+        "description": "Scientist Lab missions, live events (SSE), workflow runs, agents and prompts.",
+    },
+    {"name": "Science", "description": "Research, knowledge, memory, hypotheses, experiments, datasets and artifacts."},
+    {
+        "name": "Verification",
+        "description": "Claims and lineage, verification, discoveries, failures, reports, strategies.",
+    },
+    {
+        "name": "Governance",
+        "description": "Approvals, lab policies, tools/MCP, models, usage, billing, webhooks, benchmarks.",
+    },
     {"name": "Health", "description": "Liveness and readiness."},
 ]
 
@@ -72,6 +92,13 @@ async def lifespan(app: FastAPI):
     if settings.uses_dev_secrets and settings.is_production:
         raise RuntimeError("Refusing to start in production without SECRETS_ENCRYPTION_KEY and API_KEY_PEPPER")
     _seed_reference_data()
+    try:
+        from aegis_api.db.session import get_engine
+        from aegis_api.infrastructure.observability.telemetry import instrument_engine_metrics
+
+        instrument_engine_metrics(get_engine())
+    except Exception:
+        log.warning("db_metrics_instrumentation_skipped", exc_info=True)
     yield
 
 
@@ -80,11 +107,13 @@ def _seed_reference_data() -> None:
     try:
         from aegis_api.db.session import session_factory
         from aegis_api.services import policy_service, rbac_service
+        from aegis_api.services.lab import reference as lab_reference
 
         session = session_factory(admin=True)()
         try:
             policy_service.seed_frameworks(session)
             rbac_service.seed_catalogue(session)
+            lab_reference.seed(session)
             session.commit()
         finally:
             session.close()
@@ -121,8 +150,12 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestContextMiddleware)
 
     install_error_handlers(app)
+    from aegis_api.infrastructure.observability.telemetry import configure_tracing
+
+    configure_tracing(app)
 
     app.include_router(health.router)
+    app.include_router(system.router)
     app.include_router(auth.router)
     app.include_router(identity.router)
     app.include_router(systems.router)
@@ -133,6 +166,11 @@ def create_app() -> FastAPI:
     app.include_router(operations.router)
     app.include_router(workspace.router)
     app.include_router(demo.router)
+    app.include_router(lab_org.router)
+    app.include_router(lab_missions.router)
+    app.include_router(lab_science.router)
+    app.include_router(lab_verification.router)
+    app.include_router(lab_governance.router)
 
     @app.get("/", include_in_schema=False)
     def root() -> dict[str, str]:

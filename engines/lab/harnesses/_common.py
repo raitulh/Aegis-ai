@@ -5,13 +5,16 @@ from __future__ import annotations
 import csv
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any
 
-CANDIDATE_DIR = Path("/candidate")
-DATA_DIR = Path("/data")
-CONFIG_PATH = Path("/harness/config.json")
-OUTPUT_PATH = Path("/output/metrics.json")
+# The execution backend stages everything under one workspace volume; AEGIS_HARNESS_ROOT points at it.
+ROOT = Path(os.environ.get("AEGIS_HARNESS_ROOT", "/"))
+CANDIDATE_DIR = ROOT / "candidate"
+DATA_DIR = ROOT / "data"
+CONFIG_PATH = ROOT / "harness" / "config.json"
+OUTPUT_PATH = ROOT / "output" / "metrics.json"
 MAX_ROWS = 5_000_000
 
 

@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     gemini_embed_model: str = "gemini-embedding-001"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
+    openai_embed_model: str = "text-embedding-3-small"
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-5"
     embedding_provider: Literal["hash", "ollama", "gemini", "openai"] = "hash"

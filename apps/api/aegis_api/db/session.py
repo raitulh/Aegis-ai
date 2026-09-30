@@ -8,7 +8,7 @@ second line of defence behind the application-level organization filters.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 from sqlalchemy import Engine, create_engine, event, text
@@ -69,7 +69,15 @@ def _apply_tenant_context(session: Session, transaction: object, connection: obj
 
 @event.listens_for(Session, "after_commit")
 def _run_after_commit(session: Session) -> None:
-    """Dispatch background jobs queued during the transaction, only after it commits."""
+    """Dispatch background jobs / callbacks queued during the transaction, only after it commits."""
+    callbacks = session.info.pop("after_commit_callbacks", None)
+    for callback in callbacks or []:
+        try:
+            callback()
+        except Exception:
+            import structlog
+
+            structlog.get_logger("aegis.db").exception("after_commit_callback_failed")
     hooks = session.info.pop("after_commit", None)
     if not hooks:
         return
@@ -82,6 +90,16 @@ def _run_after_commit(session: Session) -> None:
             import structlog
 
             structlog.get_logger("aegis.jobs").exception("dispatch_failed")
+
+
+@event.listens_for(Session, "after_rollback")
+def _discard_after_commit(session: Session) -> None:
+    session.info.pop("after_commit_callbacks", None)
+
+
+def on_commit(session: Session, callback: Callable[[], None]) -> None:
+    """Run ``callback`` after the session's current transaction commits (dropped on rollback)."""
+    session.info.setdefault("after_commit_callbacks", []).append(callback)
 
 
 def set_tenant(session: Session, org_id: uuid.UUID | None, user_id: uuid.UUID | None = None) -> None:

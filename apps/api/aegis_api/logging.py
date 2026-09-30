@@ -52,3 +52,8 @@ def configure_logging(level: str = "INFO", json_logs: bool = False) -> None:
     logging.basicConfig(level=level.upper(), stream=sys.stdout, format="%(levelname)s %(name)s %(message)s")
     for noisy in ("uvicorn.access", "httpx", "httpcore"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+
+
+def redact_data(value: Any) -> Any:
+    """Redact secrets from a structure before it is persisted (tool arguments, request snapshots)."""
+    return _redact_value(value)

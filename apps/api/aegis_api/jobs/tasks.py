@@ -38,3 +38,14 @@ def run_service_job(self, dotted: str, organization_id: str, args: list) -> None
         raise
     finally:
         session.close()
+
+
+@celery_app.task(name="aegis.run_task", bind=True, max_retries=0)
+def run_task(self, dotted: str, args: list) -> None:
+    """Session-less tasks (workflow drivers); they open their own short transactions."""
+    from aegis_api.jobs.jobs import TASK_REGISTRY
+
+    fn = TASK_REGISTRY.get(dotted)
+    if fn is None:
+        raise ValueError(f"Unknown task {dotted}")
+    fn(*args)

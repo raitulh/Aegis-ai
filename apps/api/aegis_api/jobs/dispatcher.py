@@ -65,3 +65,31 @@ def run_now(fn: Callable[..., object], organization_id: uuid.UUID, *args: object
 
 def _encode(value: object) -> object:
     return str(value) if isinstance(value, uuid.UUID) else value
+
+
+def dispatch_task(dotted: str, *args: str) -> None:
+    """Run a registered session-less task asynchronously (the task manages its own short transactions).
+
+    Used for long-running orchestration (workflow drivers, webhook delivery) that must never hold a DB
+    transaction open across model calls, network I/O or sandbox execution. ``dotted`` must be a key of
+    ``aegis_api.jobs.jobs.TASK_REGISTRY`` (an allowlist — arbitrary callables are never dispatched).
+    """
+    from aegis_api.jobs.jobs import TASK_REGISTRY
+
+    fn = TASK_REGISTRY.get(dotted)
+    if fn is None:
+        raise ValueError(f"Unknown task {dotted}")
+    settings = get_settings()
+    if settings.effective_job_backend == "celery":
+        from aegis_api.jobs.tasks import run_task
+
+        run_task.delay(dotted, [str(a) for a in args])
+        return
+    _pool().submit(_run_task_safely, fn, *args)
+
+
+def _run_task_safely(fn: Callable[..., object], *args: object) -> None:
+    try:
+        fn(*args)
+    except Exception:
+        log.exception("task_failed", task=getattr(fn, "__name__", "task"))

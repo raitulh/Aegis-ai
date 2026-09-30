@@ -22,6 +22,9 @@ CODE_DIR = "code"
 INPUT_DIR = "input"
 DATA_DIR = "data"
 OUTPUT_DIR = "output"
+HARNESS_DIR = "harness"  # platform-owned evaluation harness (harness jobs only)
+CANDIDATE_DIR = "candidate"  # candidate outputs staged read-only for the harness (harness jobs only)
+WORKSPACE_ROOTS = (CODE_DIR, INPUT_DIR, DATA_DIR, OUTPUT_DIR, HARNESS_DIR, CANDIDATE_DIR)
 
 SAFE_ENV_PREFIXES = ("AEGIS_", "PYTHON", "OMP_", "MKL_", "OPENBLAS_")
 
@@ -135,16 +138,16 @@ class ExecutionBackend(ABC):
             safe_relative_path(path)
 
 
-def safe_relative_path(path: str) -> str:
-    """Normalize a workspace-relative path; reject absolute paths, traversal and odd characters."""
+def safe_relative_path(path: str, *, roots: tuple[str, ...] | None = WORKSPACE_ROOTS) -> str:
+    """Normalize a relative path; reject absolute paths, traversal and odd characters. With ``roots`` the first
+    component must be one of the workspace directories."""
     if not path or "\x00" in path or "\\" in path:
         raise ExecutionPolicyError(f"invalid path '{path}'")
     norm = posixpath.normpath(path)
     if norm.startswith(("/", "..")) or norm == "." or any(part == ".." for part in PurePosixPath(norm).parts):
         raise ExecutionPolicyError(f"path escapes the workspace: '{path}'")
-    top = PurePosixPath(norm).parts[0]
-    if top not in (CODE_DIR, INPUT_DIR, DATA_DIR, OUTPUT_DIR):
-        raise ExecutionPolicyError(f"files must live under code/, input/, data/ or output/: '{path}'")
+    if roots is not None and PurePosixPath(norm).parts[0] not in roots:
+        raise ExecutionPolicyError(f"files must live under {', '.join(r + '/' for r in roots)}: '{path}'")
     return norm
 
 

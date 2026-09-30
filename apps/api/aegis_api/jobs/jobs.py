@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
@@ -34,4 +35,23 @@ JOB_REGISTRY = {
     "aegis_api.jobs.jobs:run_redteam_job": run_redteam_job,
     "aegis_api.jobs.jobs:run_regression_job": run_regression_job,
     "aegis_api.jobs.jobs:compile_policy_job": compile_policy_job,
+}
+
+
+def _drive_workflow(run_id: str, organization_id: str) -> None:
+    from aegis_api.workflows.engine import drive_inline_run
+
+    drive_inline_run(run_id, organization_id)
+
+
+def _deliver_webhooks() -> None:
+    from aegis_api.processes.event_consumer import deliver_webhooks_once
+
+    deliver_webhooks_once()
+
+
+# Session-less tasks (see dispatcher.dispatch_task).
+TASK_REGISTRY: dict[str, Callable[..., None]] = {
+    "aegis_api.workflows.engine:drive_inline_run": _drive_workflow,
+    "aegis_api.processes.event_consumer:deliver_webhooks_once": _deliver_webhooks,
 }
