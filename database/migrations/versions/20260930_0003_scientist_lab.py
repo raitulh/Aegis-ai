@@ -298,6 +298,8 @@ def downgrade() -> None:
 
 
 def _create_tables() -> None:
+    for table in ("memberships", "invitations", "api_keys"):
+        op.alter_column(table, "role", type_=sa.String(length=48), existing_type=sa.String(length=16))
     op.create_table(
         "evaluators",
         sa.Column("key", sa.String(length=64), nullable=False),
@@ -3827,6 +3829,8 @@ def _create_tables() -> None:
 
 
 def _drop_tables() -> None:
+    for table in ("memberships", "invitations", "api_keys"):
+        op.alter_column(table, "role", type_=sa.String(length=16), existing_type=sa.String(length=48))
     op.drop_constraint("uq_webhook_deliveries_hook_event", "webhook_deliveries", type_="unique")
     op.drop_index(
         "uq_evidence_chain_scope_seq", table_name="evidence", postgresql_where=sa.text("chain_scope IS NOT NULL")

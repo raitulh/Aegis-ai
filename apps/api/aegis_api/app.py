@@ -19,6 +19,7 @@ from aegis_api.routers import (
     evidence,
     findings,
     health,
+    identity,
     operations,
     policies,
     systems,
@@ -38,7 +39,14 @@ All data is scoped to the authenticated workspace.
 """
 
 TAGS_METADATA = [
-    {"name": "Auth", "description": "Sign up, sign in, sessions and guest sandboxes."},
+    {
+        "name": "Auth",
+        "description": "Sign up, sign in, sessions, JWT tokens with refresh rotation, password reset, SSO.",
+    },
+    {
+        "name": "Identity",
+        "description": "Roles, custom roles, service accounts, key rotation, SSO connections, quotas, flags.",
+    },
     {"name": "Systems", "description": "Register AI systems and configure model providers."},
     {"name": "Audits", "description": "Run audits and stream live progress; inspect results, evidence and reports."},
     {"name": "Policies", "description": "Upload and compile policies into executable controls; framework mappings."},
@@ -71,11 +79,12 @@ def _seed_reference_data() -> None:
     """Load global framework reference packs (idempotent)."""
     try:
         from aegis_api.db.session import session_factory
-        from aegis_api.services import policy_service
+        from aegis_api.services import policy_service, rbac_service
 
         session = session_factory(admin=True)()
         try:
             policy_service.seed_frameworks(session)
+            rbac_service.seed_catalogue(session)
             session.commit()
         finally:
             session.close()
@@ -115,6 +124,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(identity.router)
     app.include_router(systems.router)
     app.include_router(audits.router)
     app.include_router(policies.router)

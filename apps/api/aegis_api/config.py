@@ -105,6 +105,106 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
     email_from: str = "Aegis AI <no-reply@aegis.local>"
 
+    # --- tokens (JWT access + rotating refresh) ------------------------------------------------
+    # HS256 signing key for access tokens (>= 32 chars; required in production).
+    jwt_signing_key: str | None = None
+    jwt_issuer: str = "aegis-lab"
+    jwt_audience: str = "aegis-api"
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 30
+    password_reset_ttl_minutes: int = 30
+    email_verification_ttl_hours: int = 48
+    email_backend: Literal["smtp", "outbox", "memory"] | None = None
+
+    # --- LLM gateway / Gemini ------------------------------------------------------------------
+    llm_default_provider: Literal["gemini", "openai", "anthropic", "ollama"] = "gemini"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_api_revision: str = "2026-05-20"
+    # Model IDs always come from configuration; they fall back to GEMINI_MODEL when unset.
+    gemini_default_model: str | None = None
+    gemini_reasoning_model: str | None = None
+    gemini_fast_model: str | None = None
+    gemini_deep_research_agent: str | None = None
+    gemini_timeout_seconds: float = 120.0
+    gemini_max_retries: int = 3
+    # JSON list of extra/override catalogue entries:
+    # [{"provider": "gemini", "model": "...", "tier": "fast", "input_per_mtok": 0.1, "output_per_mtok": 0.4}]
+    model_catalog_json: str = "[]"
+    llm_max_output_tokens: int = 8192
+    agent_max_steps: int = 6
+
+    # --- durable workflows -----------------------------------------------------------------------
+    workflow_engine: Literal["temporal", "inline"] | None = None
+    temporal_address: str | None = None
+    temporal_namespace: str = "default"
+    temporal_task_queue: str = "aegis-lab"
+    temporal_tls: bool = False
+    temporal_api_key: str | None = None
+    workflow_lease_seconds: int = 300
+    inline_workflow_poll_seconds: float = 2.0
+
+    # --- object storage ---------------------------------------------------------------------------
+    object_storage_backend: Literal["local", "s3"] = "local"
+    object_storage_endpoint: str | None = None
+    object_storage_public_endpoint: str | None = None
+    object_storage_region: str = "us-east-1"
+    object_storage_bucket: str = "aegis-lab"
+    object_storage_access_key: str | None = None
+    object_storage_secret_key: str | None = None
+    object_storage_local_dir: str = "var/objects"
+    object_storage_presign_ttl_seconds: int = 600
+    max_artifact_upload_bytes: int = 200 * 1024 * 1024
+    malware_scanner: Literal["none", "clamav"] = "none"
+    clamav_host: str | None = None
+    clamav_port: int = 3310
+
+    # --- execution fabric -------------------------------------------------------------------------
+    execution_backend: Literal["docker", "kubernetes", "disabled"] = "docker"
+    docker_host: str | None = None
+    execution_default_image: str = "python:3.12-alpine"
+    execution_workdir_root: str = "var/sandbox"
+    execution_user: str = "65534:65534"
+    execution_pids_limit: int = 256
+    execution_max_cpu: float = 4.0
+    execution_max_memory_mb: int = 8192
+    execution_max_timeout_seconds: int = 3600
+    execution_max_output_bytes: int = 50 * 1024 * 1024
+    execution_max_log_bytes: int = 2 * 1024 * 1024
+    execution_tmpfs_mb: int = 256
+    execution_require_digest_pinned_images: bool = False
+    execution_max_gpu_count: int = 0
+    execution_allowed_gpu_types: str = ""
+    kubernetes_api_url: str | None = None
+    kubernetes_namespace: str = "aegis-sandbox"
+    kubernetes_token_path: str = "/var/run/secrets/kubernetes.io/serviceaccount/token"  # noqa: S105 - file path
+    kubernetes_ca_path: str = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    kubernetes_runtime_class: str | None = "gvisor"
+    # JSON: {"cpu_core_hour": 0.04, "memory_gb_hour": 0.005, "gpu_hour": {"nvidia-l4": 0.8}, "storage_gb_month": 0.023}
+    compute_pricing_json: str = "{}"
+
+    # --- research integrations --------------------------------------------------------------------
+    research_search_providers: str = "arxiv,crossref"
+    research_fetch_max_bytes: int = 5 * 1024 * 1024
+    research_user_agent: str = "AegisLab/1.0 (+https://github.com/aegis-ai)"
+
+    # --- lab governance ---------------------------------------------------------------------------
+    lab_platform_max_autonomy: str = "L4_CLOSED_LOOP_EVOLUTION"
+    agent_message_signing_key: str | None = None
+    idempotency_ttl_hours: int = 24
+    event_stream_heartbeat_seconds: float = 15.0
+    event_stream_max_seconds: float = 3600.0
+
+    # --- observability ----------------------------------------------------------------------------
+    otel_exporter_otlp_endpoint: str | None = None
+    otel_service_name: str = "aegis-api"
+    otel_traces_sampler_ratio: float = 1.0
+    metrics_enabled: bool = True
+    metrics_token: str | None = None
+    sentry_dsn: str | None = None
+
+    # --- billing ----------------------------------------------------------------------------------
+    billing_provider: Literal["none"] = "none"
+
     # --- demo --------------------------------------------------------------------------------
     demo_enabled: bool = True
     demo_reference_org_slug: str = "aegis-demo"
@@ -115,6 +215,20 @@ class Settings(BaseSettings):
     feature_continuous_monitoring: bool = True
     feature_external_verification: bool = False
     feature_enterprise_controls: bool = False
+    feature_evolution: bool = True
+    feature_deep_research: bool = True
+    feature_mcp: bool = True
+    feature_gpu_execution: bool = False
+    feature_enterprise_sso: bool = False
+    feature_verification: bool = True
+    feature_graph_memory: bool = True
+    feature_billing: bool = False
+
+    # --- rate limit tiers for expensive lab operations -----------------------------------------
+    rate_limit_research_per_min: int = 6
+    rate_limit_execution_per_min: int = 30
+    rate_limit_model_per_min: int = 120
+    rate_limit_download_per_min: int = 120
 
     @field_validator("database_url", "database_admin_url")
     @classmethod
@@ -130,16 +244,22 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_production(self) -> Settings:
         if self.environment == "production":
-            missing = [
-                name
-                for name, value in (
-                    ("SECRETS_ENCRYPTION_KEY", self.secrets_encryption_key),
-                    ("API_KEY_PEPPER", self.api_key_pepper),
-                )
-                if not value
+            required: list[tuple[str, object]] = [
+                ("SECRETS_ENCRYPTION_KEY", self.secrets_encryption_key),
+                ("API_KEY_PEPPER", self.api_key_pepper),
+                ("JWT_SIGNING_KEY", self.jwt_signing_key),
             ]
+            if self.effective_workflow_engine == "temporal":
+                required.append(("TEMPORAL_ADDRESS", self.temporal_address))
+            if self.object_storage_backend == "s3":
+                required.append(("OBJECT_STORAGE_BUCKET", self.object_storage_bucket))
+            missing = [name for name, value in required if not value]
             if missing:
                 raise ValueError(f"Missing required production settings: {', '.join(missing)}")
+            if self.jwt_signing_key and len(self.jwt_signing_key) < 32:
+                raise ValueError("JWT_SIGNING_KEY must be at least 32 characters in production")
+            if self.object_storage_backend == "local":
+                raise ValueError("OBJECT_STORAGE_BACKEND=local is not supported in production; use s3")
         return self
 
     # --- derived values ------------------------------------------------------------------------
@@ -175,7 +295,66 @@ class Settings(BaseSettings):
 
     @property
     def uses_dev_secrets(self) -> bool:
-        return not (self.secrets_encryption_key and self.api_key_pepper)
+        return not (self.secrets_encryption_key and self.api_key_pepper and self.jwt_signing_key)
+
+    @property
+    def effective_jwt_key(self) -> bytes:
+        return (self.jwt_signing_key or f"{_DEV_ONLY_SEED}:jwt").encode()
+
+    @property
+    def effective_agent_message_key(self) -> bytes:
+        if self.agent_message_signing_key:
+            return self.agent_message_signing_key.encode()
+        base = self.secrets_encryption_key or _DEV_ONLY_SEED
+        return hashlib.sha256(f"{base}:agent-messages".encode()).digest()
+
+    @property
+    def effective_workflow_engine(self) -> str:
+        if self.workflow_engine:
+            return self.workflow_engine
+        return "temporal" if self.temporal_address else "inline"
+
+    @property
+    def effective_email_backend(self) -> str:
+        if self.email_backend:
+            return self.email_backend
+        if self.smtp_host:
+            return "smtp"
+        return "memory" if self.environment == "test" else "outbox"
+
+    @property
+    def gemini_models(self) -> dict[str, str]:
+        """Tier → model id, falling back to GEMINI_MODEL (single place where a default model id lives)."""
+        default = self.gemini_default_model or self.gemini_model
+        return {
+            "fast": self.gemini_fast_model or default,
+            "default": default,
+            "reasoning": self.gemini_reasoning_model or default,
+        }
+
+    @property
+    def model_catalog(self) -> list[dict[str, object]]:
+        try:
+            data = json.loads(self.model_catalog_json or "[]")
+        except json.JSONDecodeError:
+            return []
+        return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
+
+    @property
+    def compute_pricing(self) -> dict[str, object]:
+        try:
+            data = json.loads(self.compute_pricing_json or "{}")
+        except json.JSONDecodeError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    @property
+    def search_providers(self) -> list[str]:
+        return [p.strip() for p in self.research_search_providers.split(",") if p.strip()]
+
+    @property
+    def allowed_gpu_types(self) -> frozenset[str]:
+        return frozenset(t.strip() for t in self.execution_allowed_gpu_types.split(",") if t.strip())
 
     @property
     def effective_api_key_pepper(self) -> bytes:
@@ -196,6 +375,14 @@ class Settings(BaseSettings):
             "continuous_monitoring": self.feature_continuous_monitoring,
             "external_verification": self.feature_external_verification,
             "enterprise_controls": self.feature_enterprise_controls,
+            "evolution": self.feature_evolution,
+            "deep_research": self.feature_deep_research,
+            "mcp": self.feature_mcp,
+            "gpu_execution": self.feature_gpu_execution,
+            "enterprise_sso": self.feature_enterprise_sso,
+            "verification": self.feature_verification,
+            "graph_memory": self.feature_graph_memory,
+            "billing": self.feature_billing,
         }
 
 

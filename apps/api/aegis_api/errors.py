@@ -16,7 +16,10 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from engines.lab.state_machines import InvalidTransition
 
 log = structlog.get_logger("aegis.errors")
 
@@ -100,6 +103,55 @@ class ServiceUnavailable(AppError):
     code = "service_unavailable"
 
 
+class PolicyDenied(AppError):
+    """The action is denied by policy."""
+
+    status_code = 403
+    code = "policy_denied"
+
+
+class ApprovalRequired(AppError):
+    """The action requires human approval before it can proceed."""
+
+    status_code = 409
+    code = "approval_required"
+
+
+class BudgetExceeded(AppError):
+    """The action would exceed the configured budget."""
+
+    status_code = 402
+    code = "budget_exceeded"
+
+
+class QuotaExceeded(AppError):
+    """An organization quota has been reached."""
+
+    status_code = 429
+    code = "quota_exceeded"
+
+
+class InvalidState(AppError):
+    """The resource is not in a state that allows this operation."""
+
+    status_code = 409
+    code = "invalid_state"
+
+
+class FeatureDisabled(AppError):
+    """This feature is disabled for the workspace."""
+
+    status_code = 403
+    code = "feature_disabled"
+
+
+class IdempotencyConflict(AppError):
+    """An idempotent request with this key is in progress or was used with a different payload."""
+
+    status_code = 409
+    code = "idempotency_conflict"
+
+
 def _request_id(request: Request) -> str | None:
     return getattr(request.state, "request_id", None)
 
@@ -123,6 +175,29 @@ def install_error_handlers(app: FastAPI) -> None:
             error_body(exc.code, exc.message, _request_id(request), exc.details),
             status_code=exc.status_code,
             headers=headers,
+        )
+
+    @app.exception_handler(StaleDataError)
+    async def _stale(request: Request, exc: StaleDataError) -> JSONResponse:
+        return JSONResponse(
+            error_body(
+                "concurrent_modification",
+                "The resource was modified concurrently. Reload it and retry.",
+                _request_id(request),
+            ),
+            status_code=409,
+        )
+
+    @app.exception_handler(InvalidTransition)
+    async def _transition(request: Request, exc: InvalidTransition) -> JSONResponse:
+        return JSONResponse(
+            error_body(
+                "invalid_state_transition",
+                str(exc),
+                _request_id(request),
+                {"machine": exc.machine, "current": exc.current, "target": exc.target, "allowed": exc.allowed},
+            ),
+            status_code=409,
         )
 
     @app.exception_handler(RequestValidationError)

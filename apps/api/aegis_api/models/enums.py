@@ -11,6 +11,12 @@ class Role(StrEnum):
     AUDITOR = "auditor"
     ANALYST = "analyst"
     VIEWER = "viewer"
+    # AI Scientist Evolution Lab roles
+    RESEARCH_LEAD = "research_lead"
+    RESEARCHER = "researcher"
+    SCIENTIST_OPERATOR = "scientist_operator"
+    REVIEWER = "reviewer"
+    BILLING_ADMIN = "billing_admin"
 
 
 class MembershipStatus(StrEnum):

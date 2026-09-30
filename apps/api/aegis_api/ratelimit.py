@@ -17,7 +17,7 @@ from aegis_api.config import get_settings
 from aegis_api.errors import RateLimited
 
 log = structlog.get_logger("aegis.ratelimit")
-Tier = Literal["public", "authenticated", "expensive"]
+Tier = Literal["public", "authenticated", "expensive", "research", "execution", "model", "download"]
 
 
 class _MemoryStore:
@@ -57,6 +57,10 @@ class RateLimiter:
             "public": s.rate_limit_public_per_min,
             "authenticated": s.rate_limit_auth_per_min,
             "expensive": s.rate_limit_expensive_per_min,
+            "research": s.rate_limit_research_per_min,
+            "execution": s.rate_limit_execution_per_min,
+            "model": s.rate_limit_model_per_min,
+            "download": s.rate_limit_download_per_min,
         }[tier]
 
     def check(self, tier: Tier, identity: str) -> None:
@@ -112,3 +116,8 @@ def expensive_rate_limit_for(identity_fn: Callable[[Request], str]) -> Callable[
         get_limiter().check("expensive", identity_fn(request))
 
     return _dep
+
+
+def check_tier(tier: Tier, identity: str) -> None:
+    """Imperative variant for non-HTTP call sites (model calls, tool calls, research tasks)."""
+    get_limiter().check(tier, identity)

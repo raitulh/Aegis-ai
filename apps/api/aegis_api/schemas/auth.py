@@ -101,3 +101,41 @@ class MemberOut(BaseModel):
     role: str
     status: str
     last_active_at: datetime | None = None
+
+
+class TokenRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=256)
+    organization_id: str | None = Field(default=None, description="Workspace to bind the token to (default: primary)")
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"  # noqa: S105 - OAuth token type, not a secret
+    expires_in: int = Field(description="Access-token lifetime in seconds")
+    refresh_token: str
+    refresh_expires_in: int
+    organization_id: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=10, max_length=512)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=256)
+    new_password: str = Field(min_length=10, max_length=256)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=256)
+
+
+class ApiKeyRotated(BaseModel):
+    api_key: ApiKeyOut
+    plaintext: str = Field(description="Shown exactly once")
+    revoked_key_id: str
