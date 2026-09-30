@@ -22,13 +22,21 @@ class Principal:
     is_guest: bool = False
     request_id: str | None = None
     scopes: list[str] = field(default_factory=list)
+    service_account_id: uuid.UUID | None = None
+    # Service accounts / scoped credentials may be restricted to specific projects.
+    project_ids: list[str] = field(default_factory=list)
+    is_platform_admin: bool = False
 
     @property
     def actor_type(self) -> str:
+        if self.auth_method == "service_account":
+            return "service_account"
         return "api_key" if self.auth_method == "api_key" else "user"
 
     @property
     def actor_label(self) -> str:
+        if self.auth_method == "service_account":
+            return f"service_account:{self.service_account_id}"
         if self.auth_method == "api_key":
             return f"api_key:{self.api_key_id}"
         return self.email or str(self.user_id)

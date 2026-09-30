@@ -59,6 +59,9 @@ from aegis_api.models.systems import (
     SystemEvent,
     SystemVersion,
 )
+
+# AI Scientist Evolution Lab tables (registered on the same metadata).
+from aegis_api.lab import models as lab_models  # noqa: F401  isort: skip
 from aegis_api.models.tenancy import (
     ApiKey,
     AuditLog,

@@ -69,19 +69,34 @@ def _apply_tenant_context(session: Session, transaction: object, connection: obj
 
 @event.listens_for(Session, "after_commit")
 def _run_after_commit(session: Session) -> None:
-    """Dispatch background jobs queued during the transaction, only after it commits."""
+    """Dispatch background jobs and callbacks queued during the transaction, only after it commits."""
     hooks = session.info.pop("after_commit", None)
-    if not hooks:
-        return
-    from aegis_api.jobs import dispatcher
+    callbacks = session.info.pop("after_commit_callbacks", None)
+    if hooks:
+        from aegis_api.jobs import dispatcher
 
-    for fn, org_id, *args in hooks:
+        for fn, org_id, *args in hooks:
+            try:
+                dispatcher.dispatch(fn, org_id, *args)
+            except Exception:
+                import structlog
+
+                structlog.get_logger("aegis.jobs").exception("dispatch_failed")
+    for callback in callbacks or ():
         try:
-            dispatcher.dispatch(fn, org_id, *args)
+            callback()
         except Exception:
             import structlog
 
-            structlog.get_logger("aegis.jobs").exception("dispatch_failed")
+            structlog.get_logger("aegis.db").exception("after_commit_callback_failed")
+
+
+@event.listens_for(Session, "after_soft_rollback")
+def _discard_after_rollback(session: Session, previous_transaction: object) -> None:
+    """Work queued by a transaction that rolled back must never run."""
+    if getattr(previous_transaction, "parent", None) is None:
+        session.info.pop("after_commit", None)
+        session.info.pop("after_commit_callbacks", None)
 
 
 def set_tenant(session: Session, org_id: uuid.UUID | None, user_id: uuid.UUID | None = None) -> None:

@@ -60,10 +60,13 @@ class RateLimiter:
         }[tier]
 
     def check(self, tier: Tier, identity: str) -> None:
+        self.check_custom(tier, identity, self.limit_for(tier))
+
+    def check_custom(self, name: str, identity: str, limit: int, window: int = 60) -> None:
+        """Fixed-window limit for an arbitrary named bucket (lab tiers, per-tool, per-endpoint…)."""
         if not get_settings().rate_limit_enabled:
             return
-        limit = self.limit_for(tier)
-        window = 60
+        tier = name
         key = f"rl:{tier}:{identity}:{int(time.time() // window)}"
         count, retry = 0, window
         if self._redis is not None:

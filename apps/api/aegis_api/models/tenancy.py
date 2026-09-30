@@ -44,6 +44,8 @@ class User(IdMixin, TimestampMixin, Base):
     default_organization_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
     )
+    # Platform (cross-tenant) operator. Never settable through the public API; granted out-of-band.
+    is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     memberships: Mapped[list[Membership]] = relationship(back_populates="user")
 
@@ -114,6 +116,11 @@ class ApiKey(IdMixin, CreatedMixin, OrgMixin, Base):
     last_used_at: Mapped[datetime | None] = mapped_column(nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # Keys may belong to a service account (enterprise automation) instead of a person.
+    service_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("service_accounts.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    rotated_from_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
 
 
 class Secret(IdMixin, TimestampMixin, OrgMixin, Base):

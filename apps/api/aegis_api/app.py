@@ -10,6 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from aegis_api.config import get_settings
 from aegis_api.errors import install_error_handlers
+from aegis_api.lab.core.errors import install_lab_error_handlers
+from aegis_api.lab.router import LAB_TAGS_METADATA
+from aegis_api.lab.router import api_router as lab_api_router
 from aegis_api.logging import configure_logging
 from aegis_api.middleware import BodySizeLimitMiddleware, RequestContextMiddleware, SecureHeadersMiddleware
 from aegis_api.routers import (
@@ -28,10 +31,15 @@ from aegis_api.routers import (
 log = structlog.get_logger("aegis.app")
 
 DESCRIPTION = """
-**Aegis AI** — Continuous AI Assurance & Governance Platform.
+**Aegis AI** — Continuous AI Assurance & Governance Platform, and the **AI Scientist Evolution Lab**:
+a platform for autonomous scientific R&D. Users define research missions; AI scientist agents research
+literature, generate and critique hypotheses, design experiments that run reproducibly in sandboxes, analyse
+results and failures, evolve their strategies, and produce auditable, independently verified evidence.
+Models *propose*; the platform independently controls permissions, execution, measurement, evaluation,
+reproduction, verification, promotion, rollback and audit.
 
-Continuously test AI systems and agents for fairness, hallucination, safety, privacy, security and policy
-compliance — with evidence-backed findings and automatic re-testing.
+Errors always use the envelope `{"error": {"code", "message", "request_id", "details"}}`. Expensive
+writes accept an `Idempotency-Key` header. Lists paginate (`page`/`page_size`, or `cursor`/`limit`).
 
 Authentication: session cookie, session bearer token, or an API key (`Authorization: Bearer aeg_live_…`).
 All data is scoped to the authenticated workspace.
@@ -48,6 +56,7 @@ TAGS_METADATA = [
     {"name": "Workspace", "description": "Overview, search, team, API keys, integrations and notifications."},
     {"name": "Demo", "description": "Public demo endpoints (no authentication)."},
     {"name": "Health", "description": "Liveness and readiness."},
+    *LAB_TAGS_METADATA,
 ]
 
 
@@ -112,7 +121,10 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestContextMiddleware)
 
     install_error_handlers(app)
+    install_lab_error_handlers(app)
 
+    # Lab routers are registered first: their paths never collide with the core routers.
+    app.include_router(lab_api_router)
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(systems.router)
