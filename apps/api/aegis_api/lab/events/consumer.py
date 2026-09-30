@@ -18,7 +18,6 @@ Per organization and pass:
 
 from __future__ import annotations
 
-import os
 import signal
 import threading
 import time
@@ -203,13 +202,6 @@ class EventConsumer:
 # --------------------------------------------------------------------------------------------------
 # Process entrypoint
 # --------------------------------------------------------------------------------------------------
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.environ.get(name, str(default)))
-    except ValueError:
-        return default
-
-
 def main() -> int:
     """``python -m aegis_api.lab.events.consumer`` — loop until SIGTERM/SIGINT."""
     from prometheus_client import start_http_server
@@ -225,10 +217,9 @@ def main() -> int:
     configure_telemetry(service_name=f"{settings.otel_service_name}-event-consumer")
     install_db_metrics()
     register_runtime_collectors()
-    # Reading the environment directly is limited to this process entrypoint (deployment knobs).
-    interval = max(0.1, _env_float("EVENT_CONSUMER_INTERVAL_SECONDS", 2.0))
-    settle = _env_float("EVENT_CONSUMER_SETTLE_SECONDS", DEFAULT_SETTLE_SECONDS)
-    metrics_port = int(os.environ.get("METRICS_PORT", "9102"))
+    interval = max(0.1, settings.event_consumer_interval_seconds)
+    settle = settings.event_consumer_settle_seconds
+    metrics_port = settings.metrics_port or 9102
     start_http_server(metrics_port, registry=REGISTRY)
 
     stop = threading.Event()

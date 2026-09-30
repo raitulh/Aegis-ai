@@ -143,6 +143,7 @@ class Settings(BaseSettings):
     temporal_connect_timeout_seconds: float = 5.0
     workflow_engine: Literal["temporal", "local"] | None = None
     workflow_stale_after_seconds: int = 300  # local engine: resume RUNNING runs with no heartbeat
+    scheduler_interval_seconds: float = 15.0  # lab scheduler tick (maintenance, expiries, rollups)
 
     # --- object storage ------------------------------------------------------------------------
     object_storage_backend: Literal["local", "s3"] = "local"
@@ -235,6 +236,8 @@ class Settings(BaseSettings):
     event_bus_backend: Literal["redis", "memory"] | None = None  # default: redis when REDIS_URL set
     sse_heartbeat_seconds: float = 15.0
     sse_max_stream_seconds: int = 3600
+    event_consumer_interval_seconds: float = 2.0
+    event_consumer_settle_seconds: float = 30.0  # outbox ids may commit out of order within this window
     idempotency_ttl_hours: int = 24
     rate_limit_research_per_min: int = 10
     rate_limit_execution_per_min: int = 20
@@ -244,6 +247,7 @@ class Settings(BaseSettings):
     # --- observability ------------------------------------------------------------------------------
     metrics_enabled: bool = True
     metrics_token: str | None = None  # when set, /metrics requires `Authorization: Bearer <token>`
+    metrics_port: int | None = None  # background processes' /metrics port (defaults per process)
     otel_exporter_otlp_endpoint: str | None = None  # e.g. http://otel-collector:4318
     otel_service_name: str = "aegis-api"
     otel_traces_sampler_ratio: float = 1.0

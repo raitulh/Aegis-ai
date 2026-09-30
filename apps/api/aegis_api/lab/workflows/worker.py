@@ -86,8 +86,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     configure_telemetry(service_name=f"{settings.otel_service_name}-worker")
     register_runtime_collectors()
-    # Reading the environment directly is limited to this process entrypoint (deployment knobs).
-    metrics_port = args.metrics_port or int(os.environ.get("METRICS_PORT", str(DEFAULT_METRICS_PORT)))
+    metrics_port = args.metrics_port or settings.metrics_port or DEFAULT_METRICS_PORT
     start_http_server(metrics_port, registry=REGISTRY)
     try:
         asyncio.run(run_workers(args.queue_list, max_activities=args.max_activities))

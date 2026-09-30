@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import os
 import signal
 import threading
 import time
@@ -319,13 +318,6 @@ def _has_work(detail: dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------------------------------
 # Process entrypoint
 # ---------------------------------------------------------------------------------------------------
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.environ.get(name, str(default)))
-    except ValueError:
-        return default
-
-
 def main() -> int:
     """``python -m aegis_api.lab.workflows.scheduler`` — loop until SIGTERM/SIGINT."""
     from prometheus_client import start_http_server
@@ -339,9 +331,8 @@ def main() -> int:
     configure_logging(settings.log_level, settings.log_json)
     configure_telemetry(service_name=f"{settings.otel_service_name}-scheduler")
     register_runtime_collectors()
-    # Reading the environment directly is limited to this process entrypoint (deployment knobs).
-    interval = max(0.5, _env_float("SCHEDULER_INTERVAL_SECONDS", DEFAULT_INTERVAL_SECONDS))
-    metrics_port = int(os.environ.get("METRICS_PORT", str(DEFAULT_METRICS_PORT)))
+    interval = max(0.5, settings.scheduler_interval_seconds)
+    metrics_port = settings.metrics_port or DEFAULT_METRICS_PORT
     start_http_server(metrics_port, registry=REGISTRY)
 
     stop = threading.Event()
