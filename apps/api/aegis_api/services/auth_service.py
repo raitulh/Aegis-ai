@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from aegis_api.config import get_settings
 from aegis_api.db.base import utcnow
-from aegis_api.errors import Conflict, Unauthorized, ValidationFailed
+from aegis_api.errors import Conflict, Forbidden, Unauthorized, ValidationFailed
 from aegis_api.models import AuthSession, Membership, Organization, User
 from aegis_api.models.enums import MembershipStatus, Role
 from aegis_api.security.passwords import hash_password, password_problems, verify_password
@@ -129,15 +129,24 @@ def signup(
 
 
 def login(session: Session, *, email: str, password: str) -> SessionResult:
+    if not get_settings().local_auth_enabled:
+        raise Unauthorized("Password authentication is disabled on this deployment", code="local_auth_disabled")
     email = email.strip().lower()
     user = session.scalar(select(User).where(func.lower(User.email) == email))
-    if user is None or user.auth_provider != "local" or not verify_password(user.password_hash, password):
+    # verify_password runs a dummy hash when there is no stored hash, keeping timing uniform.
+    password_ok = verify_password(user.password_hash if user else None, password)
+    if user is None or user.auth_provider != "local" or not password_ok:
         raise Unauthorized("Invalid email or password", code="invalid_credentials")
     membership = _primary_membership(session, user)
     if membership is None:
         raise Unauthorized("This account has no active workspace")
     org = session.get(Organization, membership.organization_id)
     assert org is not None
+    if not user.is_platform_admin:
+        if (org.settings or {}).get("suspended"):
+            raise Forbidden("This organization has been suspended", code="organization_suspended")
+        if _sso_enforced(session, org.id):
+            raise Forbidden("This organization requires single sign-on", code="sso_required")
     user.last_active_at = utcnow()
     token, expires = _issue_session(session, user)
     return SessionResult(user=user, membership=membership, organization=org, session_token=token, expires_at=expires)
@@ -218,6 +227,16 @@ def revoke_session(session: Session, token: str) -> None:
     record = session.scalar(select(AuthSession).where(AuthSession.token_hash == keyed_hash(token)))
     if record and record.revoked_at is None:
         record.revoked_at = utcnow()
+
+
+def _sso_enforced(session: Session, organization_id: uuid.UUID) -> bool:
+    from aegis_api.lab.models import OrganizationSettings
+
+    return bool(
+        session.scalar(
+            select(OrganizationSettings.sso_enforced).where(OrganizationSettings.organization_id == organization_id)
+        )
+    )
 
 
 def _primary_membership(session: Session, user: User) -> Membership | None:

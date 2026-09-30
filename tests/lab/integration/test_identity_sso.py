@@ -319,3 +319,7 @@ def test_sso_enforcement_blocks_password_tokens(client, lab, idp):
     email = lab.ws.data["user"]["email"]
     r = client.post("/api/v1/auth/token", json={"email": email, "password": "Str0ng-Pass!23"})
     assert r.status_code == 403 and r.json()["error"]["code"] == "sso_required"
+    # The cookie-session login applies the same rule.
+    client.cookies.clear()
+    r = client.post("/api/v1/auth/login", json={"email": email, "password": "Str0ng-Pass!23"})
+    assert r.status_code == 403 and r.json()["error"]["code"] == "sso_required"
