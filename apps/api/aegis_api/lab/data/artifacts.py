@@ -38,6 +38,7 @@ from aegis_api.lab.core.deps import tenant_uow
 from aegis_api.lab.core.evidence import append_evidence
 from aegis_api.lab.core.locks import advisory_xact_lock
 from aegis_api.lab.core.pagination import CursorPage, CursorParams, paginate, paginate_keyset
+from aegis_api.lab.data.flows import launch_artifact_processing
 from aegis_api.lab.data.scanning import MalwareDetected, ScanResult, enforce_scan, get_scanner, scan_bytes, scan_file
 from aegis_api.lab.models import Artifact, ArtifactVersion, ComputeJob, ExperimentRun, Mission, Project
 from aegis_api.lab.storage import get_storage
@@ -406,6 +407,9 @@ def create_artifact_version(
             "scan_status": scan.status,
         },
     )
+    if scan.status == "error" or scan.detail == "deferred":
+        # The scan could not run inline (scanner down, or a non-seekable stream): finish it asynchronously.
+        launch_artifact_processing(db, actor, version)
     db.flush()
     return version
 

@@ -32,6 +32,16 @@ def storage(tmp_path: Path) -> Iterator[LocalFilesystemStorage]:
     configure_storage(None)
 
 
+@pytest.fixture
+def launched(monkeypatch: pytest.MonkeyPatch) -> list[tuple[object, object]]:
+    """Record workflow starts instead of running them in the background (keeps direct activity calls deterministic)."""
+    from aegis_api.lab.workflows import launcher
+
+    started: list[tuple[object, object]] = []
+    monkeypatch.setattr(launcher, "start_run", lambda org, run_id: started.append((org, run_id)))
+    return started
+
+
 def _dataset(lab, name: str = "benchmarks") -> dict:
     r = lab.post("/api/v1/datasets", json={"project_id": str(lab.project_id), "name": name, "license": "CC-BY-4.0"})
     assert r.status_code == 201, r.text
@@ -346,13 +356,22 @@ def test_failed_transaction_removes_written_objects(lab, storage):
     assert not [p for p in storage.root.rglob("*") if p.is_file()]
 
 
-def test_process_dataset_version_activity_profiles_and_is_idempotent(lab, storage):
+def test_process_dataset_version_activity_profiles_and_is_idempotent(lab, storage, launched):
     from aegis_api.lab.data.activities import process_dataset_version
-    from aegis_api.lab.models import Artifact, ArtifactVersion
+    from aegis_api.lab.models import Artifact, ArtifactVersion, WorkflowRun
     from aegis_api.lab.workflows.registry import ActivityContext
 
     dataset = _dataset(lab)
     version = _upload(lab, dataset["id"]).json()
+    # Every new version gets a DatasetProcessingWorkflow run (started after commit).
+    with lab.db() as db:
+        run = db.scalar(
+            select(WorkflowRun).where(
+                WorkflowRun.subject_type == "dataset_version", WorkflowRun.subject_id == version["id"]
+            )
+        )
+        assert run is not None and run.kind == "DatasetProcessingWorkflow"
+        assert (lab.org_id, run.id) in launched
     beats: list[object] = []
     ctx = ActivityContext(actor=lab.actor(), heartbeat=beats.append)
     first = process_dataset_version(ctx, {"dataset_version_id": version["id"]})
@@ -370,7 +389,7 @@ def test_process_dataset_version_activity_profiles_and_is_idempotent(lab, storag
         assert columns["score"]["max"] == 1.5 and columns["score"]["null_count"] == 1
 
 
-def test_process_dataset_version_detects_tampering(lab, storage):
+def test_process_dataset_version_detects_tampering(lab, storage, launched):
     from aegis_api.lab.core.errors import PermanentError
     from aegis_api.lab.data.activities import process_dataset_version
     from aegis_api.lab.models import DatasetVersion
@@ -384,3 +403,17 @@ def test_process_dataset_version_detects_tampering(lab, storage):
         storage.path_for(row.storage_key).write_bytes(CSV.replace(b"0.5", b"9.5"))
     with pytest.raises(PermanentError):
         process_dataset_version(ActivityContext(actor=lab.actor()), {"dataset_version_id": version["id"]})
+
+
+def test_dataset_processing_workflow_runs_on_the_local_engine(lab, storage, launched):
+    from aegis_api.lab.models import WorkflowRun
+    from aegis_api.lab.workflows.local_engine import LocalWorkflowEngine
+
+    dataset = _dataset(lab)
+    version = _upload(lab, dataset["id"]).json()
+    with lab.db() as db:
+        run_id = db.scalar(select(WorkflowRun.id).where(WorkflowRun.subject_id == version["id"]))
+    assert run_id is not None
+    outcome = LocalWorkflowEngine().run(run_id, organization_id=lab.org_id)
+    assert outcome.status == "COMPLETED", outcome.error
+    assert outcome.result is not None and outcome.result["row_count"] == 3

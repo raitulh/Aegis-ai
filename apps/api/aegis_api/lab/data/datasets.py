@@ -49,6 +49,7 @@ from aegis_api.lab.data.artifacts import (
     DownloadTarget,
     record_rejected_upload,
 )
+from aegis_api.lab.data.flows import launch_dataset_processing
 from aegis_api.lab.data.inference import (
     KIND_TO_FORMAT,
     SPLIT_NAME_RE,
@@ -504,6 +505,8 @@ class _VersionContext:
                 "splits": sorted(split_rows),
             },
         )
+        # Full streaming verification + exact profile (the upload path only samples).
+        launch_dataset_processing(db, actor, version)
         db.flush()
         return version
 

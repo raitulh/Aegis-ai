@@ -35,6 +35,16 @@ def storage(tmp_path: Path) -> Iterator[LocalFilesystemStorage]:
 
 
 @pytest.fixture
+def launched(monkeypatch: pytest.MonkeyPatch) -> list[tuple[object, object]]:
+    """Record workflow starts instead of running them in the background (keeps direct activity calls deterministic)."""
+    from aegis_api.lab.workflows import launcher
+
+    started: list[tuple[object, object]] = []
+    monkeypatch.setattr(launcher, "start_run", lambda org, run_id: started.append((org, run_id)))
+    return started
+
+
+@pytest.fixture
 def clamd() -> Iterator[FakeClamd]:
     server = FakeClamd()
     configure_scanner(ClamAVScanner("127.0.0.1", server.port, connect_timeout=2, timeout=10))
@@ -359,10 +369,10 @@ def test_rollback_removes_the_stored_object(lab, storage):
     assert not [p for p in storage.root.rglob("*") if p.is_file()]
 
 
-def test_process_artifact_version_activity(lab, storage, clamd):
+def test_process_artifact_version_activity(lab, storage, clamd, launched):
     from aegis_api.lab.data.activities import process_artifact_version
     from aegis_api.lab.data.artifacts import create_artifact_version
-    from aegis_api.lab.models import ArtifactVersion
+    from aegis_api.lab.models import ArtifactVersion, WorkflowRun
     from aegis_api.lab.storage.keys import object_key
     from aegis_api.lab.workflows.registry import ActivityContext
 
@@ -375,6 +385,10 @@ def test_process_artifact_version_activity(lab, storage, clamd):
         )
         assert version.scan_status == "not_scanned"  # platform-written objects are scanned asynchronously
         version_id = str(version.id)
+    with lab.db() as db:
+        run = db.scalar(select(WorkflowRun).where(WorkflowRun.subject_id == version_id))
+        assert run is not None and run.kind == "ArtifactProcessingWorkflow"
+        assert (lab.org_id, run.id) in launched
     ctx = ActivityContext(actor=actor)
     result = process_artifact_version(ctx, {"artifact_version_id": version_id})
     assert result["scan_status"] == "clean" and result["sha256_verified"] and result["size_verified"]
