@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, MetaData, Uuid, func, text
+from sqlalchemy import DateTime, ForeignKey, Integer, MetaData, Uuid, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 
@@ -61,6 +61,37 @@ class OrgMixin:
         return mapped_column(Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
 
 
+class OptimisticLockMixin:
+    """Optimistic concurrency control: every UPDATE checks and bumps ``lock_version``; a concurrent writer that
+    loaded an older version gets ``StaleDataError`` (mapped to HTTP 409) instead of silently overwriting."""
+
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+
+    @declared_attr.directive
+    def __mapper_args__(cls) -> dict[str, Any]:  # noqa: N805
+        return {"version_id_col": cls.__table__.c.lock_version}  # type: ignore[attr-defined]
+
+
+# PostgreSQL schema for the AI Scientist Evolution Lab bounded context (extraction boundary; avoids
+# name collisions with the assurance domain's claims/policies/evaluators/tool_calls tables).
+LAB_SCHEMA = "lab"
+
+
+def lab_args(*items: Any) -> tuple[Any, ...]:
+    """``__table_args__`` helper placing a table in the lab schema."""
+    return (*items, {"schema": LAB_SCHEMA})
+
+
+def lab_fk(table: str, ondelete: str = "CASCADE") -> ForeignKey:
+    return ForeignKey(f"{LAB_SCHEMA}.{table}.id", ondelete=ondelete)
+
+
+def qualified_name(table: Any) -> str:
+    return f"{table.schema}.{table.name}" if table.schema else table.name
+
+
 # Tables that carry organization_id and receive tenant isolation RLS policies.
 def tenant_tables() -> list[str]:
-    return sorted(t.name for t in Base.metadata.sorted_tables if "organization_id" in t.c and t.name != "memberships")
+    return sorted(
+        qualified_name(t) for t in Base.metadata.sorted_tables if "organization_id" in t.c and t.name != "memberships"
+    )

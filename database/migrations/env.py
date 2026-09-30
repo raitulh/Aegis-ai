@@ -17,6 +17,16 @@ def _url() -> str:
     return config.get_main_option("sqlalchemy.url") or get_settings().admin_database_url
 
 
+MANAGED_SCHEMAS = {None, "public", "lab"}
+
+
+def include_name(name, type_, parent_names):  # type: ignore[no-untyped-def]
+    # Only the application schemas are managed by autogenerate (the ``aegis`` schema holds RLS helpers).
+    if type_ == "schema":
+        return name in MANAGED_SCHEMAS
+    return True
+
+
 def include_object(obj, name, type_, reflected, compare_to):  # type: ignore[no-untyped-def]
     # Indexes created with raw SQL (HNSW vector, full-text GIN) are managed manually in migrations.
     return not (type_ == "index" and name and (name.startswith("ix_fts_") or name.startswith("ix_vec_")))
@@ -29,6 +39,8 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         compare_type=True,
         include_object=include_object,
+        include_schemas=True,
+        include_name=include_name,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -42,6 +54,8 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             compare_type=True,
             include_object=include_object,
+            include_schemas=True,
+            include_name=include_name,
         )
         with context.begin_transaction():
             context.run_migrations()

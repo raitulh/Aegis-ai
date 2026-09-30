@@ -192,7 +192,10 @@ class Webhook(IdMixin, TimestampMixin, OrgMixin, Base):
 
 class WebhookDelivery(IdMixin, CreatedMixin, OrgMixin, Base):
     __tablename__ = "webhook_deliveries"
-    __table_args__ = (Index("ix_webhook_deliveries_status_next", "status", "next_attempt_at"),)
+    __table_args__ = (
+        Index("ix_webhook_deliveries_status_next", "status", "next_attempt_at"),
+        UniqueConstraint("webhook_id", "event_id", name="uq_webhook_deliveries_hook_event"),
+    )
 
     webhook_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("webhooks.id", ondelete="CASCADE"), index=True)
     event_type: Mapped[str] = mapped_column(String(48))

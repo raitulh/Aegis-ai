@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Date, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aegis_api.db.base import Base, CreatedMixin, IdMixin, OrgMixin, TimestampMixin
@@ -88,6 +88,13 @@ class Evidence(IdMixin, CreatedMixin, OrgMixin, Base):
     __table_args__ = (
         Index("ix_evidence_org_kind", "organization_id", "kind"),
         Index("ix_evidence_audit_seq", "audit_id", "seq"),
+        Index(
+            "uq_evidence_chain_scope_seq",
+            "chain_scope",
+            "seq",
+            unique=True,
+            postgresql_where=text("chain_scope IS NOT NULL"),
+        ),
     )
 
     audit_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -97,6 +104,8 @@ class Evidence(IdMixin, CreatedMixin, OrgMixin, Base):
         ForeignKey("ai_systems.id", ondelete="CASCADE"), nullable=True, index=True
     )
     seq: Mapped[int] = mapped_column(Integer, default=0)
+    # Hash-chain scope for evidence not produced by an audit (e.g. "mission:<uuid>" for lab evidence).
+    chain_scope: Mapped[str | None] = mapped_column(String(96), nullable=True)
     kind: Mapped[str] = mapped_column(String(32))
     title: Mapped[str] = mapped_column(String(300))
     content: Mapped[dict[str, Any]] = mapped_column(default=dict)  # redacted/masked representation

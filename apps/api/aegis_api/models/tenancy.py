@@ -111,9 +111,13 @@ class ApiKey(IdMixin, CreatedMixin, OrgMixin, Base):
     scopes: Mapped[list[str]] = mapped_column(default=list)
     role: Mapped[str] = mapped_column(String(16), default=Role.ANALYST)
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    service_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("service_accounts.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     last_used_at: Mapped[datetime | None] = mapped_column(nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    rotated_from_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
 
 
 class Secret(IdMixin, TimestampMixin, OrgMixin, Base):
