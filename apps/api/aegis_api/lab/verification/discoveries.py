@@ -50,7 +50,6 @@ from aegis_api.lab.models import (
     ClaimEvidence,
     Discovery,
     DiscoveryVersion,
-    Experiment,
     Mission,
     Project,
     Reproduction,
@@ -62,6 +61,7 @@ from aegis_api.lab.verification.common import canonical_hash, clean_text, jsonab
 from aegis_api.lab.verification.schemas import DiscoveryOut, DiscoveryVersionOut
 from aegis_api.lab.verification.verification import claim_context
 from aegis_api.models import Membership
+from aegis_api.models.enums import MembershipStatus
 from aegis_api.security.rbac import permissions_for_role
 from engines.lab.states import ApprovalStatus, ClaimStatus, DiscoveryStatus, RunState, assert_transition
 
@@ -477,7 +477,7 @@ def _decider_actor(db: Session, discovery: Discovery, approval: Approval) -> Act
             Membership.organization_id == discovery.organization_id, Membership.user_id == approval.decided_by_id
         )
     )
-    if membership is None or membership.status != "active":
+    if membership is None or membership.status != MembershipStatus.ACTIVE:
         raise Forbidden("The reviewer who decided the approval is no longer an active member", code="approval_not_human")
     return Actor(
         kind="user",
@@ -932,9 +932,9 @@ __all__ = [
     "APPROVE_ACTION",
     "PUBLISH_ACTION",
     "DiscoveryPolicy",
-    "Experiment",
     "apply_decision",
     "create_candidate",
+    "discovery_counts",
     "on_approval_decided",
     "request_human_review",
     "transition",
