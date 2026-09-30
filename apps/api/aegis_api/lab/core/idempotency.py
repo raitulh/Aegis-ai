@@ -27,6 +27,7 @@ from datetime import timedelta
 from typing import Any
 
 from fastapi import Depends, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -98,6 +99,13 @@ async def idempotency(
     fingerprint = hashlib.sha256(
         json.dumps({"m": request.method, "p": request.url.path, "b": body.decode("utf-8", "replace")}).encode()
     ).hexdigest()
+    # The claim blocks on the unique index while a concurrent duplicate is in flight, so it must run off
+    # the event loop: a blocking call here would stall every other request on this worker, including
+    # the one holding the lock.
+    return await run_in_threadpool(_claim, db, principal, key, request.method, request.url.path[:500], fingerprint)
+
+
+def _claim(db: Session, principal: Principal, key: str, method: str, path: str, fingerprint: str) -> Idempotency:
     principal_key = _principal_key(principal)
     now = utcnow()
     stmt = (
@@ -106,8 +114,8 @@ async def idempotency(
             organization_id=principal.organization_id,
             principal_key=principal_key,
             key=key,
-            method=request.method,
-            path=request.url.path[:500],
+            method=method,
+            path=path,
             request_hash=fingerprint,
             status="in_progress",
             response_status=0,
