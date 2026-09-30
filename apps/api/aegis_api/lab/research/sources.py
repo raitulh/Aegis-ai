@@ -21,6 +21,7 @@ import structlog
 from pydantic import BaseModel, Field
 from sqlalchemy import func, literal_column, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnClause
 
 from aegis_api.db.base import utcnow
 from aegis_api.errors import NotFound, ValidationFailed
@@ -49,10 +50,10 @@ DiscoveredBy = Literal["user", "agent", "deep_research", "search"]
 SOURCE_TYPES = ("paper", "preprint", "web_page", "dataset", "upload", "book", "other")
 PAPER_TYPES = ("paper", "preprint")
 MAX_BATCH = 200
-SOURCE_FTS = literal_column(
+SOURCE_FTS: ColumnClause[Any] = literal_column(
     "to_tsvector('english', coalesce(research_sources.title,'') || ' ' || coalesce(research_sources.abstract,''))"
 )
-TS_CONFIG = literal_column("'english'::regconfig")
+TS_CONFIG: ColumnClause[Any] = literal_column("'english'::regconfig")
 
 
 class SourceInput(BaseModel):

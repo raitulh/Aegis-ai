@@ -38,6 +38,7 @@ from aegis_api.lab.core.features import ensure_feature
 from aegis_api.lab.core.locks import advisory_xact_lock
 from aegis_api.lab.core.org_settings import allows_external_llm
 from aegis_api.lab.core.pagination import CursorPage, CursorParams, paginate_by_id, paginate_keyset
+from aegis_api.lab.llm.providers.gemini.interactions import TERMINAL_STATUSES as PROVIDER_TERMINAL_STATUSES
 from aegis_api.lab.models import Mission, ResearchEvent, ResearchTask
 from aegis_api.lab.research import literature
 from aegis_api.lab.research.schemas import ResearchTaskCreate
@@ -222,7 +223,11 @@ def create_research_task(db: Session, actor: Actor, data: ResearchTaskCreate) ->
         if params.estimated_cost_usd is not None:
             context["estimated_cost_usd"] = params.estimated_cost_usd
         decision = evaluate_policy(
-            db, actor, "research.deep_research", context, project_id=project.id if mission is None else None,
+            db,
+            actor,
+            "research.deep_research",
+            context,
+            project_id=project.id if mission is None else None,
             mission=mission,
         )
         if decision.denied:
@@ -353,7 +358,9 @@ def list_research_events(
 
 
 # --- cancellation ---------------------------------------------------------------------------------
-def cancel_research_task(db: Session, actor: Actor, task_id: uuid.UUID | str, *, reason: str | None = None) -> ResearchTask:
+def cancel_research_task(
+    db: Session, actor: Actor, task_id: uuid.UUID | str, *, reason: str | None = None
+) -> ResearchTask:
     """Cancel a task: pending approval withdrawn, workflow cancelled, provider interaction cancelled after commit."""
     task = lock_task(db, actor, task_id)
     load_project(db, actor, task.project_id, "research:run")
@@ -366,9 +373,10 @@ def cancel_research_task(db: Session, actor: Actor, task_id: uuid.UUID | str, *,
     if task.approval_id is not None:
         _withdraw_approval(db, actor, task, clean_reason)
     if task.workflow_run_id is not None:
-        _cancel_workflow(db, actor, task)
+        _cancel_workflow(db, actor, task, task.workflow_run_id)
     interaction_id = task.provider_interaction_id
-    if task.kind == "deep_research" and interaction_id and task.provider_status not in ("completed", "failed"):
+    provider_done = task.provider_status in PROVIDER_TERMINAL_STATUSES
+    if task.kind == "deep_research" and interaction_id and not provider_done:
         from aegis_api.lab.core.events import after_commit
         from aegis_api.lab.research.deep_research import cancel_provider_interaction
 
@@ -389,19 +397,21 @@ def _withdraw_approval(db: Session, actor: Actor, task: ResearchTask, reason: st
         return
     try:
         with db.begin_nested():
-            cancel_approval(db, Actor.system(task.organization_id, "system:research-cancel"), approval.id, reason=reason)
+            cancel_approval(
+                db, Actor.system(task.organization_id, "system:research-cancel"), approval.id, reason=reason
+            )
     except Exception:
         log.warning("research_approval_withdraw_failed", research_task_id=str(task.id), exc_info=True)
 
 
-def _cancel_workflow(db: Session, actor: Actor, task: ResearchTask) -> None:
+def _cancel_workflow(db: Session, actor: Actor, task: ResearchTask, workflow_run_id: uuid.UUID) -> None:
     try:
         from aegis_api.lab.workflows.launcher import cancel_workflow
     except ImportError:
         return
     try:
         with db.begin_nested():
-            cancel_workflow(db, actor, task.workflow_run_id)  # type: ignore[arg-type]
+            cancel_workflow(db, actor, workflow_run_id)
     except Exception:
         log.warning("research_workflow_cancel_failed", research_task_id=str(task.id), exc_info=True)
 

@@ -152,7 +152,7 @@ def _uuid_or_none(value: str | None) -> uuid.UUID | None:
         return None
 
 
-def _set_status(db: Session, actor: Actor, experiment: Experiment, target: str, reason: str | None) -> None:
+def set_status(db: Session, actor: Actor, experiment: Experiment, target: str, reason: str | None) -> None:
     if experiment.status == target:
         return
     assert_transition("experiment", experiment.status, target)
@@ -713,15 +713,15 @@ def _report_codes(report: dict[str, Any] | ValidationReport) -> dict[str, list[s
 def _apply_validation(db: Session, actor: Actor, experiment: Experiment, version: ExperimentVersion) -> None:
     """Drive ``DRAFT → VALIDATING → QUEUED|DRAFT`` for a freshly validated version (legal paths only)."""
     for step in PATH_TO_DRAFT.get(experiment.status, ()):
-        _set_status(db, actor, experiment, step, f"re-validating version {version.version}")
+        set_status(db, actor, experiment, step, f"re-validating version {version.version}")
     if experiment.status != X.DRAFT:
         return
-    _set_status(db, actor, experiment, X.VALIDATING, f"validating version {version.version}")
+    set_status(db, actor, experiment, X.VALIDATING, f"validating version {version.version}")
     codes = _report_codes(version.validation_report)
     if version.validation_passed:
-        _set_status(db, actor, experiment, X.QUEUED, f"version {version.version} passed design validation")
+        set_status(db, actor, experiment, X.QUEUED, f"version {version.version} passed design validation")
     else:
-        _set_status(
+        set_status(
             db,
             actor,
             experiment,

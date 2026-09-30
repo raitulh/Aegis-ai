@@ -33,7 +33,7 @@ import structlog
 from sqlalchemy import and_, false, func, literal_column, or_, select, true
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.elements import ColumnClause, ColumnElement
 
 from aegis_api.db.base import utcnow
 from aegis_api.errors import Forbidden, NotFound, ValidationFailed
@@ -70,7 +70,7 @@ PUBLIC_STATUSES = frozenset({MemoryStatus.ACTIVE, MemoryStatus.SUPERSEDED})
 REVIEWER_OR_CREATOR_STATUSES = frozenset({MemoryStatus.PROPOSED, MemoryStatus.REJECTED})
 SCOPE_RANK = {"user": 0, "mission": 0, "project": 1, "workspace": 2, "organization": 3}
 MAX_FINDINGS = 20
-TS_CONFIG = literal_column("'english'::regconfig")
+TS_CONFIG: ColumnClause[Any] = literal_column("'english'::regconfig")
 
 
 @dataclass(frozen=True)

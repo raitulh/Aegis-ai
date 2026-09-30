@@ -44,10 +44,8 @@ from aegis_api.lab.core.pagination import CursorPage, CursorParams, paginate_key
 from aegis_api.lab.models import (
     AgentRun,
     Artifact,
-    ArtifactVersion,
     ClaimEvidence,
     CodeSnapshot,
-    DatasetVersion,
     Discovery,
     EvaluationRun,
     Experiment,
@@ -769,11 +767,9 @@ def check_statistical_support(db: Session, actor: Actor, verification_id: uuid.U
         "statistically_supported"
     ]
     evaluator_passed = latest.passed if latest is not None else None
-    passed: bool | None
-    if criterion.state == "missing":
-        passed = None
-    else:
-        passed = criterion.state == "satisfied" and evaluator_passed is not False
+    passed: bool | None = (
+        None if criterion.state == "missing" else criterion.state == "satisfied" and evaluator_passed is not False
+    )
     return save_check(
         db,
         verification,
@@ -1174,12 +1170,14 @@ def build_check_results(
         return row if row is not None and row.status == RunState.COMPLETED else None
 
     statistics = None
-    if (row := done(CHECK_STATISTICS)) is not None and row.passed is not None and row.result.get("statistics"):
-        statistics = StatisticalEvidence.model_validate(row.result["statistics"])
-        if row.result.get("statistical_evaluator", {}) and row.result["statistical_evaluator"].get("passed") is False:
-            # the platform's statistical evaluator (recomputed from raw values) disagrees with the stored numbers
-            statistics = StatisticalEvidence.model_validate({**row.result["statistics"], "p_value": 1.0, "p_value_adjusted": 1.0})
-            notes["statistics"] = "the statistical evaluator did not confirm the pre-registered plan"
+    if (row := done(CHECK_STATISTICS)) is not None and row.result.get("statistics"):
+        evaluator = row.result.get("statistical_evaluator") or {}
+        if evaluator.get("passed") is False:
+            # The platform's statistical evaluator recomputed the comparison from the raw per-seed values and did
+            # not confirm the pre-registered plan: the stored statistics cannot establish support.
+            notes["statistics"] = "the statistical evaluator did not confirm the pre-registered statistical plan"
+        else:
+            statistics = StatisticalEvidence.model_validate(row.result["statistics"])
 
     baseline_completed: bool | None = None
     baseline_passed: bool | None = None
@@ -1256,9 +1254,11 @@ def _update_experiment(db: Session, ctx: ClaimContext, status: str, reproduced: 
     experiment = ctx.candidate
     if experiment is None:
         return None
-    target = {ClaimStatus.VERIFIED: ExperimentStatus.VERIFIED, ClaimStatus.REJECTED: ExperimentStatus.REJECTED}.get(
-        status  # type: ignore[call-overload]
-    )
+    targets: dict[str, str] = {
+        ClaimStatus.VERIFIED: ExperimentStatus.VERIFIED,
+        ClaimStatus.REJECTED: ExperimentStatus.REJECTED,
+    }
+    target = targets.get(status)
     if target is None or experiment.status == target:
         return None
     path: list[str] = []
@@ -1379,8 +1379,8 @@ def finalize_verification(db: Session, actor: Actor, verification_id: uuid.UUID 
         actor=actor,
     )
     since = verification.started_at or verification.created_at
-    duration = max((now - since).total_seconds(), time.monotonic() - started) if since else time.monotonic() - started
-    VERIFICATION_DURATION.labels(result.status).observe(duration)
+    duration = (now - since).total_seconds() if since is not None else time.monotonic() - started
+    VERIFICATION_DURATION.labels(result.status).observe(max(duration, 0.0))
     return verification
 
 
@@ -1398,21 +1398,6 @@ def run_deterministic_checks(db: Session, actor: Actor, verification_id: uuid.UU
     ]
 
 
-def dataset_and_artifact_counts(db: Session, claim: ScientificClaim) -> dict[str, int]:
-    """Small helper for summaries: how many dataset/artifact versions a claim cites."""
-    counts = dict(
-        db.execute(
-            select(ClaimEvidence.evidence_type, func.count(ClaimEvidence.id))
-            .where(
-                ClaimEvidence.claim_id == claim.id,
-                ClaimEvidence.evidence_type.in_(["dataset_version", "artifact_version"]),
-            )
-            .group_by(ClaimEvidence.evidence_type)
-        ).all()
-    )
-    return {"dataset_versions": int(counts.get("dataset_version", 0)), "artifact_versions": int(counts.get("artifact_version", 0))}
-
-
 __all__ = [
     "CHECK_BASELINE",
     "CHECK_CONTRADICTION",
@@ -1423,8 +1408,6 @@ __all__ = [
     "CHECK_REPRODUCTION",
     "CHECK_STATISTICS",
     "DETERMINISTIC_CHECKS",
-    "ArtifactVersion",
-    "DatasetVersion",
     "check_baseline",
     "check_provenance",
     "check_statistical_support",

@@ -278,14 +278,14 @@ class PostgresGraphBackend:
             "ref_id": ref_uuid,
             "properties": props,
         }
-        stmt = insert(GraphNode).values(**values)
-        stmt = stmt.on_conflict_do_update(
+        insert_stmt = insert(GraphNode).values(**values)
+        stmt = insert_stmt.on_conflict_do_update(
             constraint="uq_graph_nodes_type_key",
             set_={
-                "label": stmt.excluded.label,
-                "properties": GraphNode.properties.op("||")(stmt.excluded.properties),
-                "ref_type": func.coalesce(stmt.excluded.ref_type, GraphNode.ref_type),
-                "ref_id": func.coalesce(stmt.excluded.ref_id, GraphNode.ref_id),
+                "label": insert_stmt.excluded.label,
+                "properties": GraphNode.properties.op("||")(insert_stmt.excluded.properties),
+                "ref_type": func.coalesce(insert_stmt.excluded.ref_type, GraphNode.ref_type),
+                "ref_id": func.coalesce(insert_stmt.excluded.ref_id, GraphNode.ref_id),
                 "updated_at": func.now(),
             },
         ).returning(GraphNode)
@@ -309,7 +309,7 @@ class PostgresGraphBackend:
         target = dst if isinstance(dst, GraphNode) and self._can_see(dst) else self.get_node(_uuid(dst))
         if source.id == target.id:
             raise ValidationFailed("A graph edge must connect two different nodes")
-        stmt = insert(GraphEdge).values(
+        edge_insert = insert(GraphEdge).values(
             id=uuid.uuid4(),
             organization_id=self.actor.organization_id,
             src_id=source.id,
@@ -319,12 +319,12 @@ class PostgresGraphBackend:
             properties=_json_properties(properties, "Edge properties"),
             provenance=_json_properties(provenance, "Edge provenance"),
         )
-        stmt = stmt.on_conflict_do_update(
+        stmt = edge_insert.on_conflict_do_update(
             constraint="uq_graph_edges_triple",
             set_={
-                "confidence": stmt.excluded.confidence,
-                "properties": GraphEdge.properties.op("||")(stmt.excluded.properties),
-                "provenance": GraphEdge.provenance.op("||")(stmt.excluded.provenance),
+                "confidence": edge_insert.excluded.confidence,
+                "properties": GraphEdge.properties.op("||")(edge_insert.excluded.properties),
+                "provenance": GraphEdge.provenance.op("||")(edge_insert.excluded.provenance),
             },
         ).returning(GraphEdge)
         edge = self.db.scalars(stmt, execution_options={"populate_existing": True}).one()

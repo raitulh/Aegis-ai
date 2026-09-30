@@ -21,6 +21,10 @@ SEARCH_KINDS: tuple[str, ...] = ("memory", "chunk", "source", "hypothesis", "fai
 MAX_JSON_BYTES = 16 * 1024
 
 
+def _all_kinds() -> list[SearchKind]:
+    return ["memory", "chunk", "source", "hypothesis", "failure", "lesson"]
+
+
 def _bounded_json(value: dict[str, Any], label: str) -> dict[str, Any]:
     try:
         encoded = json.dumps(value, default=str)
@@ -140,7 +144,7 @@ class SearchQuery(BaseModel):
     project_id: str | None = None
     mission_id: str | None = None
     categories: list[MemoryCategory] | None = Field(default=None, max_length=10)
-    kinds: list[SearchKind] = Field(default_factory=lambda: list(SEARCH_KINDS), min_length=1, max_length=6)
+    kinds: list[SearchKind] = Field(default_factory=_all_kinds, min_length=1, max_length=6)
     limit: int = Field(default=20, ge=1, le=100)
     recency_half_life_days: float | None = Field(default=None, gt=0, le=36_500)
 

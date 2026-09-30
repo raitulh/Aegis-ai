@@ -230,6 +230,10 @@ def reconstruct_abstract(index: Any, *, max_words: int = MAX_ABSTRACT_WORDS) -> 
 
 
 # --- OpenAlex -------------------------------------------------------------------------------------
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _openalex_short_id(value: Any) -> str | None:
     if not isinstance(value, str) or not value:
         return None
@@ -243,10 +247,10 @@ def parse_openalex_work(work: Any) -> PaperRecord | None:
     title = _clean(work.get("title") or work.get("display_name"), 1000)
     if not title:
         return None
-    ids = work.get("ids") if isinstance(work.get("ids"), dict) else {}
+    ids = _as_dict(work.get("ids"))
     doi = normalize_doi(work.get("doi")) or normalize_doi(ids.get("doi"))
-    primary = work.get("primary_location") if isinstance(work.get("primary_location"), dict) else {}
-    host = primary.get("source") if isinstance(primary.get("source"), dict) else {}
+    primary = _as_dict(work.get("primary_location"))
+    host = _as_dict(primary.get("source"))
     external: dict[str, str] = {}
     openalex_id = _openalex_short_id(work.get("id") or ids.get("openalex"))
     if openalex_id:

@@ -44,6 +44,10 @@ from aegis_api.lab.core.deps import tenant_uow
 from aegis_api.lab.core.errors import ApprovalRequired, TransientError
 from aegis_api.lab.core.events import EventType, after_commit
 from aegis_api.lab.core.evidence import append_evidence
+
+# Importing the knowledge memory module registers its ``memory.promote`` approval hook (this module is one of
+# the hook modules the approvals service loads).
+from aegis_api.lab.knowledge import memory as _memory_hooks  # noqa: F401
 from aegis_api.lab.llm.costs import call_cost, load_configs, resolve_price
 from aegis_api.lab.llm.errors import LLMError
 from aegis_api.lab.llm.providers.gemini.interactions import (
@@ -72,10 +76,6 @@ from aegis_api.lab.research.sources import SourceInput, upsert_sources
 from aegis_api.lab.usage.recorder import record_model_usage
 from engines.lab.prompt_security import sanitize_untrusted
 from engines.lab.states import ApprovalStatus, ResearchTaskStatus
-
-# Importing the knowledge memory module registers its ``memory.promote`` approval hook; this module is one
-# of the hook modules the approvals service loads.
-from aegis_api.lab.knowledge import memory as _memory_hooks  # noqa: F401  isort: skip
 
 log = structlog.get_logger("aegis.lab.research.deep")
 
@@ -540,9 +540,7 @@ class DeepResearchService:
             citations = [Citation.model_validate(c) for c in (event.payload.get("citations") if event else []) or []]
             return self._finalize_in(db, actor, task, citations)
 
-    def _finalize_in(
-        self, db: Session, actor: Actor, task: ResearchTask, citations: list[Citation]
-    ) -> FinalizeResult:
+    def _finalize_in(self, db: Session, actor: Actor, task: ResearchTask, citations: list[Citation]) -> FinalizeResult:
         from aegis_api.lab.data.artifacts import create_artifact_version
 
         report = task.report or ""
@@ -701,9 +699,6 @@ def _decision_task(db: Session, actor: Actor, task_id: uuid.UUID | str) -> Resea
 def approve_plan(db: Session, actor: Actor, task_id: uuid.UUID | str, feedback: str | None = None) -> ResearchTask:
     """Approve the plan (PLAN_REVIEW → APPROVED); the research interaction starts right after."""
     task = _decision_task(db, actor, task_id)
-    from engines.lab.states import assert_transition
-
-    assert_transition("research_task", task.status, R.APPROVED)
     clean = " ".join((feedback or "").split())[:MAX_FEEDBACK_CHARS] or None
     now = utcnow().isoformat()
     transition(db, task, R.APPROVED)
@@ -728,9 +723,6 @@ def revise_plan(db: Session, actor: Actor, task_id: uuid.UUID | str, feedback: s
     clean = " ".join((feedback or "").split())[:MAX_FEEDBACK_CHARS]
     if not clean:
         raise ValidationFailed("Feedback is required to revise the plan")
-    from engines.lab.states import assert_transition
-
-    assert_transition("research_task", task.status, R.PLANNING)
     now = utcnow().isoformat()
     transition(db, task, R.PLANNING)
     task.plan_status = "REVISION_REQUESTED"
@@ -764,7 +756,9 @@ def cancel_provider_interaction(organization_id: uuid.UUID, task_id: uuid.UUID, 
             if task is not None:
                 if status is not None and status in PROVIDER_TERMINAL_STATUSES:
                     task.provider_status = status
-                add_event(db, task, "provider_cancel", {"interaction_id": interaction_id, "status": status, "error": error})
+                add_event(
+                    db, task, "provider_cancel", {"interaction_id": interaction_id, "status": status, "error": error}
+                )
     except Exception:
         log.warning("deep_research_cancel_record_failed", research_task_id=str(task_id), exc_info=True)
 
