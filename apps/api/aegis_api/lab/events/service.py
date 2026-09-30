@@ -60,7 +60,7 @@ def visibility_clause(db: Session, actor: Actor) -> ColumnElement[bool] | None:
     return or_(LabEvent.project_id.is_(None), LabEvent.project_id.in_(ids))
 
 
-def filtered_statement(db: Session, actor: Actor, filters: EventFilter) -> Select[tuple[LabEvent]]:
+def filtered_statement(db: Session, actor: Actor, filters: EventFilter) -> Select[LabEvent]:
     stmt = select(LabEvent).where(LabEvent.organization_id == actor.organization_id)
     if filters.mission_id is not None:
         stmt = stmt.where(LabEvent.mission_id == filters.mission_id)
@@ -78,9 +78,7 @@ def filtered_statement(db: Session, actor: Actor, filters: EventFilter) -> Selec
     return stmt
 
 
-def list_events(
-    db: Session, actor: Actor, filters: EventFilter, params: CursorParams, mapper: Any
-) -> CursorPage[Any]:
+def list_events(db: Session, actor: Actor, filters: EventFilter, params: CursorParams, mapper: Any) -> CursorPage[Any]:
     """Ascending keyset page over event ids."""
     if filters.project_id is not None:
         load_project(db, actor, filters.project_id)

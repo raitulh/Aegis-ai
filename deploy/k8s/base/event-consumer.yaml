@@ -1,0 +1,144 @@
+# Aegis workload. Keep the security context, env and probe blocks consistent with the other workloads in base/.
+# Outbox consumer: lab events → signed webhook deliveries (deduplicated per event; per-org advisory locks).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-event-consumer
+  namespace: aegis
+  labels:
+    app.kubernetes.io/name: aegis-event-consumer
+    app.kubernetes.io/part-of: aegis
+    app.kubernetes.io/component: event-consumer
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    # One active instance is enough (tasks take advisory locks anyway); avoid overlap on rollout.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-event-consumer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-event-consumer
+        app.kubernetes.io/part-of: aegis
+        app.kubernetes.io/component: event-consumer
+    spec:
+      serviceAccountName: aegis-event-consumer
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: event-consumer
+          image: aegis-api
+          imagePullPolicy: IfNotPresent
+          args: ["python", "-m", "aegis_api.lab.events.consumer"]
+          envFrom:
+            - configMapRef:
+                name: aegis-config
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "aegis"
+            - name: METRICS_PORT
+              value: "9102"
+            - name: EVENT_CONSUMER_INTERVAL_SECONDS
+              value: "2"
+            - name: EVENT_CONSUMER_SETTLE_SECONDS
+              value: "30"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: DATABASE_URL}
+            - name: DATABASE_ADMIN_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: DATABASE_ADMIN_URL}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: REDIS_URL}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: JWT_SECRET}
+            - name: SECRETS_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: SECRETS_ENCRYPTION_KEY}
+            - name: API_KEY_PEPPER
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: API_KEY_PEPPER}
+            - name: OBJECT_STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: OBJECT_STORAGE_ACCESS_KEY}
+            - name: OBJECT_STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: OBJECT_STORAGE_SECRET_KEY}
+          ports:
+            - name: metrics
+              containerPort: 9102
+              protocol: TCP
+          startupProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 512Mi
+              ephemeral-storage: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var
+              mountPath: /app/var
+      volumes:
+        # Writable scratch space: the root filesystem is read-only.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: var
+          emptyDir:
+            sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis-event-consumer-metrics
+  namespace: aegis
+  labels:
+    app.kubernetes.io/name: aegis-event-consumer
+    app.kubernetes.io/part-of: aegis
+    aegis.io/metrics: "true"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aegis-event-consumer
+  ports:
+    - name: metrics
+      port: 9102
+      targetPort: metrics
+      protocol: TCP

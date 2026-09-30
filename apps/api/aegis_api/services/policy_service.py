@@ -66,7 +66,7 @@ def create_policy(
         source_type="text" if source_text else "dsl",
         source_text=source_text,
         source_hash=stable_hash(source_text) if source_text else None,
-        created_by_id=principal.user_id,
+        created_by_id=principal.fk_user_id,
     )
     session.add(version)
     session.flush()
@@ -318,7 +318,7 @@ def create_version(
         dsl_yaml=dsl_yaml,
         change_note=change_note,
         parent_version_id=current.id if current else None,
-        created_by_id=principal.user_id,
+        created_by_id=principal.fk_user_id,
     )
     session.add(version)
     session.flush()

@@ -1,0 +1,201 @@
+# Aegis workload. Keep the security context, env and probe blocks consistent with the other workloads in base/.
+# FastAPI service. Never executes experiment code (EXECUTION_BACKEND=disabled via aegis-config).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-api
+  namespace: aegis
+  labels:
+    app.kubernetes.io/name: aegis-api
+    app.kubernetes.io/part-of: aegis
+    app.kubernetes.io/component: api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-api
+        app.kubernetes.io/part-of: aegis
+        app.kubernetes.io/component: api
+    spec:
+      serviceAccountName: aegis-api
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-api
+      containers:
+        - name: api
+          image: aegis-api
+          imagePullPolicy: IfNotPresent
+          args: ["uvicorn", "aegis_api.app:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "20"]
+          envFrom:
+            - configMapRef:
+                name: aegis-config
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "aegis-api"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: DATABASE_URL}
+            - name: DATABASE_ADMIN_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: DATABASE_ADMIN_URL}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: REDIS_URL}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: JWT_SECRET}
+            - name: SECRETS_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: SECRETS_ENCRYPTION_KEY}
+            - name: API_KEY_PEPPER
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: API_KEY_PEPPER}
+            - name: OBJECT_STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: OBJECT_STORAGE_ACCESS_KEY}
+            - name: OBJECT_STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: OBJECT_STORAGE_SECRET_KEY}
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: GEMINI_API_KEY, optional: true}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: OPENAI_API_KEY, optional: true}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: ANTHROPIC_API_KEY, optional: true}
+            - name: METRICS_TOKEN
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: METRICS_TOKEN, optional: true}
+            - name: TEMPORAL_API_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: TEMPORAL_API_KEY, optional: true}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          startupProbe:
+            httpGet: {path: /health/live, port: http}
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            # Process health only — never dependency checks (a DB outage must not restart every pod).
+            httpGet: {path: /health/live, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            # 503 while a required dependency (database, storage, redis, temporal) is down → out of rotation.
+            httpGet: {path: /health/ready, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+              ephemeral-storage: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var
+              mountPath: /app/var
+      volumes:
+        # Writable scratch space: the root filesystem is read-only.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: var
+          emptyDir:
+            sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis-api
+  namespace: aegis
+  labels:
+    app.kubernetes.io/name: aegis-api
+    app.kubernetes.io/part-of: aegis
+    aegis.io/metrics: "true"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aegis-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+---
+# Placeholder autoscaling policy — tune from real load tests (CPU alone under-represents SSE/IO load).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aegis-api
+  namespace: aegis
+  labels: {app.kubernetes.io/name: aegis-api, app.kubernetes.io/part-of: aegis}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aegis-api
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aegis-api
+  namespace: aegis
+  labels: {app.kubernetes.io/name: aegis-api, app.kubernetes.io/part-of: aegis}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-api

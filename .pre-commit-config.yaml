@@ -1,0 +1,50 @@
+# Pre-commit hooks — fast local gates that mirror CI (.github/workflows/ci.yml).
+#
+#   uv tool install pre-commit        # or: pipx install pre-commit
+#   pre-commit install                # run on every `git commit`
+#   pre-commit run --all-files        # run everything once
+#
+# The ruff hook version is pinned to the ruff in uv.lock so local fixes match CI;
+# bump both together. mypy runs through uv (the project venv), not an isolated env,
+# so it sees the real dependencies and the pyproject.toml configuration.
+minimum_pre_commit_version: "3.5.0"
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+        exclude: ^(packages/types/openapi\.json|pnpm-lock\.yaml|uv\.lock)$
+      - id: end-of-file-fixer
+        exclude: ^(packages/types/openapi\.json|apps/web/public/.*\.svg)$
+      - id: check-yaml
+        # deploy/k8s and GitHub workflow files contain multi-document YAML streams.
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-json
+        exclude: ^(apps/web/tsconfig.*\.json|.*/tsconfig.*\.json)$  # JSONC (comments) is valid there
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (apps/api/aegis_api, engines)
+        entry: uv run mypy apps/api/aegis_api engines
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true

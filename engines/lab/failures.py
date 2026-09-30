@@ -99,13 +99,15 @@ class Classification(BaseModel):
 # =============================================================================================
 _FRAME_RE = re.compile(r'File "(?P<path>[^"\n]+)", line (?P<line>\d+)(?:, in (?P<func>[^\s]+))?')
 _EXC_LINE_RE = re.compile(
-    r"^(?P<cls>(?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*(?:Error|Exception|Exit|Interrupt|Iteration|Warning|Denied|Exceeded|"
+    r"^(?P<cls>(?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*(?:Error|Exception|Exit|Interrupt|Iteration|Denied|Exceeded|"
     r"Unavailable|Invalid|Required))(?:\s*:\s?(?P<msg>.*))?$"
 )
 _TRACEBACK_HEADER = "Traceback (most recent call last):"
 _MISSING_MODULE_RE = re.compile(r"No module named ['\"]?(?P<mod>[A-Za-z_][\w.]*)['\"]?")
 _CANNOT_IMPORT_RE = re.compile(r"cannot import name ['\"]?[\w.]+['\"]? from ['\"]?(?P<mod>[A-Za-z_][\w.]*)['\"]?")
-_MISSING_PATH_RE = re.compile(r"No such file or directory:?\s*(?:'(?P<q1>[^'\n]+)'|\"(?P<q2>[^\"\n]+)\"|(?P<bare>\S+))")
+_MISSING_PATH_RE = re.compile(
+    r"No such file or directory:?[ \t]*(?:'(?P<q1>[^'\n]+)'|\"(?P<q2>[^\"\n]+)\"|(?P<bare>[^\s'\"]+))"
+)
 _LIBRARY_PATH_RE = re.compile(r"(site-packages|dist-packages|/lib/python\d|<frozen |\\lib\\)")
 _DATA_PATH_MARKERS = ("/workspace/input", "/workspace/data", "/data/", "/datasets/", "dataset")
 _DATA_PATH_PREFIXES = ("data/", "input/", "datasets/", "./data/", "./input/")
@@ -119,7 +121,7 @@ _POSIX_PATH_RE = re.compile(r"(?<![\w.:/~])~?(?:/[^\s/\"'<>:,;()\[\]{}]+)+/?")
 _TMP_NAME_RE = re.compile(r"\btmp[a-zA-Z0-9_]{4,}\b")
 _SQ_VALUE_RE = re.compile(r"(?<!\w)'[^'\n]*'(?!\w)")
 _DQ_VALUE_RE = re.compile(r"(?<!\w)\"[^\"\n]*\"(?!\w)")
-_NUMBER_RE = re.compile(r"(?<![A-Za-z_<])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+_NUMBER_RE = re.compile(r"(?<![\w.<])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
 _CARET_LINE_RE = re.compile(r"^[\s^~]+$")
 _WS_RE = re.compile(r"[ \t]+")
 _TOKEN_RE = re.compile(r"<\w+>|[A-Za-z0-9_]+")
@@ -304,10 +306,6 @@ def find_similar(
 # =============================================================================================
 # Derived facts
 # =============================================================================================
-def _is_finite_number(value: Any) -> bool:
-    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
-
-
 _NON_FINITE_STRINGS = frozenset({"nan", "-nan", "inf", "+inf", "-inf", "infinity", "+infinity", "-infinity"})
 
 
@@ -330,6 +328,16 @@ def non_finite_metric_keys(metrics: Mapping[str, Any] | None, *, max_items: int 
         ):
             found.append(path)
     return sorted(found)
+
+
+def _path_before_enoent(text: str) -> str | None:
+    """Path in shell-style messages such as ``cat: /workspace/input/x.csv: No such file or directory``."""
+    idx = text.find(": No such file or directory")
+    if idx < 0:
+        return None
+    line = text[text.rfind("\n", 0, idx) + 1 : idx].split()
+    candidate = line[-1].strip("'\"`") if line else ""
+    return candidate if "/" in candidate else None
 
 
 def _is_data_path(path: str) -> bool:
@@ -391,6 +399,8 @@ def _derive_facts(signals: FailureSignals) -> _Facts:
     path_match = _MISSING_PATH_RE.search(text)
     if path_match:
         missing_path = path_match.group("q1") or path_match.group("q2") or path_match.group("bare")
+    else:
+        missing_path = _path_before_enoent(text)
 
     codes = sorted(
         {
@@ -601,8 +611,9 @@ RULES: tuple[FailureRule, ...] = (
         "repeated_failures",
         _strategy_confidence,
         "The strategy produced {repeated} failures; the strategy itself is the likely cause.",
-        lambda f: f.signals.stage == "strategy"
-        and f.signals.repeated_failures_for_strategy >= STRATEGY_REPEAT_THRESHOLD,
+        lambda f: (
+            f.signals.stage == "strategy" and f.signals.repeated_failures_for_strategy >= STRATEGY_REPEAT_THRESHOLD
+        ),
     ),
     # --- design validation ---------------------------------------------------------------------
     FailureRule(
@@ -670,8 +681,10 @@ RULES: tuple[FailureRule, ...] = (
         "evaluator_error",
         0.85,
         "The evaluator failed with {exc_type}: {exc_message}.",
-        lambda f: f.signals.stage == "evaluation"
-        and bool(f.signals.error_message or f.signals.error_class or f.signals.traceback),
+        lambda f: (
+            f.signals.stage == "evaluation"
+            and bool(f.signals.error_message or f.signals.error_class or f.signals.traceback)
+        ),
     ),
     # --- resources -----------------------------------------------------------------------------
     FailureRule(
@@ -688,8 +701,10 @@ RULES: tuple[FailureRule, ...] = (
         "gpu_oom",
         0.93,
         "The GPU ran out of memory.",
-        lambda f: f.icontains("CUDA out of memory", "CUBLAS_STATUS_ALLOC_FAILED", "cuda.OutOfMemoryError")
-        or (f.exc_type == "OutOfMemoryError" and f.icontains("cuda", "gpu")),
+        lambda f: (
+            f.icontains("CUDA out of memory", "CUBLAS_STATUS_ALLOC_FAILED", "cuda.OutOfMemoryError")
+            or (f.exc_type == "OutOfMemoryError" and f.icontains("cuda", "gpu"))
+        ),
     ),
     FailureRule(
         "resource.memory_error",
@@ -697,8 +712,10 @@ RULES: tuple[FailureRule, ...] = (
         "oom",
         0.9,
         "The process ran out of memory ({exc_type}).",
-        lambda f: f.exc_type == "MemoryError"
-        or f.contains("MemoryError", "Cannot allocate memory", "std::bad_alloc", "Unable to allocate"),
+        lambda f: (
+            f.exc_type == "MemoryError"
+            or f.contains("MemoryError", "Cannot allocate memory", "std::bad_alloc", "Unable to allocate")
+        ),
     ),
     FailureRule(
         "resource.timeout",
@@ -731,8 +748,10 @@ RULES: tuple[FailureRule, ...] = (
         "missing_input",
         0.88,
         "An input data file was not found ({path}); the dataset may not be mounted.",
-        lambda f: bool(f.missing_path and _is_data_path(f.missing_path))
-        and (f.exc_type in {"FileNotFoundError", "OSError", "IOError"} or f.contains("No such file or directory")),
+        lambda f: (
+            bool(f.missing_path and _is_data_path(f.missing_path))
+            and (f.exc_type in {"FileNotFoundError", "OSError", "IOError"} or f.contains("No such file or directory"))
+        ),
     ),
     FailureRule(
         "data.empty_dataset",
@@ -748,8 +767,10 @@ RULES: tuple[FailureRule, ...] = (
         "parse_error",
         0.85,
         "The input data could not be parsed ({exc_type}).",
-        lambda f: f.exc_type in {"ParserError", "ParseError"}
-        or f.contains("Error tokenizing data", "_csv.Error", "csv.Error"),
+        lambda f: (
+            f.exc_type in {"ParserError", "ParseError", "JSONDecodeError"}
+            or f.contains("Error tokenizing data", "_csv.Error", "csv.Error")
+        ),
     ),
     FailureRule(
         "data.encoding",
@@ -857,9 +878,11 @@ RULES: tuple[FailureRule, ...] = (
         "insufficient_seeds",
         0.85,
         "Only {n_seeds} seeds were run but the statistical plan requires {required_seeds}.",
-        lambda f: f.signals.n_seeds is not None
-        and f.signals.required_seeds is not None
-        and f.signals.n_seeds < f.signals.required_seeds,
+        lambda f: (
+            f.signals.n_seeds is not None
+            and f.signals.required_seeds is not None
+            and f.signals.n_seeds < f.signals.required_seeds
+        ),
     ),
     FailureRule(
         "statistics.underpowered",
@@ -885,10 +908,12 @@ RULES: tuple[FailureRule, ...] = (
         _hypothesis_confidence,
         "An adequately powered test found a significant effect opposite to the hypothesis (p = {p_value}, "
         "alpha = {alpha}); this is a legitimate negative result.",
-        lambda f: f.signals.adequately_powered is True
-        and f.signals.effect_direction == "opposite"
-        and _p_finite(f)
-        and (f.signals.p_value or 0.0) < f.signals.alpha,
+        lambda f: (
+            f.signals.adequately_powered is True
+            and f.signals.effect_direction == "opposite"
+            and _p_finite(f)
+            and (f.signals.p_value or 0.0) < f.signals.alpha
+        ),
     ),
     FailureRule(
         "hypothesis.non_significant",
@@ -897,7 +922,9 @@ RULES: tuple[FailureRule, ...] = (
         _hypothesis_confidence,
         "An adequately powered test found no significant effect (p = {p_value}, alpha = {alpha}); this is a "
         "legitimate negative result.",
-        lambda f: f.signals.adequately_powered is True and _p_finite(f) and (f.signals.p_value or 0.0) >= f.signals.alpha,
+        lambda f: (
+            f.signals.adequately_powered is True and _p_finite(f) and (f.signals.p_value or 0.0) >= f.signals.alpha
+        ),
     ),
     # --- strategy (any stage) ------------------------------------------------------------------
     FailureRule(
@@ -936,7 +963,11 @@ def classify_failure(signals: FailureSignals) -> Classification:
         root_cause = f"No classification rule matched ({detail}); manual investigation is required."
         matched_ids = [_FALLBACK_RULE]
 
-    evidence: dict[str, Any] = {"engine_version": FAILURE_ENGINE_VERSION, "rule": matched_ids[0], "stage": signals.stage}
+    evidence: dict[str, Any] = {
+        "engine_version": FAILURE_ENGINE_VERSION,
+        "rule": matched_ids[0],
+        "stage": signals.stage,
+    }
     optional: dict[str, Any] = {
         "exit_code": signals.exit_code,
         "oom_killed": signals.oom_killed or None,
@@ -1217,8 +1248,7 @@ def _recover_timeout(classification: Classification, ctx: RecoveryContext) -> Re
         return _proposal(
             classification,
             RecoveryAction.NO_AUTOMATIC_FIX,
-            f"The timeout is already at the platform limit ({cap} s); the workload must be reduced (no automatic "
-            "fix).",
+            f"The timeout is already at the platform limit ({cap} s); the workload must be reduced (no automatic fix).",
             requires_approval=True,
             factor=0.5,
         )
@@ -1375,8 +1405,7 @@ def propose_recovery(classification: Classification, context: RecoveryContext | 
         return _proposal(
             classification,
             RecoveryAction.HUMAN_REVIEW,
-            "Governance blocked this action; there is no automatic recovery. A human must review the policy "
-            "decision.",
+            "Governance blocked this action; there is no automatic recovery. A human must review the policy decision.",
             requires_approval=True,
             factor=1.0,
         )

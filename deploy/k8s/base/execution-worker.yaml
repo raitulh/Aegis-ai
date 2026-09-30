@@ -1,0 +1,150 @@
+# Aegis workload. Keep the security context, env and probe blocks consistent with the other workloads in base/.
+# Temporal worker, execution task queue: the ONLY workload that starts sandboxes. It creates batch/v1
+# Jobs in aegis-sandbox through the Kubernetes API (namespaced Role in rbac-execution.yaml) — it never
+# runs experiment code itself and has no container-runtime socket. Sandbox pods: restricted PSS, no
+# service-account token, network policies in networkpolicies-sandbox.yaml, optional gVisor RuntimeClass.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-execution-worker
+  namespace: aegis
+  labels:
+    app.kubernetes.io/name: aegis-execution-worker
+    app.kubernetes.io/part-of: aegis
+    app.kubernetes.io/component: execution-worker
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-execution-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-execution-worker
+        app.kubernetes.io/part-of: aegis
+        app.kubernetes.io/component: execution-worker
+    spec:
+      serviceAccountName: aegis-execution-worker
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: execution-worker
+          image: aegis-api
+          imagePullPolicy: IfNotPresent
+          args: ["python", "-m", "aegis_api.lab.workflows.worker", "--queues", "execution"]
+          envFrom:
+            - configMapRef:
+                name: aegis-config
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "aegis-execution"
+            - name: METRICS_PORT
+              value: "9105"
+            - name: EXECUTION_BACKEND
+              value: "kubernetes"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: DATABASE_URL}
+            - name: DATABASE_ADMIN_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: DATABASE_ADMIN_URL}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: REDIS_URL}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: JWT_SECRET}
+            - name: SECRETS_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: SECRETS_ENCRYPTION_KEY}
+            - name: API_KEY_PEPPER
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: API_KEY_PEPPER}
+            - name: OBJECT_STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: OBJECT_STORAGE_ACCESS_KEY}
+            - name: OBJECT_STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: OBJECT_STORAGE_SECRET_KEY}
+            - name: TEMPORAL_API_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: TEMPORAL_API_KEY, optional: true}
+          ports:
+            - name: metrics
+              containerPort: 9105
+              protocol: TCP
+          startupProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 768Mi
+              ephemeral-storage: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var
+              mountPath: /app/var
+      volumes:
+        # Writable scratch space: the root filesystem is read-only.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: var
+          emptyDir:
+            sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis-execution-worker-metrics
+  namespace: aegis
+  labels:
+    app.kubernetes.io/name: aegis-execution-worker
+    app.kubernetes.io/part-of: aegis
+    aegis.io/metrics: "true"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aegis-execution-worker
+  ports:
+    - name: metrics
+      port: 9105
+      targetPort: metrics
+      protocol: TCP

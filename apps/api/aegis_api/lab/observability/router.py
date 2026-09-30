@@ -93,7 +93,7 @@ def live() -> dict[str, Any]:
 )
 async def ready() -> JSONResponse:
     result = await asyncio.to_thread(health.readiness)
-    body = ReadinessOut.model_validate(result.as_dict()).model_dump(mode="json")
+    body = ReadinessOut.model_validate(result.as_dict()).model_dump(mode="json", exclude_none=True)
     return JSONResponse(body, status_code=200 if result.ready else 503, headers={"Cache-Control": "no-store"})
 
 

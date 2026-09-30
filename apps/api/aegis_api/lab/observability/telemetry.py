@@ -58,8 +58,8 @@ def _set_global_provider(provider: TracerProvider | None) -> None:
     """
     once_cls = getattr(getattr(trace, "_TRACER_PROVIDER_SET_ONCE", None), "__class__", None)
     if once_cls is not None and hasattr(trace, "_TRACER_PROVIDER"):
-        trace._TRACER_PROVIDER_SET_ONCE = once_cls()  # type: ignore[attr-defined]
-        trace._TRACER_PROVIDER = None  # type: ignore[attr-defined]
+        trace._TRACER_PROVIDER_SET_ONCE = once_cls()
+        trace._TRACER_PROVIDER = None
     if provider is not None:
         trace.set_tracer_provider(provider)
 

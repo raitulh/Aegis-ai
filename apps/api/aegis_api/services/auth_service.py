@@ -12,11 +12,13 @@ flagged ``is_guest`` with a short-lived organization.
 from __future__ import annotations
 
 import re
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from aegis_api.config import get_settings
@@ -46,13 +48,16 @@ def slugify(value: str, fallback: str = "workspace") -> str:
 
 
 def unique_org_slug(session: Session, base: str) -> str:
-    slug = slugify(base)
-    candidate = slug
-    i = 1
-    while session.scalar(select(Organization.id).where(Organization.slug == candidate)):
-        i += 1
-        candidate = f"{slug}-{i}"
-    return candidate
+    """A free slug: the plain slug if available, else the slug with a random suffix (O(1) queries, and
+    concurrent sign-ups with the same organization name do not race onto the same sequential suffix)."""
+    slug = slugify(base)[:70]
+    if not session.scalar(select(Organization.id).where(Organization.slug == slug)):
+        return slug
+    for _ in range(5):
+        candidate = f"{slug}-{secrets.token_hex(3)}"
+        if not session.scalar(select(Organization.id).where(Organization.slug == candidate)):
+            return candidate
+    return f"{slug}-{secrets.token_hex(8)}"
 
 
 def _provision_org(
@@ -64,16 +69,28 @@ def _provision_org(
     is_sandbox: bool = False,
     ttl_hours: int | None = None,
 ) -> tuple[Organization, Membership]:
-    org = Organization(
-        name=name,
-        slug=unique_org_slug(session, name),
-        is_demo=is_demo,
-        is_sandbox=is_sandbox,
-        expires_at=(utcnow() + timedelta(hours=ttl_hours)) if ttl_hours else None,
-        onboarding={"steps": {}, "completed": False},
-    )
-    session.add(org)
-    session.flush()
+    org: Organization | None = None
+    for attempt in range(3):
+        candidate = Organization(
+            name=name,
+            slug=unique_org_slug(session, name),
+            is_demo=is_demo,
+            is_sandbox=is_sandbox,
+            expires_at=(utcnow() + timedelta(hours=ttl_hours)) if ttl_hours else None,
+            onboarding={"steps": {}, "completed": False},
+        )
+        try:
+            # A concurrent sign-up may take the same slug between the check and the insert.
+            with session.begin_nested():
+                session.add(candidate)
+                session.flush()
+        except IntegrityError:
+            if attempt == 2:
+                raise
+            continue
+        org = candidate
+        break
+    assert org is not None
     membership = Membership(organization_id=org.id, user_id=user.id, role=Role.OWNER, status=MembershipStatus.ACTIVE)
     session.add(membership)
     user.default_organization_id = org.id

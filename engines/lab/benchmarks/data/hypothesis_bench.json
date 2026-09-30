@@ -1,0 +1,242 @@
+{
+  "benchmark_fixture": true,
+  "fixture_notice": "BENCHMARK FIXTURE - synthetic cases authored for internal regression benchmarking of the AI Scientist Evolution Lab. Documents, hypotheses, designs and numbers are illustrative; they are not research findings, not real data and must never be presented as discoveries.",
+  "suite": "hypothesis_bench",
+  "version": "1.0.0",
+  "description": "Assess hypothesis quality. Subject returns {falsifiable, measurable, metric_named} booleans; scored by per-label accuracy.",
+  "label_definitions": {
+    "falsifiable": "Judged on logical form: the hypothesis makes a directional or comparative prediction or states an explicit falsification criterion, without hedging ('may or may not', 'could possibly', 'in some way', 'under certain conditions') and is not a tautology or a bare evaluative claim. Whether the outcome is operationalised is judged separately by 'measurable'.",
+    "measurable": "The dependent variable is an observable quantity with an implied or stated measurement procedure (not an abstract construct such as 'understanding' or 'creativity').",
+    "metric_named": "A specific, named metric is given (e.g. AUROC, expected calibration error, cycle life at 80% capacity retention)."
+  },
+  "cases": [
+    {
+      "id": "hyp-01",
+      "input": {
+        "statement": "Replacing post-LayerNorm with pre-LayerNorm in a 12-layer transformer will reduce the fraction of diverging training runs from above 50% to below 10% without warmup.",
+        "independent_variable": "layer normalisation placement",
+        "dependent_variable": "fraction of diverging training runs",
+        "metric": "divergence rate over 20 seeds",
+        "prediction": "divergence rate below 10% with pre-LayerNorm",
+        "falsification_criterion": "divergence rate of 10% or more with pre-LayerNorm"
+      },
+      "expected": {
+        "falsifiable": true,
+        "measurable": true,
+        "metric_named": true
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-02",
+      "input": {
+        "statement": "Better prompts may or may not make the assistant more helpful in some situations.",
+        "independent_variable": "prompt",
+        "dependent_variable": "helpfulness",
+        "metric": null,
+        "prediction": null,
+        "falsification_criterion": null
+      },
+      "expected": {
+        "falsifiable": false,
+        "measurable": false,
+        "metric_named": false
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-03",
+      "input": {
+        "statement": "Adding 2 wt% fluoroethylene carbonate to the electrolyte will increase the number of cycles to 80% capacity retention of Li||NMC cells by at least 30% relative to the additive-free electrolyte.",
+        "independent_variable": "fluoroethylene carbonate concentration",
+        "dependent_variable": "cycles to 80% capacity retention",
+        "metric": "cycle life at 80% capacity retention",
+        "prediction": "at least 30% more cycles",
+        "falsification_criterion": "cycle-life gain below 30% across 5 cells per arm"
+      },
+      "expected": {
+        "falsifiable": true,
+        "measurable": true,
+        "metric_named": true
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-04",
+      "input": {
+        "statement": "The new retrieval strategy could help the research agent's scientific understanding in some way.",
+        "independent_variable": "retrieval strategy",
+        "dependent_variable": "scientific understanding",
+        "metric": null,
+        "prediction": null,
+        "falsification_criterion": null
+      },
+      "expected": {
+        "falsifiable": false,
+        "measurable": false,
+        "metric_named": false
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-05",
+      "input": {
+        "statement": "Scaffold-split test AUROC of the graph network will be lower than its random-split AUROC on the same molecular dataset.",
+        "independent_variable": "data split strategy",
+        "dependent_variable": "test-set discrimination",
+        "metric": "AUROC",
+        "prediction": "scaffold-split AUROC lower than random-split AUROC",
+        "falsification_criterion": "scaffold-split AUROC greater than or equal to random-split AUROC"
+      },
+      "expected": {
+        "falsifiable": true,
+        "measurable": true,
+        "metric_named": true
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-06",
+      "input": {
+        "statement": "Oxide-derived copper will produce more ethylene than polished copper under identical electrolysis conditions.",
+        "independent_variable": "copper surface preparation",
+        "dependent_variable": "ethylene production measured by gas chromatography",
+        "metric": null,
+        "prediction": "higher ethylene production on oxide-derived copper",
+        "falsification_criterion": "equal or lower ethylene production"
+      },
+      "expected": {
+        "falsifiable": true,
+        "measurable": true,
+        "metric_named": false
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-07",
+      "input": {
+        "statement": "Either the model's calibration improves after fine-tuning or it does not.",
+        "independent_variable": "fine-tuning",
+        "dependent_variable": "calibration",
+        "metric": "expected calibration error",
+        "prediction": null,
+        "falsification_criterion": null
+      },
+      "expected": {
+        "falsifiable": false,
+        "measurable": true,
+        "metric_named": true
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-08",
+      "input": {
+        "statement": "Students who use the tutoring agent will become more creative.",
+        "independent_variable": "use of tutoring agent",
+        "dependent_variable": "creativity",
+        "metric": null,
+        "prediction": "higher creativity",
+        "falsification_criterion": "no increase in creativity"
+      },
+      "expected": {
+        "falsifiable": true,
+        "measurable": false,
+        "metric_named": false
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-09",
+      "input": {
+        "statement": "Under certain conditions, larger batch sizes could possibly affect generalisation.",
+        "independent_variable": "batch size",
+        "dependent_variable": "test accuracy",
+        "metric": "top-1 accuracy",
+        "prediction": null,
+        "falsification_criterion": null
+      },
+      "expected": {
+        "falsifiable": false,
+        "measurable": true,
+        "metric_named": true
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-10",
+      "input": {
+        "statement": "Patient-level splitting will lower the reported AUROC of the chest radiograph classifier by at least 0.03 compared with image-level splitting.",
+        "independent_variable": "split granularity",
+        "dependent_variable": "test-set discrimination",
+        "metric": "AUROC",
+        "prediction": "AUROC drop of at least 0.03",
+        "falsification_criterion": "AUROC drop smaller than 0.03 over 5 folds"
+      },
+      "expected": {
+        "falsifiable": true,
+        "measurable": true,
+        "metric_named": true
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-11",
+      "input": {
+        "statement": "Increasing the number of retrieved passages from 5 to 20 will reduce the rate of unsupported statements in generated literature summaries.",
+        "independent_variable": "number of retrieved passages",
+        "dependent_variable": "rate of unsupported statements per summary",
+        "metric": null,
+        "prediction": "lower unsupported-statement rate with 20 passages",
+        "falsification_criterion": "equal or higher unsupported-statement rate"
+      },
+      "expected": {
+        "falsifiable": true,
+        "measurable": true,
+        "metric_named": false
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    },
+    {
+      "id": "hyp-12",
+      "input": {
+        "statement": "The optimiser is good.",
+        "independent_variable": null,
+        "dependent_variable": null,
+        "metric": null,
+        "prediction": null,
+        "falsification_criterion": null
+      },
+      "expected": {
+        "falsifiable": false,
+        "measurable": false,
+        "metric_named": false
+      },
+      "tags": [
+        "hypothesis_quality"
+      ]
+    }
+  ]
+}

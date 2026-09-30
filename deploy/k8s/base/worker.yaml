@@ -1,0 +1,123 @@
+# Aegis workload. Keep the security context, env and probe blocks consistent with the other workloads in base/.
+# Celery worker: assurance audits and existing background jobs.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-worker
+  namespace: aegis
+  labels:
+    app.kubernetes.io/name: aegis-worker
+    app.kubernetes.io/part-of: aegis
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-worker
+        app.kubernetes.io/part-of: aegis
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: aegis-worker
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: aegis-api
+          imagePullPolicy: IfNotPresent
+          args: ["celery", "-A", "aegis_api.jobs.tasks:celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+          envFrom:
+            - configMapRef:
+                name: aegis-config
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "aegis-worker"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: DATABASE_URL}
+            - name: DATABASE_ADMIN_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: DATABASE_ADMIN_URL}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: REDIS_URL}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: JWT_SECRET}
+            - name: SECRETS_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: SECRETS_ENCRYPTION_KEY}
+            - name: API_KEY_PEPPER
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: API_KEY_PEPPER}
+            - name: OBJECT_STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: OBJECT_STORAGE_ACCESS_KEY}
+            - name: OBJECT_STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: OBJECT_STORAGE_SECRET_KEY}
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: GEMINI_API_KEY, optional: true}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: OPENAI_API_KEY, optional: true}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: ANTHROPIC_API_KEY, optional: true}
+            - name: TEMPORAL_API_KEY
+              valueFrom:
+                secretKeyRef: {name: aegis-secrets, key: TEMPORAL_API_KEY, optional: true}
+          livenessProbe:
+            # Round-trips through the broker to this worker node; expensive, so run it rarely.
+            exec:
+              command: ["sh", "-c", "celery -A aegis_api.jobs.tasks:celery_app inspect ping -d celery@$HOSTNAME --timeout 10 > /dev/null"]
+            initialDelaySeconds: 60
+            periodSeconds: 120
+            timeoutSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+              ephemeral-storage: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var
+              mountPath: /app/var
+      volumes:
+        # Writable scratch space: the root filesystem is read-only.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: var
+          emptyDir:
+            sizeLimit: 1Gi

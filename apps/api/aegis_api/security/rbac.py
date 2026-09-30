@@ -256,7 +256,7 @@ ROLE_DESCRIPTIONS: dict[str, str] = {
 
 # API key scopes narrow the permissions of the key's role.
 SCOPE_RULES: dict[str, tuple[str, ...]] = {
-    "read": (":read", "artifact:download"),
+    "read": (":read", "artifact:download", "billing:view"),
     "write": (
         ":write",
         ":compile",

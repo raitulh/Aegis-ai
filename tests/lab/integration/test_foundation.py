@@ -94,3 +94,13 @@ def test_rollback_discards_after_commit_callbacks(lab):
         db.info.setdefault("after_commit_callbacks", []).append(lambda: fired.append(1))
         raise RuntimeError("boom")
     assert fired == []
+
+
+def test_after_commit_callbacks_wait_for_outermost_commit(lab):
+    fired: list[str] = []
+    with lab.db() as db:
+        db.info.setdefault("after_commit_callbacks", []).append(lambda: fired.append("cb"))
+        with db.begin_nested():
+            db.execute(text("select 1"))
+        assert fired == []  # a released savepoint is not a commit
+    assert fired == ["cb"]

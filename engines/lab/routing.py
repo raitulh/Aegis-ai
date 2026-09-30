@@ -232,7 +232,9 @@ def route(
             candidate.provider,
             candidate.model,
         )
-        ranked.append((sort_key, RankedCandidate(candidate=candidate, estimated_cost_usd=cost, tier_distance=abs(diff))))
+        ranked.append(
+            (sort_key, RankedCandidate(candidate=candidate, estimated_cost_usd=cost, tier_distance=abs(diff)))
+        )
     ranked.sort(key=lambda item: item[0])
     ordered = tuple(item[1] for item in ranked)
     return RoutingDecision(

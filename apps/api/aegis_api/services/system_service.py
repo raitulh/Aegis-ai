@@ -44,7 +44,7 @@ def create_system(session: Session, principal: Principal, data: Any) -> AISystem
             name=f"endpoint:{data.name}",
             value=data.endpoint_auth_secret,
             kind="endpoint_auth",
-            created_by_id=principal.user_id,
+            created_by_id=principal.fk_user_id,
         )
         auth_secret_id = secret.id
     system = AISystem(
@@ -54,7 +54,7 @@ def create_system(session: Session, principal: Principal, data: Any) -> AISystem
         description=data.description,
         system_type=data.system_type,
         environment=data.environment,
-        owner_id=principal.user_id,
+        owner_id=principal.fk_user_id,
         owner_name=data.owner_name or principal.display_name,
         business_purpose=data.business_purpose,
         risk_tier=data.risk_tier,
@@ -172,7 +172,7 @@ def _snapshot(session: Session, system: AISystem, changed: list[str], summary: s
             },
             changed_fields=changed,
             change_summary=summary,
-            created_by_id=principal.user_id,
+            created_by_id=principal.fk_user_id,
         )
     )
 
@@ -211,7 +211,7 @@ def create_provider(session: Session, principal: Principal, data: Any) -> Provid
             name=f"provider:{data.kind}:{data.name}",
             value=data.api_key,
             kind="provider_key",
-            created_by_id=principal.user_id,
+            created_by_id=principal.fk_user_id,
         )
         secret_id = secret.id
     provider = Provider(

@@ -16,6 +16,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from tests.conftest import Workspace, signup
+from tests.lab.fakes import fake_llm  # noqa: F401  (fixture re-export for every lab test)
 
 
 @dataclass
@@ -64,9 +65,10 @@ class LabContext:
 
 def make_lab(client, *, org: str = "Lab Org") -> LabContext:  # type: ignore[no-untyped-def]
     from aegis_api.db.session import session_factory
-    from aegis_api.lab.models import Project, Workspace as LabWorkspace
+    from aegis_api.lab.models import Project
+    from aegis_api.lab.models import Workspace as LabWorkspace
 
-    ws = signup(client, org=org)
+    ws = signup(client, org=f"{org} {uuid.uuid4().hex[:8]}")
     org_id = uuid.UUID(ws.org_id)
     user_id = uuid.UUID(ws.user_id)
     session = session_factory(admin=True)()

@@ -75,7 +75,7 @@ def approve_and_apply(session: Session, principal: Principal, remediation: Remed
     system = session.get(AISystem, finding.system_id)
     if system is None:
         raise NotFound("System not found")
-    remediation.approved_by_id = principal.user_id
+    remediation.approved_by_id = principal.fk_user_id
     remediation.approved_at = utcnow()
     remediation.status = RemediationStatus.APPLIED
     remediation.applied_at = utcnow()
@@ -201,7 +201,7 @@ def run_regression(
         system_id=system.id,
         status=RunStatus.QUEUED,
         system_version=system.version,
-        triggered_by_id=principal.user_id,
+        triggered_by_id=principal.fk_user_id,
     )
     if finding is not None:
         run.results = [{"finding_id": str(finding.id)}]

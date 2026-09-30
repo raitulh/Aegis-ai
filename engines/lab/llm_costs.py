@@ -43,7 +43,9 @@ class Price:
         return {
             "input_per_mtok": str(self.input_per_mtok),
             "output_per_mtok": str(self.output_per_mtok),
-            "cached_input_per_mtok": str(self.cached_input_per_mtok) if self.cached_input_per_mtok is not None else None,
+            "cached_input_per_mtok": str(self.cached_input_per_mtok)
+            if self.cached_input_per_mtok is not None
+            else None,
             "source": self.source,
         }
 

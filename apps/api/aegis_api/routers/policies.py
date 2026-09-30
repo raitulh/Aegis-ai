@@ -190,7 +190,7 @@ def add_manual_control(
         condition=body.condition,
         required_evidence=body.required_evidence,
         source="manual",
-        created_by_id=principal.user_id,
+        created_by_id=principal.fk_user_id,
     )
     db.add(control)
     db.flush()

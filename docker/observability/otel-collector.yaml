@@ -1,0 +1,78 @@
+# ==============================================================================
+# OpenTelemetry Collector (contrib) — docker-compose `observability` profile.
+#
+#   app processes ──OTLP/HTTP :4318 (or gRPC :4317)──▶ collector
+#       traces  → debug exporter (container log) + spanmetrics connector
+#       metrics → Prometheus exporter on :8889 (scraped by the `prometheus` service)
+#       logs    → debug exporter
+#
+# Enable in the apps with OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318.
+# Swap `debug` for a real backend exporter (otlphttp to Tempo/Jaeger/vendor) in
+# shared environments. The collector never receives secrets: the apps export
+# span names/attributes only (no SQL text, no prompts, no tokens).
+# ==============================================================================
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+  batch:
+    send_batch_size: 1024
+    timeout: 5s
+
+connectors:
+  # RED metrics derived from spans (request rate / errors / duration per service + span name).
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [5ms, 25ms, 100ms, 250ms, 1s, 2.5s, 10s, 30s, 120s]
+    dimensions:
+      - name: http.route
+      - name: http.response.status_code
+    metrics_flush_interval: 15s
+
+exporters:
+  debug:
+    verbosity: basic
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: otel
+    resource_to_telemetry_conversion:
+      enabled: true
+
+service:
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, spanmetrics]
+    metrics:
+      receivers: [otlp, spanmetrics]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]

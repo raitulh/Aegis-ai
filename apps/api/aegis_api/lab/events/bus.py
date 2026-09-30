@@ -25,6 +25,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, Protocol, runtime_checkable
 
+import anyio
 import structlog
 
 from aegis_api.config import get_settings
@@ -35,6 +36,7 @@ log = structlog.get_logger("aegis.lab.events.bus")
 DEGRADED_POLL_SECONDS = 5.0
 REDIS_RETRY_AFTER_SECONDS = 5.0
 RESUBSCRIBE_INTERVAL_SECONDS = 30.0
+CLOSE_TIMEOUT_SECONDS = 2.0
 
 
 @runtime_checkable
@@ -250,11 +252,13 @@ class RedisEventBus:
     @asynccontextmanager
     async def listen(self, channel: str) -> AsyncIterator[_RedisListener]:
         listener = _RedisListener(self.url, channel)
-        await listener.open()
         try:
+            await listener.open()
             yield listener
         finally:
-            await listener.close()
+            # Runs on client disconnect too (cancellation): shield so the pub/sub connection is released.
+            with anyio.move_on_after(CLOSE_TIMEOUT_SECONDS, shield=True):
+                await listener.close()
 
     async def wait(self, channel: str, timeout: float) -> bool:
         async with self.listen(channel) as listener:

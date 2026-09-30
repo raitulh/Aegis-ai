@@ -1,0 +1,7 @@
+# PID-1 init for the API/worker image (installed by docker/Dockerfile.api, not part of the app venv).
+# dumb-init forwards SIGTERM/SIGINT to the process and reaps zombies (the same role as tini / `docker run --init`).
+# Installed from PyPI with hash pinning so the image needs no OS package mirror. Wheels only (no sdist build).
+# Bump: https://pypi.org/project/dumb-init/#files — update BOTH hashes.
+dumb-init==1.2.5.post1 \
+    --hash=sha256:5d6b1fe9b8efcdbbdcb670efe7a55f9117251ee9648d35ffd0c487fd79515ea5 \
+    --hash=sha256:a516a16a7dfed012de2524eb449e31f7f583b11b938eebb3ec09fd194497293d

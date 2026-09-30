@@ -124,9 +124,7 @@ RULES: tuple[_Rule, ...] = (
         "exfiltration",
         0.7,
         rf"{_EXFIL_VERB}\s+(?:me\s+|us\s+)?your\s+(?:\w+\s+){{0,2}}?"
-        r"(?:system\s+prompt|prompt|instructions|rules|guidelines|configuration|secrets?|"
-        + _SENSITIVE
-        + r")\b"
+        r"(?:system\s+prompt|prompt|instructions|rules|guidelines|configuration|secrets?|" + _SENSITIVE + r")\b"
         rf"|{_EXFIL_VERB}\s+(?:me|us)\s+(?:the\s+)?(?:\w+\s+){{0,2}}?(?:system\s+prompt|instructions|secrets?|"
         + _SENSITIVE
         + r")\b"
@@ -302,7 +300,11 @@ def scan_for_injection(text: str, *, quarantine_threshold: float = QUARANTINE_TH
     zero_width = [ch for ch in text if ch in ZERO_WIDTH]
     if zero_width:
         findings["hidden_zero_width"] = InjectionFinding(
-            "hidden_zero_width", "hidden_content", _ZERO_WIDTH_WEIGHT, _visible("".join(zero_width[:8])), len(zero_width)
+            "hidden_zero_width",
+            "hidden_content",
+            _ZERO_WIDTH_WEIGHT,
+            _visible("".join(zero_width[:8])),
+            len(zero_width),
         )
     bidi = [ch for ch in text if ch in BIDI_CONTROLS]
     if bidi:

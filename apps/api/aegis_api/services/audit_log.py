@@ -27,7 +27,7 @@ def record(
 ) -> AuditLog:
     entry = AuditLog(
         organization_id=organization_id,
-        user_id=principal.user_id if principal else None,
+        user_id=principal.fk_user_id if principal else None,
         actor_type=principal.actor_type if principal else actor_type,
         actor_label=principal.actor_label if principal else actor_label,
         action=action,

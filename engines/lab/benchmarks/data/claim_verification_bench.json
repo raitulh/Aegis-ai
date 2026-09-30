@@ -1,0 +1,373 @@
+{
+  "benchmark_fixture": true,
+  "fixture_notice": "BENCHMARK FIXTURE - synthetic cases authored for internal regression benchmarking of the AI Scientist Evolution Lab. Documents, hypotheses, designs and numbers are illustrative; they are not research findings, not real data and must never be presented as discoveries.",
+  "suite": "claim_verification_bench",
+  "version": "1.0.0",
+  "description": "Decide a scientific claim's verification status from its evidence profile and check outcomes. Subject returns a ClaimStatus; scored by accuracy.",
+  "decision_rules": [
+    "UNVERIFIED if the claim has no attached evidence (evidence_count == 0).",
+    "Only required checks decide the status; optional checks are advisory.",
+    "CONTESTED if at least one required check passed and at least one failed.",
+    "REJECTED if a required check failed and none passed.",
+    "CANDIDATE if no required check has passed yet (and none failed).",
+    "PARTIALLY_VERIFIED if some required checks passed, none failed and some are pending.",
+    "VERIFIED if every required check passed."
+  ],
+  "cases": [
+    {
+      "id": "claim-01",
+      "input": {
+        "profile": {
+          "claim_type": "performance",
+          "statement": "Pre-LN removes the need for warmup in 12-layer transformers.",
+          "evidence_count": 0
+        },
+        "checks": []
+      },
+      "expected": {
+        "status": "UNVERIFIED"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-02",
+      "input": {
+        "profile": {
+          "claim_type": "mechanism",
+          "statement": "LiF-rich interphase explains the cycle-life gain.",
+          "evidence_count": 0
+        },
+        "checks": [
+          {
+            "name": "literature_support",
+            "required": false,
+            "status": "pending"
+          }
+        ]
+      },
+      "expected": {
+        "status": "UNVERIFIED"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-03",
+      "input": {
+        "profile": {
+          "claim_type": "performance",
+          "statement": "Hybrid retrieval improves nDCG@5 by 0.06.",
+          "evidence_count": 3
+        },
+        "checks": [
+          {
+            "name": "statistical_significance",
+            "required": true,
+            "status": "pending"
+          },
+          {
+            "name": "reproduction",
+            "required": true,
+            "status": "pending"
+          }
+        ]
+      },
+      "expected": {
+        "status": "CANDIDATE"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-04",
+      "input": {
+        "profile": {
+          "claim_type": "comparison",
+          "statement": "Oxide-derived copper doubles ethylene Faradaic efficiency.",
+          "evidence_count": 2
+        },
+        "checks": [
+          {
+            "name": "statistical_significance",
+            "required": true,
+            "status": "pending"
+          },
+          {
+            "name": "independent_replication",
+            "required": true,
+            "status": "pending"
+          },
+          {
+            "name": "literature_support",
+            "required": false,
+            "status": "passed"
+          }
+        ]
+      },
+      "expected": {
+        "status": "CANDIDATE"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-05",
+      "input": {
+        "profile": {
+          "claim_type": "performance",
+          "statement": "Patient-level splits lower AUROC by 0.04.",
+          "evidence_count": 4
+        },
+        "checks": [
+          {
+            "name": "statistical_significance",
+            "required": true,
+            "status": "passed"
+          },
+          {
+            "name": "reproduction",
+            "required": true,
+            "status": "pending"
+          },
+          {
+            "name": "leakage_audit",
+            "required": true,
+            "status": "passed"
+          }
+        ]
+      },
+      "expected": {
+        "status": "PARTIALLY_VERIFIED"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-06",
+      "input": {
+        "profile": {
+          "claim_type": "effect",
+          "statement": "FEC additive extends cycle life by 35%.",
+          "evidence_count": 5
+        },
+        "checks": [
+          {
+            "name": "statistical_significance",
+            "required": true,
+            "status": "passed"
+          },
+          {
+            "name": "reproduction",
+            "required": true,
+            "status": "pending"
+          },
+          {
+            "name": "effect_size_ci",
+            "required": false,
+            "status": "failed"
+          }
+        ]
+      },
+      "expected": {
+        "status": "PARTIALLY_VERIFIED"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-07",
+      "input": {
+        "profile": {
+          "claim_type": "performance",
+          "statement": "Bayesian optimisation reaches 90% of the best yield in 12 experiments.",
+          "evidence_count": 6
+        },
+        "checks": [
+          {
+            "name": "statistical_significance",
+            "required": true,
+            "status": "passed"
+          },
+          {
+            "name": "reproduction",
+            "required": true,
+            "status": "passed"
+          },
+          {
+            "name": "baseline_comparison",
+            "required": true,
+            "status": "passed"
+          }
+        ]
+      },
+      "expected": {
+        "status": "VERIFIED"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-08",
+      "input": {
+        "profile": {
+          "claim_type": "comparison",
+          "statement": "Scaffold-split AUROC is lower than random-split AUROC.",
+          "evidence_count": 4
+        },
+        "checks": [
+          {
+            "name": "statistical_significance",
+            "required": true,
+            "status": "passed"
+          },
+          {
+            "name": "reproduction",
+            "required": true,
+            "status": "passed"
+          },
+          {
+            "name": "literature_support",
+            "required": false,
+            "status": "pending"
+          }
+        ]
+      },
+      "expected": {
+        "status": "VERIFIED"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-09",
+      "input": {
+        "profile": {
+          "claim_type": "performance",
+          "statement": "Prompt variant B improves hypothesis novelty.",
+          "evidence_count": 3
+        },
+        "checks": [
+          {
+            "name": "statistical_significance",
+            "required": true,
+            "status": "failed"
+          },
+          {
+            "name": "reproduction",
+            "required": true,
+            "status": "pending"
+          }
+        ]
+      },
+      "expected": {
+        "status": "REJECTED"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-10",
+      "input": {
+        "profile": {
+          "claim_type": "effect",
+          "statement": "Larger batch sizes improve calibration.",
+          "evidence_count": 2
+        },
+        "checks": [
+          {
+            "name": "statistical_significance",
+            "required": true,
+            "status": "failed"
+          },
+          {
+            "name": "reproduction",
+            "required": true,
+            "status": "failed"
+          },
+          {
+            "name": "literature_support",
+            "required": false,
+            "status": "passed"
+          }
+        ]
+      },
+      "expected": {
+        "status": "REJECTED"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-11",
+      "input": {
+        "profile": {
+          "claim_type": "performance",
+          "statement": "The new optimiser halves training time.",
+          "evidence_count": 5
+        },
+        "checks": [
+          {
+            "name": "statistical_significance",
+            "required": true,
+            "status": "passed"
+          },
+          {
+            "name": "reproduction",
+            "required": true,
+            "status": "failed"
+          }
+        ]
+      },
+      "expected": {
+        "status": "CONTESTED"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    },
+    {
+      "id": "claim-12",
+      "input": {
+        "profile": {
+          "claim_type": "mechanism",
+          "statement": "Cation size controls C2+ selectivity.",
+          "evidence_count": 4
+        },
+        "checks": [
+          {
+            "name": "statistical_significance",
+            "required": true,
+            "status": "passed"
+          },
+          {
+            "name": "independent_replication",
+            "required": true,
+            "status": "failed"
+          },
+          {
+            "name": "reproduction",
+            "required": true,
+            "status": "passed"
+          }
+        ]
+      },
+      "expected": {
+        "status": "CONTESTED"
+      },
+      "tags": [
+        "claim_verification"
+      ]
+    }
+  ]
+}

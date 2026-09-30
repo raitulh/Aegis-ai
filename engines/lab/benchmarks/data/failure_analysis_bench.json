@@ -1,0 +1,315 @@
+{
+  "benchmark_fixture": true,
+  "fixture_notice": "BENCHMARK FIXTURE - synthetic cases authored for internal regression benchmarking of the AI Scientist Evolution Lab. Documents, hypotheses, designs and numbers are illustrative; they are not research findings, not real data and must never be presented as discoveries.",
+  "suite": "failure_analysis_bench",
+  "version": "1.0.0",
+  "description": "Classify failures from observed signals. Subject returns a failure type; scored by accuracy and macro-F1.",
+  "labels": [
+    "DATA_FAILURE",
+    "CODE_FAILURE",
+    "TOOL_FAILURE",
+    "MODEL_FAILURE",
+    "EXPERIMENT_DESIGN_FAILURE",
+    "EVALUATION_FAILURE",
+    "STATISTICAL_FAILURE",
+    "HYPOTHESIS_FAILURE",
+    "RESOURCE_FAILURE",
+    "REPRODUCIBILITY_FAILURE",
+    "STRATEGY_FAILURE",
+    "POLICY_FAILURE"
+  ],
+  "cases": [
+    {
+      "id": "failure-01",
+      "input": {
+        "stage": "data_loading",
+        "exit_code": 1,
+        "error_type": "KeyError",
+        "message": "column 'label' not found in train.csv (available: id, text, lable)",
+        "resource": {},
+        "context": {
+          "dataset_version_changed": true
+        }
+      },
+      "expected": {
+        "failure_type": "DATA_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-02",
+      "input": {
+        "stage": "data_validation",
+        "exit_code": 0,
+        "error_type": null,
+        "message": "checksum of dataset split 'test' does not match the registered dataset version; 312 rows contain NaN targets",
+        "resource": {},
+        "context": {}
+      },
+      "expected": {
+        "failure_type": "DATA_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-03",
+      "input": {
+        "stage": "execution",
+        "exit_code": 1,
+        "error_type": "TypeError",
+        "message": "unsupported operand type(s) for +: 'int' and 'str' (train.py, line 88)",
+        "resource": {
+          "memory_peak_mb": 900,
+          "memory_limit_mb": 4096
+        },
+        "context": {}
+      },
+      "expected": {
+        "failure_type": "CODE_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-04",
+      "input": {
+        "stage": "execution",
+        "exit_code": 1,
+        "error_type": "IndexError",
+        "message": "index 64 is out of bounds for axis 0 with size 64 (evaluate_batch in model.py)",
+        "resource": {
+          "memory_peak_mb": 1200,
+          "memory_limit_mb": 4096
+        },
+        "context": {}
+      },
+      "expected": {
+        "failure_type": "CODE_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-05",
+      "input": {
+        "stage": "tool_call",
+        "exit_code": null,
+        "error_type": "HTTPError",
+        "message": "paper_search returned HTTP 503 after 3 retries",
+        "resource": {},
+        "context": {
+          "tool": "paper_search",
+          "retries": 3
+        }
+      },
+      "expected": {
+        "failure_type": "TOOL_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-06",
+      "input": {
+        "stage": "agent_step",
+        "exit_code": null,
+        "error_type": "SchemaValidationError",
+        "message": "model response did not match the required output schema after 3 attempts (missing field 'hypotheses')",
+        "resource": {},
+        "context": {
+          "provider_status": 200
+        }
+      },
+      "expected": {
+        "failure_type": "MODEL_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-07",
+      "input": {
+        "stage": "design_validation",
+        "exit_code": null,
+        "error_type": null,
+        "message": "experiment rejected by validator: no control arm and a single seed",
+        "resource": {},
+        "context": {
+          "validator_codes": [
+            "MISSING_CONTROL",
+            "INSUFFICIENT_SEEDS"
+          ]
+        }
+      },
+      "expected": {
+        "failure_type": "EXPERIMENT_DESIGN_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-08",
+      "input": {
+        "stage": "evaluation",
+        "exit_code": 0,
+        "error_type": "ValueError",
+        "message": "evaluator expected 1000 predictions but received 998; metric 'auroc' not computed",
+        "resource": {},
+        "context": {
+          "run_status": "SUCCEEDED"
+        }
+      },
+      "expected": {
+        "failure_type": "EVALUATION_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-09",
+      "input": {
+        "stage": "analysis",
+        "exit_code": 0,
+        "error_type": null,
+        "message": "effect estimate +0.8% with 95% CI [-3.1%, +4.7%] from 2 seeds; between-seed variance exceeds the effect",
+        "resource": {},
+        "context": {
+          "seeds": 2
+        }
+      },
+      "expected": {
+        "failure_type": "STATISTICAL_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-10",
+      "input": {
+        "stage": "analysis",
+        "exit_code": 0,
+        "error_type": null,
+        "message": "all 10 seeds completed; predicted improvement not observed: accuracy decreased by 2.4% (95% CI [-3.0%, -1.8%])",
+        "resource": {},
+        "context": {
+          "seeds": 10,
+          "design_valid": true
+        }
+      },
+      "expected": {
+        "failure_type": "HYPOTHESIS_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-11",
+      "input": {
+        "stage": "execution",
+        "exit_code": 137,
+        "error_type": "OOMKilled",
+        "message": "container killed by the kernel OOM killer",
+        "resource": {
+          "memory_peak_mb": 8192,
+          "memory_limit_mb": 8192
+        },
+        "context": {}
+      },
+      "expected": {
+        "failure_type": "RESOURCE_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-12",
+      "input": {
+        "stage": "execution",
+        "exit_code": null,
+        "error_type": "Timeout",
+        "message": "job exceeded its wall-clock limit of 3600 s",
+        "resource": {
+          "timed_out": true,
+          "duration_seconds": 3600
+        },
+        "context": {}
+      },
+      "expected": {
+        "failure_type": "RESOURCE_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-13",
+      "input": {
+        "stage": "reproduction",
+        "exit_code": 0,
+        "error_type": null,
+        "message": "reproduction with identical code snapshot, image and seeds gave accuracy 0.842 vs original 0.901 (tolerance 0.01)",
+        "resource": {},
+        "context": {
+          "same_environment": true
+        }
+      },
+      "expected": {
+        "failure_type": "REPRODUCIBILITY_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-14",
+      "input": {
+        "stage": "strategy_review",
+        "exit_code": null,
+        "error_type": null,
+        "message": "after promoting strategy version 7, mean benchmark score fell from 0.71 to 0.58 across 5 missions",
+        "resource": {},
+        "context": {
+          "strategy_version": 7
+        }
+      },
+      "expected": {
+        "failure_type": "STRATEGY_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    },
+    {
+      "id": "failure-15",
+      "input": {
+        "stage": "execution_submit",
+        "exit_code": null,
+        "error_type": "PolicyDenied",
+        "message": "policy execution.submit denied the job: network egress to non-allowlisted host requested",
+        "resource": {},
+        "context": {
+          "policy": "execution.submit"
+        }
+      },
+      "expected": {
+        "failure_type": "POLICY_FAILURE"
+      },
+      "tags": [
+        "failure_classification"
+      ]
+    }
+  ]
+}

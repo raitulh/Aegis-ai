@@ -11,6 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from aegis_api.config import get_settings
 from aegis_api.errors import install_error_handlers
 from aegis_api.lab.core.errors import install_lab_error_handlers
+from aegis_api.lab.events.bus import close_event_bus
+from aegis_api.lab.observability.db_metrics import install_db_metrics
+from aegis_api.lab.observability.middleware import TelemetryMiddleware
+from aegis_api.lab.observability.telemetry import configure_telemetry, shutdown_telemetry
 from aegis_api.lab.router import LAB_TAGS_METADATA
 from aegis_api.lab.router import api_router as lab_api_router
 from aegis_api.logging import configure_logging
@@ -64,17 +68,25 @@ TAGS_METADATA = [
 async def lifespan(app: FastAPI):
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_json)
+    tracing = configure_telemetry()
+    install_db_metrics()
     log.info(
         "startup",
         environment=settings.environment,
         job_backend=settings.effective_job_backend,
         dev_secrets=settings.uses_dev_secrets,
+        tracing=tracing,
+        event_bus=settings.effective_event_bus,
     )
     if settings.uses_dev_secrets and settings.is_production:
         raise RuntimeError("Refusing to start in production without SECRETS_ENCRYPTION_KEY and API_KEY_PEPPER")
     _seed_reference_data()
     _seed_lab_catalogs()
-    yield
+    try:
+        yield
+    finally:
+        close_event_bus()
+        shutdown_telemetry()
 
 
 def _seed_reference_data() -> None:
@@ -117,7 +129,7 @@ def create_app() -> FastAPI:
         contact={"name": "Aegis AI"},
         license_info={"name": "Apache-2.0"},
     )
-    # Middleware (outermost first): context/logging → secure headers → body limit → CORS.
+    # Middleware (outermost first): context/logging → telemetry → secure headers → body limit → CORS.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -129,6 +141,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(BodySizeLimitMiddleware)
     app.add_middleware(SecureHeadersMiddleware)
+    app.add_middleware(TelemetryMiddleware)
     app.add_middleware(RequestContextMiddleware)
 
     install_error_handlers(app)

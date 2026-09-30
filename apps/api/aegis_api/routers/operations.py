@@ -179,5 +179,5 @@ def acknowledge_alert(
     if alert is None or alert.organization_id != principal.organization_id:
         raise NotFound("Alert not found")
     alert.status = AlertStatus.ACKNOWLEDGED
-    alert.acknowledged_by_id = principal.user_id
+    alert.acknowledged_by_id = principal.fk_user_id
     return AlertOut.model_validate(alert)

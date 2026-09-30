@@ -1,8 +1,12 @@
+# Build context filter for docker/Dockerfile.api and docker/Dockerfile.web.
+# Patterns are relative to the repository root (a bare `name` matches only at the root).
+
 # VCS / tooling
 .git
 .github
 .gitignore
 .editorconfig
+.pre-commit-config.yaml
 
 # dependencies & virtualenvs (reinstalled inside the image)
 node_modules
@@ -42,7 +46,20 @@ storage
 *.log
 .DS_Store
 
-# docs & meta not needed at runtime
+# not needed at runtime: tests, docs, deployment manifests, local-stack configs
+tests
 docs
+deploy
+docker-compose.yml
+docker/egress-proxy
+docker/minio
+docker/observability
+docker/temporal
 *.md
 !README.md
+
+# developer-only scripts (scripts/seed_demo.py and scripts/seed_lab_demo.py ARE
+# needed: docker/init.sh runs them)
+scripts/dev.mjs
+scripts/register_ollama_qwen.py
+scripts/test_audit_qwen.py

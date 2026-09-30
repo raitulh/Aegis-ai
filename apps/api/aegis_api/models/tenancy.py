@@ -55,7 +55,7 @@ class Membership(IdMixin, TimestampMixin, OrgMixin, Base):
     __table_args__ = (UniqueConstraint("organization_id", "user_id", name="uq_memberships_org_user"),)
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    role: Mapped[str] = mapped_column(String(16), default=Role.VIEWER)
+    role: Mapped[str] = mapped_column(String(32), default=Role.VIEWER)
     status: Mapped[str] = mapped_column(String(16), default=MembershipStatus.ACTIVE)
     last_active_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
@@ -96,7 +96,7 @@ class Invitation(IdMixin, TimestampMixin, OrgMixin, Base):
     __tablename__ = "invitations"
 
     email: Mapped[str] = mapped_column(String(320), index=True)
-    role: Mapped[str] = mapped_column(String(16), default=Role.VIEWER)
+    role: Mapped[str] = mapped_column(String(32), default=Role.VIEWER)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True)
     invited_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="pending")  # pending | accepted | revoked
@@ -111,7 +111,7 @@ class ApiKey(IdMixin, CreatedMixin, OrgMixin, Base):
     prefix: Mapped[str] = mapped_column(String(24), index=True)
     key_hash: Mapped[str] = mapped_column(String(128), unique=True)
     scopes: Mapped[list[str]] = mapped_column(default=list)
-    role: Mapped[str] = mapped_column(String(16), default=Role.ANALYST)
+    role: Mapped[str] = mapped_column(String(32), default=Role.ANALYST)
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(nullable=True)

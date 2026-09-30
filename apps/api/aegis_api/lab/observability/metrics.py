@@ -110,6 +110,12 @@ EVENTS_CONSUMED = Counter(
 EVENT_CONSUMER_RUNS = Counter(
     "aegis_event_consumer_runs_total", "Event consumer passes", ["consumer", "outcome"], registry=REGISTRY
 )
+EVENT_CONSUMER_LAST_SUCCESS = Gauge(
+    "aegis_event_consumer_last_success_timestamp_seconds",
+    "Unix time of the last successful consumer pass",
+    ["consumer"],
+    registry=REGISTRY,
+)
 WEBHOOK_DELIVERY_LATENCY = Histogram(
     "aegis_webhook_delivery_duration_seconds",
     "Outbound webhook HTTP latency",

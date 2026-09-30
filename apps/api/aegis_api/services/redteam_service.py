@@ -40,7 +40,7 @@ def create_run(session: Session, principal: Principal, data: Any) -> RedTeamRun:
             "max_depth": data.max_depth,
             "empty": corpus.is_empty,
         },
-        created_by_id=principal.user_id,
+        created_by_id=principal.fk_user_id,
     )
     session.add(run)
     session.flush()

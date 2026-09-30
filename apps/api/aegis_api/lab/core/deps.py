@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from typing import Literal
 
@@ -21,7 +21,14 @@ from aegis_api.security.context import Principal
 LabTier = Literal["research", "execution", "model", "download"]
 
 
-def get_actor(request: Request, principal: Principal = Depends(get_current_principal)) -> Actor:
+async def get_actor(request: Request, principal: Principal = Depends(get_current_principal)) -> Actor:
+    """FastAPI dependency. ``async`` on purpose: context variables bound here stay visible to the endpoint
+    (sync dependencies run in a copied context, so their log bindings would be lost)."""
+    return actor_from_principal(request, principal)
+
+
+def actor_from_principal(request: Request, principal: Principal) -> Actor:
+    """Build the lab actor for an authenticated principal and bind log context (sync; usable anywhere)."""
     actor = Actor.from_principal(principal)
     # Contextual ids for structured logs (only after successful authentication).
     structlog.contextvars.bind_contextvars(
@@ -35,10 +42,10 @@ def get_actor(request: Request, principal: Principal = Depends(get_current_princ
     return actor
 
 
-def require_actor(*permissions: str) -> Callable[..., Actor]:
+def require_actor(*permissions: str) -> Callable[..., Awaitable[Actor]]:
     """Dependency: the actor, after checking organization-level permissions."""
 
-    def _dep(actor: Actor = Depends(get_actor)) -> Actor:
+    async def _dep(actor: Actor = Depends(get_actor)) -> Actor:
         actor.require(*permissions)
         return actor
 

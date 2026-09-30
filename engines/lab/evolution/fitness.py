@@ -6,7 +6,7 @@ The :class:`FitnessEngine` turns raw objective measurements (as recorded in
 * every objective is *oriented* so that higher is better (minimised objectives are flipped) and
   normalised by its declared bounds — Pareto domination is invariant under these monotone maps;
 * hard constraints (e.g. ``safety >= 1.0``) produce a summed, normalised *constraint violation*;
-  a candidate is feasible iff it is zero. Constrained domination (see ``selection.py``) guarantees an
+  a candidate is feasible iff it is zero. Constrained domination (see ``selection.py``) ensures an
   infeasible candidate never dominates a feasible one, however good its other objectives look;
 * a missing or non-finite objective value makes the candidate infeasible (``missing:<name>`` /
   ``invalid:<name>``) — an unmeasured strategy can never out-rank a measured one;

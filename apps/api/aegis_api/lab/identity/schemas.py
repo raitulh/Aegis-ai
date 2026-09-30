@@ -83,6 +83,10 @@ class OrgSettingsUpdate(_Strict):
     execution_policy: ExecutionPolicyIn | None = None
     data_processing: DataProcessingIn | None = None
     sso_enforced: bool | None = None
+    allow_self_approval: bool | None = Field(
+        default=None,
+        description="Let a requester decide their own approval requests (weakens separation of duties; default false)",
+    )
     lock_version: int | None = Field(default=None, description="Optimistic concurrency: expected current version")
 
 
@@ -96,6 +100,9 @@ class OrgSettingsOut(ORMModel):
     execution_policy: dict[str, Any]
     data_processing: dict[str, Any]
     sso_enforced: bool
+    allow_self_approval: bool = Field(
+        default=False, description="Separation of duties for approvals is relaxed when true (governance)"
+    )
     lock_version: int
     updated_at: datetime
 
@@ -330,18 +337,24 @@ class PermissionOut(BaseModel):
 
 
 # --- service accounts & API keys -----------------------------------------------------------------
+def _default_scopes() -> list[ApiScope]:
+    return ["read"]
+
+
 class ServiceAccountCreate(_Strict):
     name: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")
     description: str | None = Field(default=None, max_length=2000)
     role: str = "researcher"
-    scopes: list[ApiScope] = Field(default_factory=lambda: ["read"])
-    project_ids: list[uuid.UUID] = Field(default_factory=list, max_length=200)
+    scopes: list[ApiScope] = Field(default_factory=_default_scopes, min_length=1)
+    project_ids: list[uuid.UUID] = Field(
+        default_factory=list, max_length=200, description="Restrict to these projects (empty = no restriction)"
+    )
 
 
 class ServiceAccountUpdate(_Strict):
     description: str | None = Field(default=None, max_length=2000)
     role: str | None = None
-    scopes: list[ApiScope] | None = None
+    scopes: list[ApiScope] | None = Field(default=None, min_length=1)
     project_ids: list[uuid.UUID] | None = Field(default=None, max_length=200)
 
 
@@ -406,7 +419,7 @@ class TokenRequest(_Strict):
 
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: Literal["Bearer"] = "Bearer"
+    token_type: Literal["Bearer"] = "Bearer"  # noqa: S105 - OAuth token type, not a secret
     expires_in: int = Field(description="Access token lifetime in seconds")
     refresh_token: str = Field(description="Opaque, single-use; rotate it with POST /auth/token/refresh")
     refresh_token_expires_at: datetime

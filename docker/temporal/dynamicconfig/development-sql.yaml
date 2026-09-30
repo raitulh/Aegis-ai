@@ -1,0 +1,14 @@
+# Temporal dynamic configuration for the local docker-compose server (temporalio/auto-setup, SQL persistence).
+# Mounted read-only at /etc/temporal/config/dynamicconfig/development-sql.yaml and selected with
+# DYNAMIC_CONFIG_FILE_PATH. Unknown keys are ignored by the server; keep this file small and development-only.
+# Production Temporal (Temporal Cloud or the official Helm chart) is configured separately.
+
+# Make newly registered custom search attributes visible immediately (dev convenience; costs a cache refresh per read).
+system.forceSearchAttributesCacheRefreshOnRead:
+  - value: true
+    constraints: {}
+
+# Workflow ids are `<kind>:<subject_id>:<workflow_key>` and bounded to 255 chars by the application; mirror that bound.
+limit.maxIDLength:
+  - value: 255
+    constraints: {}

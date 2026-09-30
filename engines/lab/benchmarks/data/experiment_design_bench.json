@@ -1,0 +1,496 @@
+{
+  "benchmark_fixture": true,
+  "fixture_notice": "BENCHMARK FIXTURE - synthetic cases authored for internal regression benchmarking of the AI Scientist Evolution Lab. Documents, hypotheses, designs and numbers are illustrative; they are not research findings, not real data and must never be presented as discoveries.",
+  "suite": "experiment_design_bench",
+  "version": "1.0.0",
+  "description": "Detect experiment-design issues. Subject returns issue codes from the declared vocabulary; scored by micro precision/recall/F1 over issue codes (clean designs expect an empty list).",
+  "issue_vocabulary": {
+    "MISSING_CONTROL": "No control or baseline arm to compare against.",
+    "INSUFFICIENT_SEEDS": "Fewer than 3 independent seeds/replicates per arm.",
+    "DATA_LEAKAGE": "Information from the evaluation data reaches training (overlapping groups, preprocessing fitted on all data, tuning on the test set).",
+    "NO_PRIMARY_METRIC": "No pre-specified primary metric.",
+    "MULTIPLE_COMPARISONS_UNCORRECTED": "Five or more hypothesis tests (metrics x arms) without a multiple-comparison correction.",
+    "CONFOUNDED_VARIABLES": "An arm changes more than one factor relative to the control, so effects cannot be attributed.",
+    "UNDERPOWERED": "No power analysis and fewer than 30 units per arm for an expected small effect (standardised effect < 0.5).",
+    "NO_RANDOMIZATION": "Units are assigned to arms non-randomly (sequentially or by hand)."
+  },
+  "cases": [
+    {
+      "id": "design-01",
+      "input": {
+        "objective": "Compare pre-LN and post-LN transformer stability without warmup",
+        "control_arm": "baseline",
+        "arms": [
+          {
+            "name": "baseline",
+            "changes": {}
+          },
+          {
+            "name": "pre_ln",
+            "changes": {
+              "layer_norm": "pre"
+            }
+          }
+        ],
+        "seeds": 20,
+        "primary_metric": "divergence_rate",
+        "secondary_metrics": [],
+        "multiple_comparison_correction": null,
+        "dataset": {
+          "split": "group_kfold",
+          "group_key": "subject_id",
+          "preprocessing_fit_on": "train"
+        },
+        "units_per_arm": 100,
+        "expected_effect_size": 0.8,
+        "power_analysis": true,
+        "assignment": "randomized"
+      },
+      "expected": {
+        "issues": []
+      },
+      "tags": [
+        "design_validation"
+      ]
+    },
+    {
+      "id": "design-02",
+      "input": {
+        "objective": "Evaluate a new data augmentation for tumour classification",
+        "control_arm": null,
+        "arms": [
+          {
+            "name": "augmented",
+            "changes": {
+              "augmentation": "elastic"
+            }
+          }
+        ],
+        "seeds": 5,
+        "primary_metric": "auroc",
+        "secondary_metrics": [],
+        "multiple_comparison_correction": null,
+        "dataset": {
+          "split": "group_kfold",
+          "group_key": "subject_id",
+          "preprocessing_fit_on": "train"
+        },
+        "units_per_arm": 100,
+        "expected_effect_size": 0.8,
+        "power_analysis": true,
+        "assignment": "randomized"
+      },
+      "expected": {
+        "issues": [
+          "MISSING_CONTROL"
+        ]
+      },
+      "tags": [
+        "design_validation"
+      ]
+    },
+    {
+      "id": "design-03",
+      "input": {
+        "objective": "Test learning-rate schedule on molecular property model",
+        "control_arm": "baseline",
+        "arms": [
+          {
+            "name": "baseline",
+            "changes": {}
+          },
+          {
+            "name": "cosine",
+            "changes": {
+              "schedule": "cosine"
+            }
+          }
+        ],
+        "seeds": 1,
+        "primary_metric": "rmse",
+        "secondary_metrics": [],
+        "multiple_comparison_correction": null,
+        "dataset": {
+          "split": "group_kfold",
+          "group_key": "subject_id",
+          "preprocessing_fit_on": "train"
+        },
+        "units_per_arm": 100,
+        "expected_effect_size": 0.8,
+        "power_analysis": true,
+        "assignment": "randomized"
+      },
+      "expected": {
+        "issues": [
+          "INSUFFICIENT_SEEDS"
+        ]
+      },
+      "tags": [
+        "design_validation"
+      ]
+    },
+    {
+      "id": "design-04",
+      "input": {
+        "objective": "Chest radiograph classifier with random image-level split",
+        "control_arm": "baseline",
+        "arms": [
+          {
+            "name": "baseline",
+            "changes": {}
+          },
+          {
+            "name": "densenet",
+            "changes": {
+              "backbone": "densenet121"
+            }
+          }
+        ],
+        "seeds": 5,
+        "primary_metric": "auroc",
+        "secondary_metrics": [],
+        "multiple_comparison_correction": null,
+        "dataset": {
+          "split": "random_image",
+          "group_key": null,
+          "preprocessing_fit_on": "train",
+          "note": "patients contribute multiple images"
+        },
+        "units_per_arm": 100,
+        "expected_effect_size": 0.8,
+        "power_analysis": true,
+        "assignment": "randomized"
+      },
+      "expected": {
+        "issues": [
+          "DATA_LEAKAGE"
+        ]
+      },
+      "tags": [
+        "design_validation"
+      ]
+    },
+    {
+      "id": "design-05",
+      "input": {
+        "objective": "Retrieval strategy comparison for literature agent",
+        "control_arm": "baseline",
+        "arms": [
+          {
+            "name": "baseline",
+            "changes": {}
+          },
+          {
+            "name": "hybrid",
+            "changes": {
+              "retriever": "hybrid"
+            }
+          }
+        ],
+        "seeds": 5,
+        "primary_metric": null,
+        "secondary_metrics": [
+          "ndcg@5",
+          "recall@5",
+          "latency"
+        ],
+        "multiple_comparison_correction": null,
+        "dataset": {
+          "split": "group_kfold",
+          "group_key": "subject_id",
+          "preprocessing_fit_on": "train"
+        },
+        "units_per_arm": 100,
+        "expected_effect_size": 0.8,
+        "power_analysis": true,
+        "assignment": "randomized"
+      },
+      "expected": {
+        "issues": [
+          "NO_PRIMARY_METRIC"
+        ]
+      },
+      "tags": [
+        "design_validation"
+      ]
+    },
+    {
+      "id": "design-06",
+      "input": {
+        "objective": "Screen prompt variants for hypothesis generation",
+        "control_arm": "baseline",
+        "arms": [
+          {
+            "name": "baseline",
+            "changes": {}
+          },
+          {
+            "name": "variant_a",
+            "changes": {
+              "prompt_variant": "a"
+            }
+          },
+          {
+            "name": "variant_b",
+            "changes": {
+              "prompt_variant": "b"
+            }
+          },
+          {
+            "name": "variant_c",
+            "changes": {
+              "prompt_variant": "c"
+            }
+          }
+        ],
+        "seeds": 5,
+        "primary_metric": "novelty_score",
+        "secondary_metrics": [
+          "falsifiability_rate",
+          "critic_score"
+        ],
+        "multiple_comparison_correction": null,
+        "dataset": {
+          "split": "group_kfold",
+          "group_key": "subject_id",
+          "preprocessing_fit_on": "train"
+        },
+        "units_per_arm": 100,
+        "expected_effect_size": 0.8,
+        "power_analysis": true,
+        "assignment": "randomized"
+      },
+      "expected": {
+        "issues": [
+          "MULTIPLE_COMPARISONS_UNCORRECTED"
+        ]
+      },
+      "tags": [
+        "design_validation"
+      ]
+    },
+    {
+      "id": "design-07",
+      "input": {
+        "objective": "Effect of electrolyte additive on lithium metal cycle life",
+        "control_arm": "baseline",
+        "arms": [
+          {
+            "name": "baseline",
+            "changes": {}
+          },
+          {
+            "name": "fec_high_rate",
+            "changes": {
+              "additive": "FEC 2wt%",
+              "charge_rate": "1C"
+            }
+          }
+        ],
+        "seeds": 5,
+        "primary_metric": "cycles_to_80pct",
+        "secondary_metrics": [],
+        "multiple_comparison_correction": null,
+        "dataset": {
+          "split": "group_kfold",
+          "group_key": "subject_id",
+          "preprocessing_fit_on": "train"
+        },
+        "units_per_arm": 8,
+        "expected_effect_size": 1.2,
+        "power_analysis": true,
+        "assignment": "randomized"
+      },
+      "expected": {
+        "issues": [
+          "CONFOUNDED_VARIABLES"
+        ]
+      },
+      "tags": [
+        "design_validation"
+      ]
+    },
+    {
+      "id": "design-08",
+      "input": {
+        "objective": "Tutoring agent effect on exam scores",
+        "control_arm": "baseline",
+        "arms": [
+          {
+            "name": "baseline",
+            "changes": {}
+          },
+          {
+            "name": "agent",
+            "changes": {
+              "tutor": "agent"
+            }
+          }
+        ],
+        "seeds": 5,
+        "primary_metric": "exam_score",
+        "secondary_metrics": [],
+        "multiple_comparison_correction": null,
+        "dataset": {
+          "split": "group_kfold",
+          "group_key": "subject_id",
+          "preprocessing_fit_on": "train"
+        },
+        "units_per_arm": 12,
+        "expected_effect_size": 0.2,
+        "power_analysis": false,
+        "assignment": "sequential"
+      },
+      "expected": {
+        "issues": [
+          "NO_RANDOMIZATION",
+          "UNDERPOWERED"
+        ]
+      },
+      "tags": [
+        "design_validation"
+      ]
+    },
+    {
+      "id": "design-09",
+      "input": {
+        "objective": "Hyperparameter search reported on the test set",
+        "control_arm": null,
+        "arms": [
+          {
+            "name": "tuned",
+            "changes": {
+              "search": "grid"
+            }
+          }
+        ],
+        "seeds": 1,
+        "primary_metric": "accuracy",
+        "secondary_metrics": [],
+        "multiple_comparison_correction": null,
+        "dataset": {
+          "split": "train_test",
+          "group_key": null,
+          "preprocessing_fit_on": "all",
+          "tuning_on": "test"
+        },
+        "units_per_arm": 100,
+        "expected_effect_size": 0.8,
+        "power_analysis": true,
+        "assignment": "randomized"
+      },
+      "expected": {
+        "issues": [
+          "DATA_LEAKAGE",
+          "INSUFFICIENT_SEEDS",
+          "MISSING_CONTROL"
+        ]
+      },
+      "tags": [
+        "design_validation"
+      ]
+    },
+    {
+      "id": "design-10",
+      "input": {
+        "objective": "Bayesian optimisation versus grid search for reaction yield",
+        "control_arm": "baseline",
+        "arms": [
+          {
+            "name": "baseline",
+            "changes": {}
+          },
+          {
+            "name": "bo",
+            "changes": {
+              "optimizer": "gp_ei"
+            }
+          }
+        ],
+        "seeds": 10,
+        "primary_metric": "best_yield_after_20_experiments",
+        "secondary_metrics": [
+          "experiments_to_90pct_of_best",
+          "cost"
+        ],
+        "multiple_comparison_correction": "holm",
+        "dataset": {
+          "split": "group_kfold",
+          "group_key": "subject_id",
+          "preprocessing_fit_on": "train"
+        },
+        "units_per_arm": 100,
+        "expected_effect_size": 0.8,
+        "power_analysis": true,
+        "assignment": "randomized"
+      },
+      "expected": {
+        "issues": []
+      },
+      "tags": [
+        "design_validation"
+      ]
+    },
+    {
+      "id": "design-11",
+      "input": {
+        "objective": "Compare four model sizes on six calibration metrics",
+        "control_arm": "baseline",
+        "arms": [
+          {
+            "name": "baseline",
+            "changes": {}
+          },
+          {
+            "name": "size_1b",
+            "changes": {
+              "params": "1b"
+            }
+          },
+          {
+            "name": "size_7b",
+            "changes": {
+              "params": "7b"
+            }
+          },
+          {
+            "name": "size_70b",
+            "changes": {
+              "params": "70b"
+            }
+          }
+        ],
+        "seeds": 2,
+        "primary_metric": null,
+        "secondary_metrics": [
+          "ece",
+          "mce",
+          "brier",
+          "nll",
+          "auroc",
+          "coverage"
+        ],
+        "multiple_comparison_correction": null,
+        "dataset": {
+          "split": "group_kfold",
+          "group_key": "subject_id",
+          "preprocessing_fit_on": "train"
+        },
+        "units_per_arm": 100,
+        "expected_effect_size": 0.8,
+        "power_analysis": true,
+        "assignment": "randomized"
+      },
+      "expected": {
+        "issues": [
+          "INSUFFICIENT_SEEDS",
+          "MULTIPLE_COMPARISONS_UNCORRECTED",
+          "NO_PRIMARY_METRIC"
+        ]
+      },
+      "tags": [
+        "design_validation"
+      ]
+    }
+  ]
+}

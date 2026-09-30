@@ -1,0 +1,142 @@
+# Allowlisting egress proxy for sandbox Jobs in network mode "allowlist" (label aegis.io/egress=allowlist).
+# The execution worker injects HTTP(S)_PROXY=EXECUTION_EGRESS_PROXY_URL into those pods; the sandbox
+# NetworkPolicies let them reach ONLY this proxy (plus DNS to resolve its name), and this proxy forwards
+# only to the domains in allowlist.txt (default deny, CONNECT to 443 only).
+#
+# Limits: the allowlist is deployment-wide (per-job host lists are validated at submission time, not
+# enforced here) — keep it no broader than TOOL_EGRESS_ALLOWLIST. Allowlisted domains resolving to private
+# addresses are blocked by this proxy's own NetworkPolicy (egress to private ranges is denied).
+# Mirrors docker/egress-proxy/ (the compose `egress` profile).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aegis-egress-proxy
+  namespace: aegis
+  labels: {app.kubernetes.io/name: aegis-egress-proxy, app.kubernetes.io/part-of: aegis}
+data:
+  tinyproxy.conf: |
+    Port 8888
+    Listen 0.0.0.0
+    Timeout 120
+    MaxClients 100
+    LogLevel Connect
+    DisableViaHeader Yes
+    XTinyproxy No
+    # 127.0.0.1 = the pod's own liveness probe. Pod-network ranges are further restricted by NetworkPolicy
+    # (only allowlist-mode sandbox pods may connect).
+    Allow 127.0.0.1
+    Allow 10.0.0.0/8
+    Allow 172.16.0.0/12
+    Allow 192.168.0.0/16
+    Allow 100.64.0.0/10
+    ConnectPort 443
+    Filter "/etc/tinyproxy/allowlist.txt"
+    FilterType fnmatch
+    FilterURLs Off
+    FilterCaseSensitive Off
+    FilterDefaultDeny Yes
+  # One shell-style pattern per line, no comments ("*.x.org" does not match "x.org": list both).
+  allowlist.txt: |
+    api.openalex.org
+    export.arxiv.org
+    arxiv.org
+    api.crossref.org
+    wikipedia.org
+    *.wikipedia.org
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-egress-proxy
+  namespace: aegis
+  labels:
+    app.kubernetes.io/name: aegis-egress-proxy
+    app.kubernetes.io/part-of: aegis
+    app.kubernetes.io/component: egress-proxy
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-egress-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-egress-proxy
+        app.kubernetes.io/part-of: aegis
+        app.kubernetes.io/component: egress-proxy
+      annotations:
+        # Roll the pod when the allowlist changes (update by hand, or use a configMapGenerator in an overlay).
+        aegis.io/allowlist-revision: "1"
+    spec:
+      serviceAccountName: aegis-egress-proxy
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 57981
+        runAsGroup: 57981
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: tinyproxy
+          # tinyproxy 1.11 on Alpine, pinned by digest (third-party image; mirror it internally).
+          image: kalaksi/tinyproxy:1.7@sha256:5a65354cbb5f9c0fdcc8de3d3af8dd1c5ea072b3a1f52e5961a9a5cce6eba227
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: proxy
+              containerPort: 8888
+              protocol: TCP
+          livenessProbe:
+            # Healthy = serving AND filtering: a non-allowlisted host must be refused with 403.
+            exec:
+              command: ["sh", "-c", "[ \"$(curl -s -o /dev/null -w '%{http_code}' -x http://127.0.0.1:8888 http://healthcheck.invalid/)\" = 403 ]"]
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            tcpSocket:
+              port: proxy
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 50m, memory: 32Mi, ephemeral-storage: 16Mi}
+            limits: {cpu: 500m, memory: 128Mi, ephemeral-storage: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tinyproxy/tinyproxy.conf
+              subPath: tinyproxy.conf
+              readOnly: true
+            - name: config
+              mountPath: /etc/tinyproxy/allowlist.txt
+              subPath: allowlist.txt
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: aegis-egress-proxy
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis-egress-proxy
+  namespace: aegis
+  labels: {app.kubernetes.io/name: aegis-egress-proxy, app.kubernetes.io/part-of: aegis}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aegis-egress-proxy
+  ports:
+    - name: proxy
+      port: 8888
+      targetPort: proxy
+      protocol: TCP

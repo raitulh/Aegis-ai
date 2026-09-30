@@ -145,6 +145,9 @@ class Settings(BaseSettings):
     # --- object storage ------------------------------------------------------------------------
     object_storage_backend: Literal["local", "s3"] = "local"
     object_storage_endpoint: str | None = None  # S3-compatible endpoint (MinIO, GCS interop, R2…)
+    # Browser-facing endpoint used when minting presigned URLs (e.g. http://localhost:9000 while the API talks
+    # to http://minio:9000 inside Docker). Defaults to OBJECT_STORAGE_ENDPOINT.
+    object_storage_public_endpoint: str | None = None
     object_storage_bucket: str = "aegis-lab"
     object_storage_access_key: str | None = None
     object_storage_secret_key: str | None = None

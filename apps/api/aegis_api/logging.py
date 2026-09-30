@@ -8,6 +8,7 @@ import sys
 from typing import Any
 
 import structlog
+from opentelemetry import trace
 
 _SENSITIVE_KEY = re.compile(
     r"(pass(word)?|secret|token|api[_-]?key|authorization|cookie|credential|private[_-]?key)", re.I
@@ -34,10 +35,21 @@ def redact_processor(_: Any, __: str, event_dict: dict[str, Any]) -> dict[str, A
     }
 
 
+def add_trace_context(_: Any, __: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+    """Add ``trace_id``/``span_id`` of the active OpenTelemetry span (contextvars bound by the request
+    middleware — request_id, trace_id, tenant_id, user_id — are merged before this and take precedence)."""
+    ctx = trace.get_current_span().get_span_context()
+    if ctx.is_valid:
+        event_dict.setdefault("trace_id", format(ctx.trace_id, "032x"))
+        event_dict.setdefault("span_id", format(ctx.span_id, "016x"))
+    return event_dict
+
+
 def configure_logging(level: str = "INFO", json_logs: bool = False) -> None:
     timestamper = structlog.processors.TimeStamper(fmt="iso", utc=True)
     shared: list[Any] = [
         structlog.contextvars.merge_contextvars,
+        add_trace_context,
         structlog.processors.add_log_level,
         timestamper,
         redact_processor,
@@ -50,5 +62,6 @@ def configure_logging(level: str = "INFO", json_logs: bool = False) -> None:
         cache_logger_on_first_use=False,
     )
     logging.basicConfig(level=level.upper(), stream=sys.stdout, format="%(levelname)s %(name)s %(message)s")
+    logging.getLogger("pypdf").setLevel(logging.ERROR)  # corrupt/hostile PDFs are expected input
     for noisy in ("uvicorn.access", "httpx", "httpcore"):
         logging.getLogger(noisy).setLevel(logging.WARNING)

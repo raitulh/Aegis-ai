@@ -1,0 +1,514 @@
+{
+  "benchmark_fixture": true,
+  "fixture_notice": "BENCHMARK FIXTURE - synthetic cases authored for internal regression benchmarking of the AI Scientist Evolution Lab. Documents, hypotheses, designs and numbers are illustrative; they are not research findings, not real data and must never be presented as discoveries.",
+  "suite": "literature_bench",
+  "version": "1.0.0",
+  "description": "Rank candidate documents for a research query. Subject returns ranked document ids; scored by nDCG@5 (graded relevance 2 = directly relevant, 1 = partially relevant) and recall@5.",
+  "k": 5,
+  "cases": [
+    {
+      "id": "lit-01",
+      "input": {
+        "query": "learning-rate warmup and training stability of transformers",
+        "documents": [
+          {
+            "id": "L01-D1",
+            "title": "Warmup schedules and early-training divergence in transformers",
+            "text": "Removing linear learning-rate warmup from post-LayerNorm transformers produced loss spikes and divergence in most runs, while a few thousand warmup steps stabilised training."
+          },
+          {
+            "id": "L01-D2",
+            "title": "Variance of adaptive learning rates early in training",
+            "text": "The second-moment estimate of Adam has high variance during the first iterations; a warmup phase limits the effective step size until the estimate settles, which explains part of the benefit of warmup."
+          },
+          {
+            "id": "L01-D3",
+            "title": "Step decay versus cosine annealing for image classifiers",
+            "text": "Step decay and cosine schedules are compared for residual convolutional networks on image classification; warmup is not studied."
+          },
+          {
+            "id": "L01-D4",
+            "title": "Transformer inference latency on edge accelerators",
+            "text": "We profile attention kernels and quantised matrix multiplication for transformer inference on mobile accelerators."
+          },
+          {
+            "id": "L01-D5",
+            "title": "Layer normalisation placement and warmup-free training",
+            "text": "Moving layer normalisation inside the residual branch (Pre-LN) yields well-scaled gradients at initialisation, so transformers train stably without a warmup stage."
+          },
+          {
+            "id": "L01-D6",
+            "title": "Warm-starting networks from previously trained weights",
+            "text": "Initialising from weights trained on a smaller dataset can hurt generalisation compared with random initialisation."
+          },
+          {
+            "id": "L01-D7",
+            "title": "Temperature scaling for classifier calibration",
+            "text": "A single scalar temperature fitted on held-out data substantially reduces expected calibration error."
+          },
+          {
+            "id": "L01-D8",
+            "title": "Spectral normalisation for stable GAN training",
+            "text": "Constraining the Lipschitz constant of the discriminator stabilises adversarial training of generative models."
+          }
+        ]
+      },
+      "expected": {
+        "relevant_ids": [
+          "L01-D1",
+          "L01-D2",
+          "L01-D5"
+        ],
+        "grades": {
+          "L01-D1": 2,
+          "L01-D2": 1,
+          "L01-D5": 2
+        }
+      },
+      "tags": [
+        "retrieval"
+      ]
+    },
+    {
+      "id": "lit-02",
+      "input": {
+        "query": "graph neural networks for molecular property prediction",
+        "documents": [
+          {
+            "id": "L02-D1",
+            "title": "Message passing networks for quantum chemistry",
+            "text": "A message passing neural network over molecular graphs predicts DFT-level properties such as atomisation energy with chemical accuracy on a small-molecule dataset."
+          },
+          {
+            "id": "L02-D2",
+            "title": "Scaffold splits reveal optimistic GNN benchmarks",
+            "text": "Random splits overestimate generalisation of graph neural networks for molecular property prediction; scaffold-based splits reduce reported accuracy."
+          },
+          {
+            "id": "L02-D3",
+            "title": "Graph neural networks for traffic forecasting",
+            "text": "Spatio-temporal graph convolutions model road-sensor networks for short-term traffic speed prediction."
+          },
+          {
+            "id": "L02-D4",
+            "title": "Fingerprint-based random forests for solubility",
+            "text": "Extended connectivity fingerprints with random forests remain a strong baseline for aqueous solubility prediction."
+          },
+          {
+            "id": "L02-D5",
+            "title": "Molecular dynamics of lipid bilayers",
+            "text": "Coarse-grained simulations characterise membrane curvature induced by peptides."
+          },
+          {
+            "id": "L02-D6",
+            "title": "Knowledge graph embeddings for drug repurposing",
+            "text": "Link prediction on a biomedical knowledge graph ranks candidate drug-disease associations."
+          },
+          {
+            "id": "L02-D7",
+            "title": "Oversmoothing in deep graph networks",
+            "text": "Stacking many graph convolution layers makes node representations indistinguishable; we analyse the effect on citation networks."
+          },
+          {
+            "id": "L02-D8",
+            "title": "Protein-ligand docking scoring functions",
+            "text": "Empirical scoring functions are benchmarked for pose prediction across crystal structures."
+          }
+        ]
+      },
+      "expected": {
+        "relevant_ids": [
+          "L02-D1",
+          "L02-D2",
+          "L02-D4"
+        ],
+        "grades": {
+          "L02-D1": 2,
+          "L02-D2": 2,
+          "L02-D4": 1
+        }
+      },
+      "tags": [
+        "retrieval"
+      ]
+    },
+    {
+      "id": "lit-03",
+      "input": {
+        "query": "copper electrocatalysts for CO2 reduction to ethylene selectivity",
+        "documents": [
+          {
+            "id": "L03-D1",
+            "title": "Oxide-derived copper improves C2+ selectivity",
+            "text": "Copper electrodes reduced from thermally grown oxide show higher Faradaic efficiency toward ethylene than polished copper in CO2 electroreduction."
+          },
+          {
+            "id": "L03-D2",
+            "title": "Electrolyte cation effects in CO2 electroreduction",
+            "text": "Larger alkali cations increase ethylene production on copper by stabilising adsorbed CO2 intermediates at the interface."
+          },
+          {
+            "id": "L03-D3",
+            "title": "Hydrogen evolution on platinum nanoparticles",
+            "text": "Particle size effects on hydrogen evolution activity of platinum are measured in acidic electrolyte."
+          },
+          {
+            "id": "L03-D4",
+            "title": "Gas diffusion electrodes for high-current CO2 reduction",
+            "text": "Flow cells with gas diffusion electrodes reach industrially relevant current densities for CO2 reduction on copper, with selectivity depending on local pH."
+          },
+          {
+            "id": "L03-D5",
+            "title": "Photocatalytic water splitting on titania",
+            "text": "Doped titanium dioxide photocatalysts are evaluated for hydrogen production under visible light."
+          },
+          {
+            "id": "L03-D6",
+            "title": "Copper interconnect electromigration",
+            "text": "Grain boundaries control electromigration lifetime of copper interconnects in integrated circuits."
+          },
+          {
+            "id": "L03-D7",
+            "title": "Nickel single-atom catalysts for CO production",
+            "text": "Atomically dispersed nickel sites convert CO2 to CO with high selectivity but produce negligible hydrocarbons."
+          },
+          {
+            "id": "L03-D8",
+            "title": "Techno-economic analysis of green ammonia",
+            "text": "Levelised cost of ammonia from electrolytic hydrogen is estimated for several regions."
+          }
+        ]
+      },
+      "expected": {
+        "relevant_ids": [
+          "L03-D1",
+          "L03-D2",
+          "L03-D4"
+        ],
+        "grades": {
+          "L03-D1": 2,
+          "L03-D2": 2,
+          "L03-D4": 1
+        }
+      },
+      "tags": [
+        "retrieval"
+      ]
+    },
+    {
+      "id": "lit-04",
+      "input": {
+        "query": "deep learning prediction of CRISPR-Cas9 off-target activity",
+        "documents": [
+          {
+            "id": "L04-D1",
+            "title": "Convolutional models of Cas9 off-target cleavage",
+            "text": "A convolutional network trained on genome-wide off-target assays predicts cleavage at mismatched sites better than hand-crafted mismatch scores."
+          },
+          {
+            "id": "L04-D2",
+            "title": "Mismatch position effects on Cas9 specificity",
+            "text": "Mismatches in the PAM-proximal seed region reduce Cas9 cleavage far more than PAM-distal mismatches."
+          },
+          {
+            "id": "L04-D3",
+            "title": "Base editors for correcting point mutations",
+            "text": "Cytidine base editors achieve targeted C-to-T conversion without double-strand breaks."
+          },
+          {
+            "id": "L04-D4",
+            "title": "Attention models for guide RNA off-target ranking",
+            "text": "A transformer over guide-target sequence pairs ranks candidate off-target sites and generalises to unseen guides in cross-validation."
+          },
+          {
+            "id": "L04-D5",
+            "title": "Single-cell RNA sequencing clustering",
+            "text": "Graph-based clustering identifies cell types in single-cell transcriptomes."
+          },
+          {
+            "id": "L04-D6",
+            "title": "CRISPR screens for drug resistance genes",
+            "text": "Genome-wide knockout screens identify genes whose loss confers resistance to a kinase inhibitor."
+          },
+          {
+            "id": "L04-D7",
+            "title": "Protein language models for variant effects",
+            "text": "Masked language models over protein sequences score missense variant pathogenicity."
+          },
+          {
+            "id": "L04-D8",
+            "title": "Delivery of Cas9 ribonucleoproteins",
+            "text": "Lipid nanoparticles deliver Cas9 ribonucleoprotein complexes to hepatocytes in mice."
+          }
+        ]
+      },
+      "expected": {
+        "relevant_ids": [
+          "L04-D1",
+          "L04-D2",
+          "L04-D4"
+        ],
+        "grades": {
+          "L04-D1": 2,
+          "L04-D2": 1,
+          "L04-D4": 2
+        }
+      },
+      "tags": [
+        "retrieval"
+      ]
+    },
+    {
+      "id": "lit-05",
+      "input": {
+        "query": "electrolyte additives to extend lithium metal anode cycle life",
+        "documents": [
+          {
+            "id": "L05-D1",
+            "title": "Fluoroethylene carbonate additive and lithium metal cycling",
+            "text": "Adding fluoroethylene carbonate forms a LiF-rich interphase that raises Coulombic efficiency and extends cycle life of lithium metal anodes."
+          },
+          {
+            "id": "L05-D2",
+            "title": "Lithium nitrate as a co-additive in ether electrolytes",
+            "text": "Lithium nitrate suppresses dendritic lithium growth in ether electrolytes and increases the number of cycles to 80 percent capacity retention."
+          },
+          {
+            "id": "L05-D3",
+            "title": "Cathode coatings for high-voltage nickel-rich cathodes",
+            "text": "Alumina coatings reduce transition-metal dissolution from nickel-rich cathodes at high voltage."
+          },
+          {
+            "id": "L05-D4",
+            "title": "Solid-state electrolytes with garnet structure",
+            "text": "Garnet-type oxide electrolytes enable lithium metal anodes but suffer from interfacial resistance."
+          },
+          {
+            "id": "L05-D5",
+            "title": "Sodium-ion battery hard carbon anodes",
+            "text": "Hard carbon microstructure controls sodium storage capacity."
+          },
+          {
+            "id": "L05-D6",
+            "title": "Battery state-of-health estimation with machine learning",
+            "text": "Gradient-boosted models predict remaining useful life from early-cycle voltage curves."
+          },
+          {
+            "id": "L05-D7",
+            "title": "Silicon anode binders",
+            "text": "Self-healing polymer binders accommodate silicon volume expansion."
+          },
+          {
+            "id": "L05-D8",
+            "title": "Thermal runaway propagation in battery packs",
+            "text": "Cell-to-cell thermal runaway propagation is modelled for pouch-cell modules."
+          }
+        ]
+      },
+      "expected": {
+        "relevant_ids": [
+          "L05-D1",
+          "L05-D2",
+          "L05-D4"
+        ],
+        "grades": {
+          "L05-D1": 2,
+          "L05-D2": 2,
+          "L05-D4": 1
+        }
+      },
+      "tags": [
+        "retrieval"
+      ]
+    },
+    {
+      "id": "lit-06",
+      "input": {
+        "query": "data leakage from patient-level splits in medical imaging deep learning",
+        "documents": [
+          {
+            "id": "L06-D1",
+            "title": "Patient overlap inflates chest radiograph classifier performance",
+            "text": "When images from the same patient appear in both training and test sets, reported AUROC is substantially higher than with patient-level splitting."
+          },
+          {
+            "id": "L06-D2",
+            "title": "A checklist for leakage in machine-learning-based science",
+            "text": "We catalogue leakage types including duplicated subjects across splits and preprocessing fitted on the full dataset, and show their prevalence in published studies."
+          },
+          {
+            "id": "L06-D3",
+            "title": "Self-supervised pretraining for histopathology",
+            "text": "Contrastive pretraining on unlabeled slides improves downstream tumour classification."
+          },
+          {
+            "id": "L06-D4",
+            "title": "Domain shift between hospitals in radiology AI",
+            "text": "Models trained at one hospital degrade at another because of scanner and population differences."
+          },
+          {
+            "id": "L06-D5",
+            "title": "Segmentation of brain tumours with U-Net variants",
+            "text": "Architectural variants of U-Net are compared on multimodal MRI tumour segmentation."
+          },
+          {
+            "id": "L06-D6",
+            "title": "Federated learning across hospitals",
+            "text": "Federated averaging trains a shared model without centralising patient images."
+          },
+          {
+            "id": "L06-D7",
+            "title": "Explaining imaging models with saliency maps",
+            "text": "Saliency maps frequently highlight image markers unrelated to pathology."
+          },
+          {
+            "id": "L06-D8",
+            "title": "Label noise in radiology reports",
+            "text": "Automatically extracted labels from radiology reports contain systematic errors."
+          }
+        ]
+      },
+      "expected": {
+        "relevant_ids": [
+          "L06-D1",
+          "L06-D2",
+          "L06-D4"
+        ],
+        "grades": {
+          "L06-D1": 2,
+          "L06-D2": 2,
+          "L06-D4": 1
+        }
+      },
+      "tags": [
+        "retrieval"
+      ]
+    },
+    {
+      "id": "lit-07",
+      "input": {
+        "query": "Bayesian optimization of chemical reaction conditions",
+        "documents": [
+          {
+            "id": "L07-D1",
+            "title": "Bayesian reaction optimisation outperforms human experts",
+            "text": "A Gaussian-process-based Bayesian optimiser found higher-yield conditions for a palladium-catalysed coupling in fewer experiments than chemists."
+          },
+          {
+            "id": "L07-D2",
+            "title": "Batch acquisition functions for parallel experimentation",
+            "text": "Batched expected-improvement variants select several reaction conditions per round for parallel high-throughput experimentation."
+          },
+          {
+            "id": "L07-D3",
+            "title": "Retrosynthesis planning with Monte Carlo tree search",
+            "text": "Tree search over reaction templates proposes synthetic routes to target molecules."
+          },
+          {
+            "id": "L07-D4",
+            "title": "Multi-objective Bayesian optimisation of yield and selectivity",
+            "text": "Expected hypervolume improvement optimises yield and enantioselectivity simultaneously in a closed-loop flow reactor."
+          },
+          {
+            "id": "L07-D5",
+            "title": "Reaction yield prediction from SMILES with transformers",
+            "text": "Sequence models predict yields of Buchwald-Hartwig reactions from reaction SMILES."
+          },
+          {
+            "id": "L07-D6",
+            "title": "Design of experiments for pharmaceutical crystallisation",
+            "text": "Factorial designs identify cooling rate and seeding as key factors for crystal size."
+          },
+          {
+            "id": "L07-D7",
+            "title": "Hyperparameter tuning of neural networks with Bayesian optimisation",
+            "text": "Gaussian-process optimisation tunes learning rate and depth of image classifiers."
+          },
+          {
+            "id": "L07-D8",
+            "title": "Kinetic modelling of enzymatic reactions",
+            "text": "Michaelis-Menten parameters are estimated from progress curves."
+          }
+        ]
+      },
+      "expected": {
+        "relevant_ids": [
+          "L07-D1",
+          "L07-D2",
+          "L07-D4"
+        ],
+        "grades": {
+          "L07-D1": 2,
+          "L07-D2": 1,
+          "L07-D4": 2
+        }
+      },
+      "tags": [
+        "retrieval"
+      ]
+    },
+    {
+      "id": "lit-08",
+      "input": {
+        "query": "calibration of confidence estimates in large language models",
+        "documents": [
+          {
+            "id": "L08-D1",
+            "title": "Language models mostly know what they know",
+            "text": "Larger language models are reasonably well calibrated on multiple-choice questions when asked for the probability that their answer is correct."
+          },
+          {
+            "id": "L08-D2",
+            "title": "Verbalised confidence versus token probabilities",
+            "text": "Confidence stated in words by chat models is systematically overconfident compared with calibrated token-level probabilities."
+          },
+          {
+            "id": "L08-D3",
+            "title": "Temperature scaling for classifier calibration",
+            "text": "A single scalar temperature fitted on held-out data substantially reduces expected calibration error of neural classifiers."
+          },
+          {
+            "id": "L08-D4",
+            "title": "Efficient attention for long documents",
+            "text": "Sparse attention patterns reduce the memory cost of long-context transformers."
+          },
+          {
+            "id": "L08-D5",
+            "title": "Instruction tuning improves zero-shot generalisation",
+            "text": "Fine-tuning on many instruction-formatted tasks improves zero-shot performance on held-out tasks."
+          },
+          {
+            "id": "L08-D6",
+            "title": "Tokenizer effects on multilingual performance",
+            "text": "Byte-pair vocabularies disadvantage morphologically rich languages."
+          },
+          {
+            "id": "L08-D7",
+            "title": "Retrieval augmentation reduces hallucination",
+            "text": "Conditioning generation on retrieved passages reduces unsupported statements in open-domain answers."
+          },
+          {
+            "id": "L08-D8",
+            "title": "Quantisation of language model weights",
+            "text": "Four-bit weight quantisation preserves most downstream accuracy."
+          }
+        ]
+      },
+      "expected": {
+        "relevant_ids": [
+          "L08-D1",
+          "L08-D2",
+          "L08-D3"
+        ],
+        "grades": {
+          "L08-D1": 2,
+          "L08-D2": 2,
+          "L08-D3": 1
+        }
+      },
+      "tags": [
+        "retrieval"
+      ]
+    }
+  ]
+}

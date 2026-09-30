@@ -47,6 +47,12 @@ DEFAULT_NON_RETRYABLE: tuple[str, ...] = (
     "NotFound",
     "Forbidden",
     "FeatureDisabled",
+    "LLMValidationError",
+    "LLMOutputInvalid",
+    "LLMPolicyError",
+    "LLMPermanentError",
+    "MalwareDetected",
+    "GuardrailViolation",
 )
 
 

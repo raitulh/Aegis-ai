@@ -1,7 +1,8 @@
 """Hypervolume indicator (the Lebesgue measure dominated by a front, bounded by a reference point).
 
 * 2 objectives — exact sweep, O(n log n).
-* ≥ 3 objectives — exact *Hypervolume by Slicing Objectives* (HSO, While et al. 2006) for fronts
+* 3 objectives — exact sweep over the third objective with an incrementally updated 2-D staircase.
+* ≥ 4 objectives — exact *Hypervolume by Slicing Objectives* (HSO, While et al. 2006) for fronts
   small enough to be tractable, otherwise a seeded Monte-Carlo estimate (deterministic per seed).
 
 Conventions: by default objectives are **minimised** and the reference point is a *nadir* (worse
@@ -12,6 +13,7 @@ Points that do not strictly dominate the reference point contribute nothing and 
 
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections.abc import Sequence
 from typing import Literal
 
@@ -22,25 +24,25 @@ from engines.lab.evolution.rng import make_np_rng
 Method = Literal["auto", "exact", "monte_carlo"]
 
 # Largest front size for which ``method="auto"`` still uses the exact HSO, per dimension count.
-EXACT_LIMITS: dict[int, int] = {3: 1500, 4: 120, 5: 40}
-_MC_CHUNK = 4096
+EXACT_LIMITS: dict[int, int] = {2: 10**9, 3: 50_000, 4: 150, 5: 40, 6: 12, 7: 8}
+_EXACT_LIMIT_HIGH_DIM = 6  # d >= 8: HSO cost grows ~ n^(d-3), keep exact only for tiny fronts
+_BROADCAST_BUDGET = 4_000_000  # max booleans materialised per vectorised comparison block
 
 
 def _nondominated_min(points: Sequence[tuple[float, ...]]) -> list[tuple[float, ...]]:
-    """Unique non-dominated subset (minimisation), sorted lexicographically."""
-    unique = sorted(set(points))
-    kept: list[tuple[float, ...]] = []
-    for p in unique:
-        dominated = False
-        for q in kept:
-            if all(qi <= pi for qi, pi in zip(q, p, strict=True)):
-                dominated = True
-                break
-        if dominated:
-            continue
-        kept = [q for q in kept if not all(pi <= qi for pi, qi in zip(p, q, strict=True))]
-        kept.append(p)
-    return sorted(kept)
+    """Unique non-dominated subset (minimisation), sorted lexicographically (vectorised, chunked)."""
+    if not points:
+        return []
+    arr = np.unique(np.asarray(points, dtype=float), axis=0)
+    n, d = arr.shape
+    keep = np.ones(n, dtype=bool)
+    chunk = max(1, _BROADCAST_BUDGET // max(1, n * d))
+    for start in range(0, n, chunk):
+        block = arr[start : start + chunk]
+        weakly_better = (arr[None, :, :] <= block[:, None, :]).all(axis=2)
+        strictly_better = (arr[None, :, :] < block[:, None, :]).any(axis=2)
+        keep[start : start + chunk] = ~(weakly_better & strictly_better).any(axis=1)
+    return [tuple(float(v) for v in row) for row in arr[keep]]
 
 
 def _hv2d(points: Sequence[tuple[float, ...]], ref: Sequence[float]) -> float:
@@ -58,6 +60,43 @@ def _hv2d(points: Sequence[tuple[float, ...]], ref: Sequence[float]) -> float:
     return volume
 
 
+def _hv3d(points: Sequence[tuple[float, ...]], ref: Sequence[float]) -> float:
+    """Exact 3-D hypervolume (minimisation) by sweeping the third objective.
+
+    Points are inserted in ascending ``z`` into a 2-D staircase (sorted by ``x`` ascending, ``y``
+    strictly descending); the dominated area is updated incrementally on each insertion and the
+    volume accumulates ``area × Δz``. Dominated points leave the staircase unchanged.
+    """
+    ordered = sorted(points, key=lambda p: (p[2], p[0], p[1]))
+    xs: list[float] = []
+    ys: list[float] = []
+    rx, ry, rz = ref[0], ref[1], ref[2]
+    area = 0.0
+    volume = 0.0
+    for i, (x, y, z) in enumerate(ordered):
+        lo = bisect_left(xs, x)
+        dominated = (lo < len(xs) and xs[lo] == x and ys[lo] <= y) or (lo > 0 and ys[lo - 1] <= y)
+        if not dominated:
+            level = ys[lo - 1] if lo > 0 else ry
+            cursor = x
+            j = lo
+            added = 0.0
+            while j < len(xs) and ys[j] >= y:  # staircase points now dominated by (x, y)
+                added += (xs[j] - cursor) * (level - y)
+                level, cursor = ys[j], xs[j]
+                j += 1
+            end = xs[j] if j < len(xs) else rx
+            added += (end - cursor) * (level - y)
+            del xs[lo:j]
+            del ys[lo:j]
+            xs.insert(lo, x)
+            ys.insert(lo, y)
+            area += added
+        next_z = ordered[i + 1][2] if i + 1 < len(ordered) else rz
+        volume += area * (next_z - z)
+    return volume
+
+
 def _hv_exact(points: list[tuple[float, ...]], ref: Sequence[float]) -> float:
     d = len(ref)
     if not points:
@@ -66,6 +105,8 @@ def _hv_exact(points: list[tuple[float, ...]], ref: Sequence[float]) -> float:
         return ref[0] - min(p[0] for p in points)
     if d == 2:
         return _hv2d(points, ref)
+    if d == 3:
+        return _hv3d(points, ref)
     ordered = sorted(points, key=lambda p: (p[-1], p))
     volume = 0.0
     for i, p in enumerate(ordered):
@@ -73,9 +114,7 @@ def _hv_exact(points: list[tuple[float, ...]], ref: Sequence[float]) -> float:
         height = upper - p[-1]
         if height <= 0:
             continue
-        projection = [q[:-1] for q in ordered[: i + 1]]
-        if d > 3:
-            projection = _nondominated_min(projection)
+        projection = _nondominated_min([q[:-1] for q in ordered[: i + 1]])
         volume += height * _hv_exact(projection, ref[:-1])
     return volume
 
@@ -91,7 +130,7 @@ def _hv_monte_carlo(points: list[tuple[float, ...]], ref: Sequence[float], sampl
     dominated = 0
     remaining = samples
     while remaining > 0:
-        size = min(_MC_CHUNK, remaining)
+        size = min(max(1, _BROADCAST_BUDGET // (front.shape[0] * front.shape[1])), remaining)
         draws = ideal + rng.random((size, front.shape[1])) * (reference - ideal)
         # a draw is dominated if some front point is <= it on every axis
         covered = (front[None, :, :] <= draws[:, None, :]).all(axis=2).any(axis=1)
@@ -132,14 +171,12 @@ def hypervolume(
     d = len(ref)
     if method == "monte_carlo" and d >= 2:
         return _hv_monte_carlo(front, ref_min, samples, seed)
-    if method == "auto" and d >= 3 and len(front) > EXACT_LIMITS.get(d, 12):
+    if method == "auto" and d >= 3 and len(front) > EXACT_LIMITS.get(d, _EXACT_LIMIT_HIGH_DIM):
         return _hv_monte_carlo(front, ref_min, samples, seed)
     return _hv_exact(front, ref_min)
 
 
-def reference_point(
-    points: Sequence[Sequence[float]], *, margin: float = 0.1, maximize: bool = False
-) -> list[float]:
+def reference_point(points: Sequence[Sequence[float]], *, margin: float = 0.1, maximize: bool = False) -> list[float]:
     """A reference point just beyond the worst observed value on each axis (``margin`` × spread).
 
     Useful when no problem-specific reference exists; prefer a fixed reference point when comparing

@@ -141,9 +141,7 @@ class SelectionEngine:
         return Ranking(fronts=tuple(tuple(f) for f in fronts), rank=tuple(rank), crowding=tuple(crowding))
 
     @staticmethod
-    def environmental_selection(
-        ranking: Ranking, size: int, *, secondary: Sequence[float] | None = None
-    ) -> list[int]:
+    def environmental_selection(ranking: Ranking, size: int, *, secondary: Sequence[float] | None = None) -> list[int]:
         """Pick ``size`` survivors: whole fronts in rank order, then the last front by crowding.
 
         ``secondary`` (e.g. a novelty bonus) is added to the crowding distance of the last front and

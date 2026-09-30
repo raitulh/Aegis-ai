@@ -1,0 +1,15 @@
+# Grafana datasource provisioning — docker-compose `observability` profile.
+# The fixed uid is referenced by the provisioned dashboards.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: aegis-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s

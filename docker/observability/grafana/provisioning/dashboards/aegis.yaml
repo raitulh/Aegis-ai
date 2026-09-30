@@ -1,0 +1,14 @@
+# Grafana dashboard provider — loads every JSON dashboard mounted at /var/lib/grafana/dashboards/aegis.
+apiVersion: 1
+
+providers:
+  - name: aegis
+    orgId: 1
+    folder: Aegis
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 60
+    options:
+      path: /var/lib/grafana/dashboards/aegis
+      foldersFromFilesStructure: false

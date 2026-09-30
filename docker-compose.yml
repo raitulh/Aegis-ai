@@ -1,57 +1,199 @@
 # ==============================================================================
-# Aegis AI — full local stack: web · api · worker · postgres(pgvector) · redis
+# Aegis AI — full local stack
 #
-#   cp .env.example .env        # optional; generate real secrets for production
+#   cp .env.example .env        # optional; every value below has a dev default
 #   docker compose up --build   # web → http://localhost:3000, api → :8000
 #
-# The `migrate` service applies migrations and seeds the demo once; api/worker/web
-# wait for it. The API and worker connect as the RLS-enforced app role (aegis);
-# migrations, seeding and the identity layer use the owner role (postgres).
+# Core services (always on):
+#   db (Postgres 16 + pgvector) · redis · temporal (+ temporal-ui :8080)
+#   minio (S3 API :9000, console :9001) + minio-init · migrate (one-shot)
+#   api · worker (Celery) · temporal-worker (default queue)
+#   execution-worker (execution queue; the ONLY service with the Docker socket)
+#   scheduler · event-consumer · web
+#
+# Optional profiles:
+#   --profile observability   otel-collector (:4318), prometheus (:9090), grafana (:3001)
+#   --profile egress          egress-proxy for sandbox "allowlist" networking
+#   (or COMPOSE_PROFILES=observability,egress in .env)
+#
+# Security notes:
+#   * The API and workers connect as the RLS-enforced app role (aegis); migrations,
+#     seeding and the identity layer use the owner role (postgres).
+#   * Every default secret below is a DEVELOPMENT-ONLY value, flagged "dev-only".
+#     Set real values in .env (or your secret store) for anything shared.
+#   * Host ports bind to 127.0.0.1 by default (PUBLISH_ADDRESS=0.0.0.0 to expose).
+#   * The stack runs without a GPU (EXECUTION_GPU_ENABLED=false by default).
 # ==============================================================================
 
-x-api-env: &api-env
+# ------------------------------------------------------------------------------
+# Shared settings for every process built from docker/Dockerfile.api. Names map
+# 1:1 to apps/api/aegis_api/config.py (env var = upper-case field name). Infra
+# addresses are fixed to in-network hostnames on purpose: host-oriented values
+# in .env (localhost:…) must not leak into containers.
+# ------------------------------------------------------------------------------
+x-app-env: &app-env
+  # --- runtime ---
   ENVIRONMENT: ${ENVIRONMENT:-development}
   LOG_JSON: ${LOG_JSON:-true}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
+  WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+  CORS_ORIGINS: ${WEB_ORIGIN:-http://localhost:3000}
+  # --- database (dev-only passwords, provisioned by docker/postgres-init.sql) ---
   DATABASE_URL: postgresql+psycopg://aegis:aegis@db:5432/aegis
   DATABASE_ADMIN_URL: postgresql+psycopg://postgres:postgres@db:5432/aegis
+  # --- queue / events ---
   REDIS_URL: redis://redis:6379/0
   JOB_BACKEND: ${JOB_BACKEND:-celery}
+  # --- secrets (blank → deterministic dev-only fallbacks, flagged at startup;
+  #     REQUIRED when ENVIRONMENT=production) ---
   SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
   API_KEY_PEPPER: ${API_KEY_PEPPER:-}
-  CORS_ORIGINS: ${WEB_ORIGIN:-http://localhost:3000}
+  JWT_SECRET: ${JWT_SECRET:-}
+  JWT_SECRETS_JSON: ${JWT_SECRETS_JSON:-}
+  JWT_ACTIVE_KID: ${JWT_ACTIVE_KID:-primary}
+  # --- legacy evidence storage (shared `appvar` volume) ---
   STORAGE_LOCAL_DIR: /app/var/storage
-  # AI providers (optional — blank falls back to the local hash embedder / deterministic engines).
+  # --- workflows (Temporal) ---
+  TEMPORAL_ADDRESS: temporal:7233
+  TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+  TEMPORAL_TASK_QUEUE: ${TEMPORAL_TASK_QUEUE:-aegis-lab}
+  TEMPORAL_EXECUTION_TASK_QUEUE: ${TEMPORAL_EXECUTION_TASK_QUEUE:-aegis-lab-execution}
+  # --- object storage (MinIO). The app uses a bucket-scoped user created by
+  #     minio-init — never the MinIO root credentials. dev-only defaults. ---
+  OBJECT_STORAGE_BACKEND: s3
+  OBJECT_STORAGE_ENDPOINT: http://minio:9000
+  OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-aegis-lab}
+  OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-aegis-lab-app}
+  OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-aegis-lab-app-dev-only-secret}
+  OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+  OBJECT_STORAGE_FORCE_PATH_STYLE: "true"
+  # --- AI providers (optional — blank keys disable the provider; the hash
+  #     embedder / deterministic engines keep working without any) ---
   OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
-  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-hash}
+  LLM_DEFAULT_PROVIDER: ${LLM_DEFAULT_PROVIDER:-gemini}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  # Model ids are configuration; defaults mirror config.py (stable aliases).
+  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
+  GEMINI_DEFAULT_MODEL: ${GEMINI_DEFAULT_MODEL:-}
+  GEMINI_REASONING_MODEL: ${GEMINI_REASONING_MODEL:-gemini-pro-latest}
+  GEMINI_FAST_MODEL: ${GEMINI_FAST_MODEL:-gemini-flash-lite-latest}
+  GEMINI_DEEP_RESEARCH_AGENT: ${GEMINI_DEEP_RESEARCH_AGENT:-deep-research-preview-04-2026}
+  GEMINI_TIMEOUT_SECONDS: ${GEMINI_TIMEOUT_SECONDS:-120}
+  GEMINI_MAX_RETRIES: ${GEMINI_MAX_RETRIES:-3}
+  MODEL_PRICING_JSON: ${MODEL_PRICING_JSON:-}
+  # --- execution fabric: disabled everywhere except execution-worker, which
+  #     overrides it. The API never executes experiment code. ---
+  EXECUTION_BACKEND: disabled
+  EXECUTION_DEFAULT_IMAGE: ${EXECUTION_DEFAULT_IMAGE:-python:3.12-slim}
+  EXECUTION_ALLOWED_IMAGES: ${EXECUTION_ALLOWED_IMAGES:-python:3.12-slim,python:3.11-slim}
+  EXECUTION_GPU_ENABLED: ${EXECUTION_GPU_ENABLED:-false}
+  # Sandbox allowlist networking (needs --profile egress). Blank = network mode "none" only.
+  EXECUTION_EGRESS_NETWORK: ${EXECUTION_EGRESS_NETWORK:-}
+  EXECUTION_EGRESS_PROXY_URL: ${EXECUTION_EGRESS_PROXY_URL:-}
+  # --- observability ---
+  METRICS_ENABLED: ${METRICS_ENABLED:-true}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+  # Set to http://otel-collector:4318 together with --profile observability.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_TRACES_SAMPLER_RATIO: ${OTEL_TRACES_SAMPLER_RATIO:-1.0}
+  # --- billing (no provider adapter ships; usage is metered only) ---
+  BILLING_PROVIDER: none
+
+# Container hardening shared by every service (images that need more add caps back explicitly).
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+# Every process built from docker/Dockerfile.api: non-root (uid 10001, from the
+# image), read-only root filesystem, writable /tmp (tmpfs) and /app/var (volume).
+x-app-service: &app-service
+  image: ${AEGIS_API_IMAGE:-aegis-api:local}
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.api
+  <<: [*hardening, *logging]
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m,mode=1777
+  volumes:
+    - appvar:/app/var
+  pids_limit: 512
+  restart: unless-stopped
+
+# Lab background processes serve Prometheus metrics on METRICS_PORT; the
+# healthcheck probes that endpoint (loopback only, see docker/healthcheck.py).
+x-metrics-healthcheck: &metrics-healthcheck
+  healthcheck:
+    test: ["CMD-SHELL", "python /app/docker/healthcheck.py http://127.0.0.1:$${METRICS_PORT}/metrics"]
+    interval: 20s
+    timeout: 5s
+    start_period: 60s
+    retries: 5
+
+x-lab-depends: &lab-depends
+  db:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  temporal:
+    condition: service_healthy
+  minio-init:
+    condition: service_completed_successfully
+  migrate:
+    condition: service_completed_successfully
 
 services:
+  # ============================================================================
+  # Infrastructure
+  # ============================================================================
   db:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:0.8.6-pg16
+    <<: [*hardening, *logging]
+    # The official entrypoint initialises the volume and drops to the postgres user.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    # Temporal + API + workers each hold a pool; raise the default of 100.
+    command: ["postgres", "-c", "max_connections=300"]
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: postgres # dev-only
       POSTGRES_DB: aegis
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    shm_size: 256m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d aegis"]
       interval: 5s
       timeout: 5s
+      start_period: 20s
       retries: 20
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.11-alpine
+    <<: [*hardening, *logging]
+    # Ephemeral broker/pub-sub: no persistence, so it can run as the redis user
+    # with a read-only root filesystem.
+    user: "999:1000"
+    read_only: true
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -59,44 +201,167 @@ services:
       retries: 20
     restart: unless-stopped
 
-  # One-shot: migrate + seed, then exit. api/worker/web gate on its success.
-  migrate:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
-    command: ["bash", "docker/init.sh"]
+  # Temporal server with Postgres persistence on the SAME Postgres server
+  # (separate `temporal` / `temporal_visibility` databases owned by the
+  # `temporal` role, created by docker/postgres-init.sql). auto-setup installs /
+  # upgrades the schemas and registers the default namespace.
+  # NOTE: 1.29.x is the last auto-setup line Temporal publishes; production
+  # uses Temporal Cloud or temporalio/server + admin-tools (Helm chart).
+  temporal:
+    image: temporalio/auto-setup:1.29.7
+    <<: [*hardening, *logging]
     environment:
-      <<: *api-env
-      DEMO_SEED_ON_INIT: ${DEMO_SEED_ON_INIT:-true}
+      DB: postgres12
+      DB_PORT: "5432" # container port — not the DB_PORT host mapping above
+      POSTGRES_SEEDS: db
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal # dev-only (docker/postgres-init.sql)
+      DBNAME: temporal
+      VISIBILITY_DBNAME: temporal_visibility
+      SKIP_DB_CREATE: "true" # databases pre-created; the role has no CREATEDB
+      DEFAULT_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      DEFAULT_NAMESPACE_RETENTION: ${TEMPORAL_RETENTION:-72h}
+      # Also the address auto-setup and the healthcheck CLI talk to.
+      TEMPORAL_ADDRESS: temporal:7233
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+      PROMETHEUS_ENDPOINT: 0.0.0.0:8000
+      SQL_MAX_CONNS: "10"
+      SQL_MAX_IDLE_CONNS: "10"
+      LOG_LEVEL: warn
+    volumes:
+      - ./docker/temporal/dynamicconfig/development-sql.yaml:/etc/temporal/config/dynamicconfig/development-sql.yaml:ro
+    ports:
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${TEMPORAL_PORT:-7233}:7233"
     depends_on:
       db:
+        condition: service_healthy
+    healthcheck:
+      # Healthy = frontend serving AND the application namespace registered.
+      test: ["CMD-SHELL", "temporal operator namespace describe --namespace \"$${DEFAULT_NAMESPACE}\" > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      start_period: 90s
+      retries: 30
+    restart: unless-stopped
+
+  temporal-ui:
+    image: temporalio/ui:2.54.1
+    <<: [*hardening, *logging]
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: ${WEB_ORIGIN:-http://localhost:3000}
+      TEMPORAL_DEFAULT_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+    ports:
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${TEMPORAL_UI_PORT:-8080}:8080"
+    depends_on:
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 10
+    restart: unless-stopped
+
+  # S3-compatible object storage for lab artifacts, datasets and logs.
+  # Upstream minio/minio images are no longer published on Docker Hub (MinIO
+  # community edition went source-only in 2025); the default is the Pigsty
+  # community build, pinned by tag AND digest. Override MINIO_IMAGE /
+  # MINIO_MC_IMAGE with your own mirror if your policy requires.
+  minio:
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372}
+    <<: [*hardening, *logging]
+    command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aegis-minio-root} # dev-only
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aegis-minio-root-dev-only} # dev-only
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:${MINIO_CONSOLE_PORT:-9001}
+    ports:
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${MINIO_PORT:-9000}:9000"
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      start_period: 10s
+      retries: 20
+    restart: unless-stopped
+
+  # One-shot: private bucket + bucket-scoped app user (docker/minio/minio-init.sh).
+  minio-init:
+    image: ${MINIO_MC_IMAGE:-pgsty/mc:RELEASE.2026-09-16T00-00-00Z@sha256:cfc83108c3abb371f8fb84d99c1fdc88f8c237e022409b0081fb7c0a3be634dd}
+    <<: [*hardening, *logging]
+    user: "65534:65534"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    entrypoint: ["/bin/sh", "/config/minio-init.sh"]
+    environment:
+      HOME: /tmp
+      MC_CONFIG_DIR: /tmp/.mc
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aegis-minio-root}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aegis-minio-root-dev-only}
+      BUCKET: ${OBJECT_STORAGE_BUCKET:-aegis-lab}
+      APP_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-aegis-lab-app}
+      APP_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-aegis-lab-app-dev-only-secret}
+    volumes:
+      - ./docker/minio:/config:ro
+    depends_on:
+      minio:
         condition: service_healthy
     restart: "no"
 
-  api:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
-    environment: *api-env
-    ports:
-      - "${API_PORT:-8000}:8000"
+  # ============================================================================
+  # Application
+  # ============================================================================
+  # One-shot: migrate + seed, then exit. Everything that touches the schema gates on it.
+  migrate:
+    <<: *app-service
+    command: ["bash", "docker/init.sh"]
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: aegis-migrate
+      DEMO_SEED_ON_INIT: ${DEMO_SEED_ON_INIT:-true}
+      LAB_DEMO_SEED_ON_INIT: ${LAB_DEMO_SEED_ON_INIT:-true}
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
+    healthcheck:
+      disable: true
+    restart: "no"
 
+  api:
+    <<: *app-service
+    # Default image CMD: uvicorn on :8000. Healthcheck: image HEALTHCHECK (GET /health/live).
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: aegis-api
+    ports:
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${API_PORT:-8000}:8000"
+    stop_grace_period: 30s
+    depends_on:
+      <<: *lab-depends
+
+  # Celery worker for assurance audits and existing background jobs.
   worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
+    <<: *app-service
     command:
       ["celery", "-A", "aegis_api.jobs.tasks:celery_app", "worker",
        "--loglevel=info", "--concurrency=${WORKER_CONCURRENCY:-2}"]
-    environment: *api-env
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: aegis-worker
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A aegis_api.jobs.tasks:celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 > /dev/null"]
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 3
     depends_on:
       db:
         condition: service_healthy
@@ -104,23 +369,231 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    restart: unless-stopped
+
+  # Temporal worker — default task queue (missions, agents, research, evaluation…).
+  # Never executes experiment code (EXECUTION_BACKEND stays "disabled").
+  temporal-worker:
+    <<: [*app-service, *metrics-healthcheck]
+    command: ["python", "-m", "aegis_api.lab.workflows.worker", "--queues", "default"]
+    environment:
+      <<: *app-env
+      # Lab processes append their role to OTEL_SERVICE_NAME → "aegis-temporal-worker".
+      OTEL_SERVICE_NAME: aegis-temporal
+      METRICS_PORT: "9104"
+    stop_grace_period: 60s
+    depends_on:
+      <<: *lab-depends
+
+  # Temporal worker — execution task queue. The ONLY service that talks to a
+  # container runtime.
+  #
+  # !! SECURITY: access to the Docker socket is equivalent to root on the host.
+  # !! It is mounted into this service only, read-write (a ":ro" bind mount does
+  # !! NOT restrict Docker API calls, so it would be false comfort). The process
+  # !! runs as the image's non-root user with the socket's group added via
+  # !! DOCKER_GID (Linux: `stat -c %g /var/run/docker.sock`). Sandboxes it starts
+  # !! get no socket, no host mounts, network "none", dropped capabilities and a
+  # !! read-only rootfs (engines/lab/sandbox.py). Production must use
+  # !! EXECUTION_BACKEND=kubernetes (deploy/k8s) or a rootless / sysbox / gVisor
+  # !! runtime — never a shared host Docker socket.
+  execution-worker:
+    <<: [*app-service, *metrics-healthcheck]
+    command: ["python", "-m", "aegis_api.lab.workflows.worker", "--queues", "execution"]
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: aegis-execution # → "aegis-execution-worker"
+      METRICS_PORT: "9105"
+      EXECUTION_BACKEND: local_docker
+      DOCKER_HOST: unix:///var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-999}"
+    volumes:
+      - appvar:/app/var
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    stop_grace_period: 120s
+    depends_on:
+      <<: *lab-depends
+
+  # Periodic maintenance: start pending workflow runs, reconcile stale jobs,
+  # expire approvals, retention purge, usage roll-ups (single active instance
+  # via advisory locks).
+  scheduler:
+    <<: [*app-service, *metrics-healthcheck]
+    command: ["python", "-m", "aegis_api.lab.workflows.scheduler"]
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: aegis # → "aegis-scheduler"
+      METRICS_PORT: "9103"
+      SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-15}
+    depends_on:
+      <<: *lab-depends
+
+  # Outbox consumer: lab events → signed webhook deliveries (deduplicated).
+  event-consumer:
+    <<: [*app-service, *metrics-healthcheck]
+    command: ["python", "-m", "aegis_api.lab.events.consumer"]
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: aegis # → "aegis-event-consumer"
+      METRICS_PORT: "9102"
+      EVENT_CONSUMER_INTERVAL_SECONDS: ${EVENT_CONSUMER_INTERVAL_SECONDS:-2}
+      EVENT_CONSUMER_SETTLE_SECONDS: ${EVENT_CONSUMER_SETTLE_SECONDS:-30}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   web:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
+    <<: [*hardening, *logging]
     environment:
       NODE_ENV: production
       # Server-side origin the Next.js BFF proxies to (never exposed to the browser).
       API_INTERNAL_URL: http://api:8000
       NEXT_PUBLIC_SITE_URL: ${WEB_ORIGIN:-http://localhost:3000}
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${WEB_PORT:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
 
+  # ============================================================================
+  # Optional: sandbox egress proxy (profile "egress")
+  #
+  # Enables network mode "allowlist" for local_docker sandboxes. Set in .env:
+  #   COMPOSE_PROFILES=egress
+  #   EXECUTION_EGRESS_NETWORK=aegis-sandbox-egress
+  #   EXECUTION_EGRESS_PROXY_URL=http://egress-proxy:8888
+  # Sandboxes join the INTERNAL network `aegis-sandbox-egress` (no route out);
+  # the proxy is the only other member and forwards only to the domains in
+  # docker/egress-proxy/allowlist.txt (see tinyproxy.conf for the limits).
+  # ============================================================================
+  egress-proxy:
+    image: kalaksi/tinyproxy:1.7@sha256:5a65354cbb5f9c0fdcc8de3d3af8dd1c5ea072b3a1f52e5961a9a5cce6eba227
+    profiles: ["egress"]
+    <<: [*hardening, *logging]
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    volumes:
+      - ./docker/egress-proxy/tinyproxy.conf:/etc/tinyproxy/tinyproxy.conf:ro
+      - ./docker/egress-proxy/allowlist.txt:/etc/tinyproxy/allowlist.txt:ro
+    networks:
+      - sandbox-egress
+      - egress-outbound
+    healthcheck:
+      # Healthy = serving AND filtering: a non-allowlisted host must be refused (403).
+      test: ["CMD-SHELL", "[ \"$$(curl -s -o /dev/null -w '%{http_code}' -x http://127.0.0.1:8888 http://healthcheck.invalid/)\" = 403 ]"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================================================
+  # Optional: observability (profile "observability")
+  #   OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 enables tracing in
+  #   the apps. Grafana: http://localhost:3001 (admin / GRAFANA_ADMIN_PASSWORD),
+  #   dashboard "Aegis / AI Scientist Lab".
+  # ============================================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.161.0
+    profiles: ["observability"]
+    <<: [*hardening, *logging]
+    read_only: true
+    command: ["--config", "/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./docker/observability/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${OTEL_HTTP_PORT:-4318}:4318"
+    # No healthcheck: the image is distroless (no shell or HTTP client to run a
+    # probe). Liveness is visible in Prometheus as up{job="otel-collector"} and
+    # on the health_check extension (:13133) from other containers.
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    profiles: ["observability"]
+    <<: [*hardening, *logging]
+    read_only: true
+    tmpfs:
+      - /tmp:size=1m,mode=1777
+    # /metrics on the API requires `Authorization: Bearer $METRICS_TOKEN` when the
+    # token is set. Prometheus cannot read env vars in its config, so the token is
+    # written to a private tmpfs file that the aegis-api job reads
+    # (credentials_file). An empty token (the dev default) means no auth.
+    environment:
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      PROMETHEUS_RETENTION: ${PROMETHEUS_RETENTION:-7d}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        umask 077 &&
+        printf '%s' "$${METRICS_TOKEN}" > /tmp/metrics-token &&
+        exec /bin/prometheus
+        --config.file=/etc/prometheus/prometheus.yml
+        --storage.tsdb.path=/prometheus
+        --storage.tsdb.retention.time="$${PROMETHEUS_RETENTION}"
+    volumes:
+      - ./docker/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.0.10
+    profiles: ["observability"]
+    <<: [*hardening, *logging]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-aegis-grafana-dev-only} # dev-only
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/aegis/ai-scientist-lab.json
+    volumes:
+      - ./docker/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/observability/grafana/dashboards:/var/lib/grafana/dashboards/aegis:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+    restart: unless-stopped
+
+networks:
+  # Internal network for allowlist-mode sandboxes: no route to the outside world.
+  # Fixed name so the execution worker can attach sandboxes to it by name.
+  sandbox-egress:
+    name: ${EXECUTION_EGRESS_NETWORK:-aegis-sandbox-egress}
+    internal: true
+  # Outbound network used by the egress proxy only.
+  egress-outbound: {}
+
 volumes:
   pgdata:
+  appvar:
+  miniodata:
+  prometheus-data:
+  grafana-data:

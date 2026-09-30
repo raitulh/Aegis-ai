@@ -1,0 +1,6 @@
+api.openalex.org
+export.arxiv.org
+arxiv.org
+api.crossref.org
+wikipedia.org
+*.wikipedia.org

@@ -1,0 +1,371 @@
+{
+  "benchmark_fixture": true,
+  "fixture_notice": "BENCHMARK FIXTURE - synthetic cases authored for internal regression benchmarking of the AI Scientist Evolution Lab. Documents, hypotheses, designs and numbers are illustrative; they are not research findings, not real data and must never be presented as discoveries.",
+  "suite": "reproducibility_bench",
+  "version": "1.0.0",
+  "description": "Decide whether a reproduction reproduces the original result. Subject returns a verdict; scored by accuracy.",
+  "decision_rules": [
+    "INCONCLUSIVE if the reproduction has fewer than min_runs runs or lacks any metric reported by the original.",
+    "A metric is within tolerance when |reproduced - original| <= max(absolute, relative * |original|).",
+    "REPRODUCED if every original metric is within tolerance.",
+    "NOT_REPRODUCED if no original metric is within tolerance.",
+    "PARTIALLY_REPRODUCED otherwise."
+  ],
+  "cases": [
+    {
+      "id": "repro-01",
+      "input": {
+        "original": {
+          "metrics": {
+            "accuracy": 0.901,
+            "f1": 0.874
+          },
+          "runs": 5
+        },
+        "reproduced": {
+          "metrics": {
+            "accuracy": 0.897,
+            "f1": 0.869
+          },
+          "runs": 5
+        },
+        "tolerance": {
+          "relative": 0.01,
+          "absolute": 0.0
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "REPRODUCED"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-02",
+      "input": {
+        "original": {
+          "metrics": {
+            "cycles_to_80pct": 412.0
+          },
+          "runs": 4
+        },
+        "reproduced": {
+          "metrics": {
+            "cycles_to_80pct": 398.0
+          },
+          "runs": 4
+        },
+        "tolerance": {
+          "relative": 0.05,
+          "absolute": 0.0
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "REPRODUCED"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-03",
+      "input": {
+        "original": {
+          "metrics": {
+            "rmse": 0.412,
+            "mae": 0.301,
+            "r2": 0.81
+          },
+          "runs": 3
+        },
+        "reproduced": {
+          "metrics": {
+            "rmse": 0.415,
+            "mae": 0.305,
+            "r2": 0.805
+          },
+          "runs": 3
+        },
+        "tolerance": {
+          "relative": 0.02,
+          "absolute": 0.005
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "REPRODUCED"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-04",
+      "input": {
+        "original": {
+          "metrics": {
+            "accuracy": 0.901,
+            "f1": 0.874
+          },
+          "runs": 5
+        },
+        "reproduced": {
+          "metrics": {
+            "accuracy": 0.899,
+            "f1": 0.812
+          },
+          "runs": 5
+        },
+        "tolerance": {
+          "relative": 0.01,
+          "absolute": 0.0
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "PARTIALLY_REPRODUCED"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-05",
+      "input": {
+        "original": {
+          "metrics": {
+            "faradaic_efficiency_c2h4": 0.46,
+            "partial_current_ma_cm2": 115.0
+          },
+          "runs": 3
+        },
+        "reproduced": {
+          "metrics": {
+            "faradaic_efficiency_c2h4": 0.44,
+            "partial_current_ma_cm2": 71.0
+          },
+          "runs": 3
+        },
+        "tolerance": {
+          "relative": 0.05,
+          "absolute": 0.0
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "PARTIALLY_REPRODUCED"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-06",
+      "input": {
+        "original": {
+          "metrics": {
+            "auroc": 0.93,
+            "sensitivity": 0.88,
+            "specificity": 0.86
+          },
+          "runs": 5
+        },
+        "reproduced": {
+          "metrics": {
+            "auroc": 0.925,
+            "sensitivity": 0.79,
+            "specificity": 0.84
+          },
+          "runs": 5
+        },
+        "tolerance": {
+          "relative": 0.03,
+          "absolute": 0.0
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "PARTIALLY_REPRODUCED"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-07",
+      "input": {
+        "original": {
+          "metrics": {
+            "accuracy": 0.901
+          },
+          "runs": 5
+        },
+        "reproduced": {
+          "metrics": {
+            "accuracy": 0.842
+          },
+          "runs": 5
+        },
+        "tolerance": {
+          "relative": 0.01,
+          "absolute": 0.0
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "NOT_REPRODUCED"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-08",
+      "input": {
+        "original": {
+          "metrics": {
+            "divergence_rate": 0.05,
+            "final_loss": 2.31
+          },
+          "runs": 20
+        },
+        "reproduced": {
+          "metrics": {
+            "divergence_rate": 0.35,
+            "final_loss": 2.88
+          },
+          "runs": 20
+        },
+        "tolerance": {
+          "relative": 0.1,
+          "absolute": 0.02
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "NOT_REPRODUCED"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-09",
+      "input": {
+        "original": {
+          "metrics": {
+            "yield": 0.78,
+            "selectivity": 0.91
+          },
+          "runs": 3
+        },
+        "reproduced": {
+          "metrics": {
+            "yield": 0.52,
+            "selectivity": 0.74
+          },
+          "runs": 3
+        },
+        "tolerance": {
+          "relative": 0.05,
+          "absolute": 0.0
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "NOT_REPRODUCED"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-10",
+      "input": {
+        "original": {
+          "metrics": {
+            "accuracy": 0.901
+          },
+          "runs": 5
+        },
+        "reproduced": {
+          "metrics": {
+            "accuracy": 0.9
+          },
+          "runs": 1
+        },
+        "tolerance": {
+          "relative": 0.01,
+          "absolute": 0.0
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "INCONCLUSIVE"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-11",
+      "input": {
+        "original": {
+          "metrics": {
+            "rmse": 0.412,
+            "r2": 0.81
+          },
+          "runs": 3
+        },
+        "reproduced": {
+          "metrics": {
+            "rmse": 0.41
+          },
+          "runs": 3
+        },
+        "tolerance": {
+          "relative": 0.02,
+          "absolute": 0.0
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "INCONCLUSIVE"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    },
+    {
+      "id": "repro-12",
+      "input": {
+        "original": {
+          "metrics": {
+            "auroc": 0.93
+          },
+          "runs": 5
+        },
+        "reproduced": {
+          "metrics": {
+            "auroc": 0.61
+          },
+          "runs": 2
+        },
+        "tolerance": {
+          "relative": 0.03,
+          "absolute": 0.0
+        },
+        "min_runs": 3
+      },
+      "expected": {
+        "verdict": "INCONCLUSIVE"
+      },
+      "tags": [
+        "reproduction_decision"
+      ]
+    }
+  ]
+}

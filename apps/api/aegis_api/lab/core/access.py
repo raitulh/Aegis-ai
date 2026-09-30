@@ -101,6 +101,9 @@ def can_see_project(db: Session, actor: Actor, project: Project) -> bool:
             return True
         if actor.role in ORG_SUPERUSER_ROLES:
             return True
+        if actor.kind in ("service_account", "api_key") and str(project.id) in actor.project_ids:
+            # An explicit project allowlist on a non-human credential is its project membership.
+            return True
         return is_project_member(db, actor, project.id)
     return True
 
@@ -141,7 +144,8 @@ def visible_project_ids(db: Session, actor: Actor) -> list[uuid.UUID] | None:
     if actor.role in ORG_SUPERUSER_ROLES or actor.kind in ("system", "workflow"):
         hidden: set[uuid.UUID] = set()
     else:
-        hidden = {pid for pid in restricted if not is_project_member(db, actor, pid)}
+        explicit = actor.project_ids if actor.kind in ("service_account", "api_key") else frozenset()
+        hidden = {pid for pid in restricted if str(pid) not in explicit and not is_project_member(db, actor, pid)}
     all_ids = set(db.scalars(select(Project.id).where(Project.organization_id == actor.organization_id)).all())
     visible = all_ids - hidden
     if allowed is not None:

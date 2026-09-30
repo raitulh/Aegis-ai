@@ -232,8 +232,8 @@ class RoutePreviewRequest(BaseModel):
     tier: TierName | None = None
     latency_budget_ms: int | None = Field(default=None, ge=1)
     cost_budget_usd: Decimal | None = Field(default=None, ge=0)
-    required_capabilities: list[Literal["structured_output", "tools", "search", "code_execution", "streaming"]] = (
-        Field(default_factory=list)
+    required_capabilities: list[Literal["structured_output", "tools", "search", "code_execution", "streaming"]] = Field(
+        default_factory=list
     )
     provider: str | None = None
     model: str | None = None

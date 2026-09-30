@@ -42,7 +42,7 @@ def create_audit(
         policy_version_ids=policy_version_ids,
         config=config,
         is_demo=system.is_demo,
-        created_by_id=principal.user_id,
+        created_by_id=principal.fk_user_id,
     )
     session.add(audit)
     session.flush()

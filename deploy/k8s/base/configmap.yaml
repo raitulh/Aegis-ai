@@ -1,0 +1,71 @@
+# Non-secret settings shared by every Aegis workload (envFrom). Names map 1:1 to
+# apps/api/aegis_api/config.py; see .env.example for every available setting.
+#
+# Secrets are NOT here: each Deployment references the externally managed Secret "aegis-secrets"
+# key by key (secretKeyRef). Create it with your secret manager (External Secrets Operator, Sealed
+# Secrets, Vault, …) — see examples/external-secret.yaml for the expected keys.
+#
+# Values marked PLACEHOLDER must be patched per environment (overlays/*).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aegis-config
+  namespace: aegis
+  labels: {app.kubernetes.io/part-of: aegis}
+data:
+  # --- runtime ---
+  ENVIRONMENT: production
+  LOG_JSON: "true"
+  LOG_LEVEL: INFO
+  API_BASE_URL: https://api.aegis.example.com     # PLACEHOLDER
+  WEB_BASE_URL: https://aegis.example.com         # PLACEHOLDER
+  CORS_ORIGINS: https://aegis.example.com         # PLACEHOLDER (comma-separated exact origins)
+  # --- queue ---
+  JOB_BACKEND: celery
+  # --- workflows: Temporal Cloud or the official Temporal Helm chart (not part of these manifests) ---
+  TEMPORAL_ADDRESS: temporal-frontend.temporal.svc.cluster.local:7233   # PLACEHOLDER
+  TEMPORAL_NAMESPACE: aegis
+  TEMPORAL_TASK_QUEUE: aegis-lab
+  TEMPORAL_EXECUTION_TASK_QUEUE: aegis-lab-execution
+  TEMPORAL_TLS: "false"
+  # --- object storage (credentials come from aegis-secrets) ---
+  OBJECT_STORAGE_BACKEND: s3
+  OBJECT_STORAGE_ENDPOINT: https://s3.us-east-1.amazonaws.com   # PLACEHOLDER (MinIO/R2/GCS interop also work)
+  OBJECT_STORAGE_BUCKET: aegis-lab                              # PLACEHOLDER
+  OBJECT_STORAGE_REGION: us-east-1
+  OBJECT_STORAGE_FORCE_PATH_STYLE: "true"
+  # Local paths live on the pod's writable emptyDir (/app/var). The legacy evidence store is therefore
+  # per-pod; mount a shared volume at /app/var/storage or use STORAGE_BACKEND=supabase in production.
+  STORAGE_LOCAL_DIR: /app/var/storage
+  OBJECT_STORAGE_LOCAL_DIR: /app/var/objects
+  # --- LLM gateway (model ids are configuration; defaults mirror config.py) ---
+  LLM_DEFAULT_PROVIDER: gemini
+  GEMINI_MODEL: gemini-flash-latest
+  GEMINI_REASONING_MODEL: gemini-pro-latest
+  GEMINI_FAST_MODEL: gemini-flash-lite-latest
+  GEMINI_DEEP_RESEARCH_AGENT: deep-research-preview-04-2026
+  GEMINI_TIMEOUT_SECONDS: "120"
+  GEMINI_MAX_RETRIES: "3"
+  # Cost reporting only uses configured prices — verify against the provider's pricing page:
+  MODEL_PRICING_JSON: "{}"
+  # --- execution fabric: "disabled" for every process; the execution worker overrides it to
+  #     "kubernetes". The API never executes experiment code. ---
+  EXECUTION_BACKEND: disabled
+  K8S_NAMESPACE: aegis-sandbox
+  K8S_API_URL: https://kubernetes.default.svc
+  # Pin sandbox images by digest in production (image@sha256:…); prefixes ending in '*' are allowed.
+  EXECUTION_DEFAULT_IMAGE: python:3.12-slim
+  EXECUTION_ALLOWED_IMAGES: python:3.12-slim,python:3.11-slim
+  EXECUTION_GPU_ENABLED: "false"
+  # Allowlist-mode sandboxes get HTTP(S)_PROXY pointing here (egress-proxy.yaml); NetworkPolicy allows
+  # them to reach nothing else.
+  EXECUTION_EGRESS_PROXY_URL: http://aegis-egress-proxy.aegis.svc.cluster.local:8888
+  # --- observability ---
+  METRICS_ENABLED: "true"
+  # OTLP/HTTP collector base URL (e.g. http://otel-collector.observability.svc:4318); empty = tracing off.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  OTEL_TRACES_SAMPLER_RATIO: "0.1"
+  # --- misc ---
+  RATE_LIMIT_ENABLED: "true"
+  BILLING_PROVIDER: none
+  DEMO_ENABLED: "false"

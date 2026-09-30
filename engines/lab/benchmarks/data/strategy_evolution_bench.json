@@ -1,0 +1,171 @@
+{
+  "benchmark_fixture": true,
+  "fixture_notice": "BENCHMARK FIXTURE - synthetic cases authored for internal regression benchmarking of the AI Scientist Evolution Lab. Documents, hypotheses, designs and numbers are illustrative; they are not research findings, not real data and must never be presented as discoveries.",
+  "suite": "strategy_evolution_bench",
+  "version": "1.0.0",
+  "description": "Measures the evolution engine on synthetic multi-objective test problems (ZDT1, ZDT2, DTLZ2). The subject returns evolution-config overrides; the suite runs the engine for the case's population/generation budget and scores hypervolume normalised by the analytic hypervolume of the true Pareto front.",
+  "cases": [
+    {
+      "id": "evo-01",
+      "input": {
+        "problem": "zdt1",
+        "dims": 6,
+        "generations": 15,
+        "population": 24
+      },
+      "expected": {
+        "reference_point": [
+          1.1,
+          1.1
+        ],
+        "pass_threshold": 0.6
+      },
+      "tags": [
+        "evolution",
+        "zdt1"
+      ]
+    },
+    {
+      "id": "evo-02",
+      "input": {
+        "problem": "zdt1",
+        "dims": 10,
+        "generations": 20,
+        "population": 32
+      },
+      "expected": {
+        "reference_point": [
+          1.1,
+          1.1
+        ],
+        "pass_threshold": 0.55
+      },
+      "tags": [
+        "evolution",
+        "zdt1"
+      ]
+    },
+    {
+      "id": "evo-03",
+      "input": {
+        "problem": "zdt1",
+        "dims": 4,
+        "generations": 12,
+        "population": 20
+      },
+      "expected": {
+        "reference_point": [
+          1.1,
+          1.1
+        ],
+        "pass_threshold": 0.6
+      },
+      "tags": [
+        "evolution",
+        "zdt1"
+      ]
+    },
+    {
+      "id": "evo-04",
+      "input": {
+        "problem": "zdt2",
+        "dims": 6,
+        "generations": 30,
+        "population": 24
+      },
+      "expected": {
+        "reference_point": [
+          1.1,
+          1.1
+        ],
+        "pass_threshold": 0.6
+      },
+      "tags": [
+        "evolution",
+        "zdt2"
+      ]
+    },
+    {
+      "id": "evo-05",
+      "input": {
+        "problem": "zdt2",
+        "dims": 10,
+        "generations": 40,
+        "population": 32
+      },
+      "expected": {
+        "reference_point": [
+          1.1,
+          1.1
+        ],
+        "pass_threshold": 0.8
+      },
+      "tags": [
+        "evolution",
+        "zdt2"
+      ]
+    },
+    {
+      "id": "evo-06",
+      "input": {
+        "problem": "zdt2",
+        "dims": 4,
+        "generations": 20,
+        "population": 20
+      },
+      "expected": {
+        "reference_point": [
+          1.1,
+          1.1
+        ],
+        "pass_threshold": 0.35
+      },
+      "tags": [
+        "evolution",
+        "zdt2"
+      ]
+    },
+    {
+      "id": "evo-07",
+      "input": {
+        "problem": "dtlz2",
+        "dims": 7,
+        "generations": 15,
+        "population": 32
+      },
+      "expected": {
+        "reference_point": [
+          1.1,
+          1.1,
+          1.1
+        ],
+        "pass_threshold": 0.65
+      },
+      "tags": [
+        "evolution",
+        "dtlz2"
+      ]
+    },
+    {
+      "id": "evo-08",
+      "input": {
+        "problem": "dtlz2",
+        "dims": 5,
+        "generations": 12,
+        "population": 24
+      },
+      "expected": {
+        "reference_point": [
+          1.1,
+          1.1,
+          1.1
+        ],
+        "pass_threshold": 0.65
+      },
+      "tags": [
+        "evolution",
+        "dtlz2"
+      ]
+    }
+  ]
+}

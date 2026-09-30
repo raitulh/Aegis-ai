@@ -230,7 +230,7 @@ def transition(
                 organization_id=finding.organization_id,
                 finding_id=finding.id,
                 type="status_changed",
-                actor_id=principal.user_id,
+                actor_id=principal.fk_user_id,
                 actor_label=principal.actor_label,
                 from_status=finding.status,
                 to_status=status,

@@ -15,6 +15,8 @@ from aegis_api.config import get_settings
 
 log = structlog.get_logger("aegis.http")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9\-_.]{8,64}$")
+# Probes and metric scrapes are not access-logged (they would drown real traffic).
+_QUIET_PATHS = frozenset({"/health", "/ready", "/health/live", "/health/ready", "/metrics"})
 UPLOAD_PATH_RE = re.compile(r"^/api/v1/policies(/upload|/[0-9a-f-]{36}/version)$")
 # Lab multipart uploads (datasets, artifacts, knowledge documents) use MAX_LAB_UPLOAD_BYTES.
 LAB_UPLOAD_PATH_RE = re.compile(
@@ -53,14 +55,27 @@ class RequestContextMiddleware:
             await self.app(scope, receive, send_wrapper)
         finally:
             path = scope.get("path", "")
-            if path not in ("/health", "/ready"):
+            if path not in _QUIET_PATHS:
                 log.info(
                     "request",
                     method=scope.get("method"),
                     path=path,
                     status=status_holder["status"],
                     latency_ms=round((time.perf_counter() - started) * 1000, 1),
+                    **_principal_fields(scope),
                 )
+
+
+def _principal_fields(scope: Scope) -> dict[str, str]:
+    """Tenant/user of the authenticated principal (set by ``get_current_principal``) for the access log."""
+    principal: Any = scope.get("state", {}).get("principal")
+    if principal is None:
+        return {}
+    fields = {"tenant_id": str(principal.organization_id)}
+    user_id = getattr(principal, "user_id", None)
+    if user_id is not None and getattr(user_id, "int", 1) != 0:
+        fields["user_id"] = str(user_id)
+    return fields
 
 
 class SecureHeadersMiddleware:

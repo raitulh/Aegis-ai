@@ -69,7 +69,13 @@ def _apply_tenant_context(session: Session, transaction: object, connection: obj
 
 @event.listens_for(Session, "after_commit")
 def _run_after_commit(session: Session) -> None:
-    """Dispatch background jobs and callbacks queued during the transaction, only after it commits."""
+    """Dispatch background jobs and callbacks queued during the transaction, only after it commits.
+
+    SQLAlchemy also fires ``after_commit`` when a SAVEPOINT is released; queued work must wait for the
+    outermost commit, so savepoint releases are ignored.
+    """
+    if session.in_nested_transaction():
+        return
     hooks = session.info.pop("after_commit", None)
     callbacks = session.info.pop("after_commit_callbacks", None)
     if hooks:

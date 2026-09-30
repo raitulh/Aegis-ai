@@ -35,6 +35,6 @@ blob-report/
 
 # local data
 var/
-storage/
+/storage/
 *.log
 .DS_Store

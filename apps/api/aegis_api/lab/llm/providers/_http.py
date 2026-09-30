@@ -99,7 +99,9 @@ def map_http_error(provider: str, response: httpx.Response, *, secret: str | Non
     summary = scrub(f"{provider} HTTP {status_code} {status_text}: {message}".rstrip(": "), secret)
     retry_after = parse_retry_after(response, details)
     if status_code == 429:
-        return LLMTransientError(summary, code="llm_rate_limited", provider=provider, status=429, retry_after=retry_after)
+        return LLMTransientError(
+            summary, code="llm_rate_limited", provider=provider, status=429, retry_after=retry_after
+        )
     if status_code in TRANSIENT_STATUSES or status_code >= 500:
         return LLMTransientError(
             summary, code="llm_provider_unavailable", provider=provider, status=status_code, retry_after=retry_after
@@ -161,7 +163,9 @@ def request_json(
             f"{provider} returned a non-JSON response", code="llm_bad_response", provider=provider
         ) from None
     if not isinstance(data, dict):
-        raise LLMTransientError(f"{provider} returned an unexpected JSON shape", code="llm_bad_response", provider=provider)
+        raise LLMTransientError(
+            f"{provider} returned an unexpected JSON shape", code="llm_bad_response", provider=provider
+        )
     return data
 
 

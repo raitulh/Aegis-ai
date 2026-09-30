@@ -28,6 +28,12 @@ class Principal:
     is_platform_admin: bool = False
 
     @property
+    def fk_user_id(self) -> uuid.UUID | None:
+        """The user id to store in ``users`` foreign keys; ``None`` for non-person principals (service
+        accounts and keys whose creator was deleted carry the nil UUID)."""
+        return None if self.user_id.int == 0 else self.user_id
+
+    @property
     def actor_type(self) -> str:
         if self.auth_method == "service_account":
             return "service_account"

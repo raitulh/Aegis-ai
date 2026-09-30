@@ -87,9 +87,7 @@ def issue_access_token(
     issued = (now or datetime.now(UTC)).replace(microsecond=0)
     expires = issued + timedelta(seconds=ttl)
     jti = uuid.uuid4().hex
-    claims: dict[str, Any] = {
-        key: value for key, value in (extra_claims or {}).items() if key not in RESERVED_CLAIMS
-    }
+    claims: dict[str, Any] = {key: value for key, value in (extra_claims or {}).items() if key not in RESERVED_CLAIMS}
     claims.update(
         {
             "iss": settings.jwt_issuer,

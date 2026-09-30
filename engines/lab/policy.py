@@ -188,6 +188,11 @@ def _check_field_name(value: str) -> str:
     return value
 
 
+def is_valid_action_name(action: str) -> bool:
+    """``namespace.verb`` in lower_snake_case (catalog actions and service-defined approval actions)."""
+    return len(action) <= 64 and _ACTION_RE.match(action) is not None
+
+
 def action_matches(pattern: str, action: str) -> bool:
     """``*`` matches everything, ``ns.*`` matches every action in namespace ``ns``, else exact."""
     if pattern == "*":
@@ -774,7 +779,7 @@ def evaluate(
             if rule_matches(rule, action, ctx):
                 matched.append((tier, -rule.priority, rule))
     matched.sort(key=lambda m: (m[0], m[1], m[2].id))
-    versions = tuple([base.ref, *(s.ref for s in sets)])
+    versions = (base.ref, *(s.ref for s in sets))
 
     if not matched:
         return Decision(

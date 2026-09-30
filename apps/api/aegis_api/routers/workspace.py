@@ -254,7 +254,7 @@ def invite(
             email=body.email.lower(),
             role=body.role,
             token_hash=keyed_hash(token),
-            invited_by_id=principal.user_id,
+            invited_by_id=principal.fk_user_id,
             expires_at=utcnow() + timedelta(days=7),
         )
     )
@@ -339,7 +339,7 @@ def create_api_key(
         name=body.name,
         role=body.role,
         scopes=body.scopes,
-        created_by_id=principal.user_id,
+        created_by_id=principal.fk_user_id,
         expires_in_days=body.expires_in_days,
         test=body.test,
     )

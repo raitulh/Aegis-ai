@@ -149,11 +149,18 @@ def emit(
     channels = [org_channel(organization_id)]
     if mission_id is not None:
         channels.append(mission_channel(organization_id, mission_id))
-    after_commit(db, lambda: _notify(channels, event.id))
+    event_type = str(type)
+    after_commit(db, lambda: _notify(channels, event.id, event_type))
     return event
 
 
-def _notify(channels: list[str], event_id: int) -> None:
+def _notify(channels: list[str], event_id: int, event_type: str) -> None:
+    try:
+        from aegis_api.lab.observability.metrics import EVENTS_EMITTED
+
+        EVENTS_EMITTED.labels(event_type).inc()
+    except Exception:  # metrics must never break event delivery
+        log.debug("events_metric_failed", exc_info=True)
     try:
         from aegis_api.lab.events.bus import get_event_bus
 

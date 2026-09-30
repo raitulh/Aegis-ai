@@ -11,19 +11,25 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  UV_VERSION: "0.5.11"
+  # uv matches the version that writes uv.lock (and docker/Dockerfile.api's UV_VERSION).
+  UV_VERSION: "0.8.17"
   PNPM_VERSION: "10.28.0"
   NODE_VERSION: "22"
+  # Pinned service images used by the backend job (Temporal dev server = CLI image; sandbox base image).
+  TEMPORAL_DEV_IMAGE: "temporalio/temporal:1.9.1"
+  SANDBOX_TEST_IMAGE: "python:3.12-slim"
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Backend: lint, type-check, migrate and test the Python API + engines.
+  # Backend: lint, security lint, type-check, migrate (round-trip) and test the
+  # Python API + engines, including the lab suites that need Postgres, Redis,
+  # a Temporal dev server and a Docker daemon (sandbox tests).
   # ---------------------------------------------------------------------------
   backend:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:0.8.6-pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -33,7 +39,7 @@ jobs:
           --health-cmd "pg_isready -U postgres" --health-interval 5s
           --health-timeout 5s --health-retries 20
       redis:
-        image: redis:7-alpine
+        image: redis:7.4.11-alpine
         ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s
@@ -43,10 +49,24 @@ jobs:
       DATABASE_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/aegis_test
       TEST_DATABASE_URL: postgresql://aegis:aegis@127.0.0.1:5432/aegis_test
       TEST_DATABASE_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/aegis_test
+      TEST_REDIS_URL: redis://127.0.0.1:6379/0
+      # Tests marked `temporal` target this server. TEMPORAL_ADDRESS stays unset so the
+      # rest of the suite keeps the local workflow engine.
+      TEMPORAL_TEST_ADDRESS: 127.0.0.1:7233
       PGPASSWORD: postgres
       ENVIRONMENT: test
     steps:
       - uses: actions/checkout@v4
+
+      # GitHub service containers cannot take a command, so the Temporal dev server
+      # (in-memory, single binary) is started as a plain container on the host network.
+      - name: Start Temporal dev server
+        run: |
+          docker run -d --name temporal-dev --network host "$TEMPORAL_DEV_IMAGE" \
+            server start-dev --ip 0.0.0.0 --headless --log-level warn
+
+      - name: Pull sandbox image (tests marked `docker`)
+        run: docker pull "$SANDBOX_TEST_IMAGE"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -66,6 +86,11 @@ jobs:
       - name: Ruff (format check)
         run: uv run ruff format --check .
 
+      # Dedicated gate for flake8-bandit rules (also part of the main rule set) so a
+      # security finding is visible as its own failed step.
+      - name: Security lint (ruff S / bandit rules)
+        run: uv run ruff check --select S .
+
       - name: mypy (type-check)
         run: uv run mypy apps/api/aegis_api engines workers packages/sdk/python/aegis_ai packages/mcp/aegis_mcp
 
@@ -83,8 +108,36 @@ jobs:
       - name: Apply migrations
         run: uv run alembic upgrade head
 
-      - name: Pytest (unit, integration, evaluation)
+      # Every migration must have a working downgrade(): go back to the pre-lab
+      # schema and forward again before the tests run on the result.
+      - name: Migration round-trip (head → 0002 → head)
+        run: |
+          uv run alembic downgrade 0002
+          uv run alembic current
+          uv run alembic upgrade head
+          uv run alembic current
+
+      - name: Wait for Temporal
+        run: |
+          for _ in $(seq 1 60); do
+            if docker exec temporal-dev temporal operator cluster health --address 127.0.0.1:7233 > /dev/null 2>&1; then
+              echo "Temporal is serving on $TEMPORAL_TEST_ADDRESS"; exit 0
+            fi
+            sleep 2
+          done
+          docker logs temporal-dev
+          exit 1
+
+      - name: Pytest (unit, integration, evaluation, lab)
         run: uv run pytest --cov --cov-report=term-missing
+
+      - name: Temporal logs (on failure)
+        if: failure()
+        run: docker logs temporal-dev 2>&1 | tail -200
+
+      - name: Stop Temporal
+        if: always()
+        run: docker rm -f temporal-dev || true
 
   # ---------------------------------------------------------------------------
   # Frontend: lint, type-check, unit-test and build the Next.js app.
@@ -188,7 +241,8 @@ jobs:
         run: pnpm --filter @aegis/web test:e2e
 
   # ---------------------------------------------------------------------------
-  # Docker: verify both images build (no push).
+  # Docker: verify both images build (no push), smoke-test the API image, and
+  # validate the local stack + Kubernetes manifests render.
   # ---------------------------------------------------------------------------
   docker:
     runs-on: ubuntu-latest
@@ -201,8 +255,20 @@ jobs:
           context: .
           file: docker/Dockerfile.api
           push: false
+          load: true
+          tags: aegis-api:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Smoke-test API image
+        run: |
+          docker run --rm --read-only --tmpfs /tmp aegis-api:ci sh -c '
+            set -e
+            test "$(id -u)" = 10001
+            python -c "import aegis_api.app, engines, temporalio, boto3; print(\"imports ok\")"
+            alembic --help > /dev/null
+            python /app/docker/healthcheck.py http://example.com/ && exit 1 || echo "healthcheck refuses non-loopback URLs"
+          '
+          docker image inspect aegis-api:ci --format '{{json .Config.Entrypoint}} {{json .Config.Healthcheck.Test}}'
       - name: Build web image
         uses: docker/build-push-action@v6
         with:
@@ -211,3 +277,36 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Deployment config: docker-compose (all profiles) and kustomize overlays.
+  # ---------------------------------------------------------------------------
+  deploy-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config (all profiles)
+        run: |
+          docker compose config -q
+          docker compose --profile observability --profile egress config -q
+          docker compose --env-file .env.example config -q
+      - name: YAML parses (deploy/k8s, docker/)
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys, yaml
+          bad = 0
+          for path in sorted([*pathlib.Path("deploy/k8s").rglob("*.yaml"), *pathlib.Path("docker").rglob("*.y*ml")]):
+              try:
+                  list(yaml.safe_load_all(path.read_text()))
+              except yaml.YAMLError as exc:
+                  bad += 1
+                  print(f"{path}: {exc}")
+          sys.exit(1 if bad else 0)
+          PY
+      - name: kustomize render (dev + prod overlays)
+        run: |
+          kubectl version --client
+          for overlay in deploy/k8s/overlays/dev deploy/k8s/overlays/prod; do
+            kubectl kustomize "$overlay" > /dev/null
+            echo "rendered $overlay"
+          done

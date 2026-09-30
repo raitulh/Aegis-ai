@@ -1,61 +1,133 @@
 # syntax=docker/dockerfile:1.7
 # ==============================================================================
 # Aegis AI — API / worker image (Python 3.12 + uv)
-# Runs the FastAPI service (uvicorn) or the Celery worker. Same image, different
-# command (see docker-compose.yml).
+#
+# One image, several processes (same code, different command — see
+# docker-compose.yml and deploy/k8s/):
+#   api               uvicorn aegis_api.app:app --host 0.0.0.0 --port 8000   (default CMD)
+#   worker            celery -A aegis_api.jobs.tasks:celery_app worker
+#   temporal-worker   python -m aegis_api.lab.workflows.worker --queues default
+#   execution-worker  python -m aegis_api.lab.workflows.worker --queues execution
+#   scheduler         python -m aegis_api.lab.workflows.scheduler
+#   event-consumer    python -m aegis_api.lab.events.consumer
+#   migrate           bash docker/init.sh
+#
+# Build:   docker build -f docker/Dockerfile.api -t aegis-api:dev .
+#
+# Behind a TLS-intercepting (corporate) proxy, pass a PEM bundle that contains
+# the public roots PLUS the proxy CA as a BuildKit secret. It is mounted only
+# for the dependency-download steps and never stored in a layer:
+#   docker build --secret id=build_ca,src=/path/to/ca-bundle.pem -f docker/Dockerfile.api .
 # ==============================================================================
 
-FROM python:3.12-slim AS base
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
+# Pinned base (Debian 13 "trixie", CPython 3.12.14). Bump deliberately; for
+# production builds prefer pinning the digest as well (python:<tag>@sha256:…).
+ARG PYTHON_IMAGE=python:3.12.14-slim-trixie
+# uv version must understand the lockfile revision (uv.lock is written by uv 0.8.x).
+ARG UV_VERSION=0.8.17
+
+# ------------------------------------------------------------------------------
+# builder: resolve the locked dependency set into /opt/venv (uv never ships in
+# the runtime image).
+# ------------------------------------------------------------------------------
+FROM ${PYTHON_IMAGE} AS builder
+ARG UV_VERSION
+ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
     UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
-    UV_PROJECT_ENVIRONMENT=/opt/venv \
-    PATH="/opt/venv/bin:/root/.local/bin:$PATH"
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/opt/venv
 
-# libpq is needed at runtime by psycopg[binary]; curl is used by the container healthcheck.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# uv (pinned) — fast, reproducible resolver honouring uv.lock.
-COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
+# uv (pinned) from PyPI — the only registry the build needs besides the base image.
+RUN --mount=type=secret,id=build_ca,required=false \
+    if [ -s /run/secrets/build_ca ]; then export PIP_CERT=/run/secrets/build_ca; fi; \
+    pip install "uv==${UV_VERSION}"
 
 WORKDIR /app
 
 # ---- dependency layer (cached until the lockfile changes) --------------------
-# Copy only the manifests the workspace members reference, then sync from the lock.
+# Copy only the manifests the workspace members reference, then sync from the
+# lock. --frozen fails the build if uv.lock is out of date with pyproject.toml.
 COPY pyproject.toml uv.lock ./
 COPY packages/sdk/python/pyproject.toml packages/sdk/python/
 COPY packages/mcp/pyproject.toml packages/mcp/
 RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=secret,id=build_ca,required=false \
+    if [ -s /run/secrets/build_ca ]; then export SSL_CERT_FILE=/run/secrets/build_ca; fi; \
     uv sync --frozen --no-install-project --no-dev
 
+# PID-1 init (dumb-init, hash-pinned wheel from PyPI) — see docker/init-requirements.txt.
+COPY docker/init-requirements.txt /tmp/init-requirements.txt
+RUN --mount=type=secret,id=build_ca,required=false \
+    if [ -s /run/secrets/build_ca ]; then export PIP_CERT=/run/secrets/build_ca; fi; \
+    pip install --no-deps --only-binary=:all: --require-hashes --prefix=/opt/init -r /tmp/init-requirements.txt \
+    && /opt/init/bin/dumb-init --version
+
+# ------------------------------------------------------------------------------
+# runtime: slim Python + the prebuilt venv + application source. Source is
+# root-owned and read-only for the runtime user; only /app/var is writable.
+# ------------------------------------------------------------------------------
+FROM ${PYTHON_IMAGE} AS runtime
+
+LABEL org.opencontainers.image.title="aegis-api" \
+      org.opencontainers.image.description="Aegis AI API, workers and AI Scientist Lab processes" \
+      org.opencontainers.image.licenses="Proprietary"
+
+# engines/ and apps/api are import roots; database/ holds the Alembic env + migrations.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app/apps/api:/app:/app/packages/sdk/python:/app/packages/mcp"
+
+# No OS packages are added: psycopg[binary] bundles libpq, the healthcheck is a
+# stdlib Python probe (docker/healthcheck.py — no curl/wget in the image), and the
+# init process comes from the builder. Fewer binaries, smaller attack surface.
+
+# Non-root runtime user with a fixed UID/GID (Kubernetes runAsUser/runAsGroup 10001).
+RUN groupadd --system --gid 10001 aegis \
+    && useradd --system --uid 10001 --gid 10001 --create-home --home-dir /home/aegis \
+       --shell /usr/sbin/nologin aegis
+
+COPY --from=builder /opt/venv /opt/venv
+# dumb-init as PID 1: forwards SIGTERM/SIGINT to the (single) child and reaps
+# zombies (Celery prefork children, subprocesses) — `--init`/tini semantics.
+COPY --from=builder /opt/init/bin/dumb-init /usr/local/bin/dumb-init
+
+WORKDIR /app
+
 # ---- application source ------------------------------------------------------
+COPY alembic.ini ./
 COPY apps/api apps/api
 COPY engines engines
 COPY workers workers
 COPY database database
-COPY alembic.ini ./
 COPY packages/sdk/python packages/sdk/python
 COPY packages/mcp packages/mcp
 COPY scripts scripts
-COPY docker/init.sh docker/init.sh
+COPY docker/init.sh docker/healthcheck.py docker/
 
-# engines/ and apps/api are import roots; database/ holds the Alembic env + migrations.
-ENV PYTHONPATH="/app/apps/api:/app:/app/packages/sdk/python:/app/packages/mcp"
+# Precompile bytecode at build time (the runtime never writes .pyc files, so a
+# read-only root filesystem costs nothing at startup), then create the only
+# writable location: /app/var (local evidence storage + local object storage).
+RUN python -m compileall -q -j 0 apps/api engines workers database packages/sdk/python packages/mcp docker \
+    && mkdir -p /app/var/storage /app/var/objects \
+    && chown -R aegis:aegis /app/var
 
-# Non-root runtime user.
-RUN useradd --system --create-home --uid 10001 aegis \
-    && mkdir -p /app/var/storage \
-    && chown -R aegis:aegis /app
-USER aegis
+USER 10001:10001
 
 EXPOSE 8000
 
+# Liveness only (no dependency checks): readiness is /health/ready and is used by
+# orchestrators, not by the container healthcheck. Worker services override this.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
-    CMD curl -fsS http://localhost:8000/health || exit 1
+    CMD ["python", "/app/docker/healthcheck.py", "http://127.0.0.1:8000/health/live"]
 
-# Default: serve the API. Overridden to `celery ... worker` for the worker service.
+# --single-child: signals go to the direct child only (like tini's default), so
+# Celery's main process can run its warm shutdown instead of every pool process
+# receiving SIGTERM at once.
+ENTRYPOINT ["/usr/local/bin/dumb-init", "--single-child", "--"]
+# Default: serve the API. Overridden per service (celery / lab workers / migrate).
 CMD ["uvicorn", "aegis_api.app:app", "--host", "0.0.0.0", "--port", "8000"]
