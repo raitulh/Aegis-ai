@@ -16,6 +16,10 @@ from aegis_api.config import get_settings
 log = structlog.get_logger("aegis.http")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9\-_.]{8,64}$")
 UPLOAD_PATH_RE = re.compile(r"^/api/v1/policies(/upload|/[0-9a-f-]{36}/version)$")
+# Lab multipart uploads (datasets, artifacts, knowledge documents) use MAX_LAB_UPLOAD_BYTES.
+LAB_UPLOAD_PATH_RE = re.compile(
+    r"^/api/v1/(datasets/[0-9a-f-]{36}/versions|artifacts(/[0-9a-f-]{36}/versions)?|knowledge/documents)$"
+)
 
 
 class RequestContextMiddleware:
@@ -101,12 +105,19 @@ class BodySizeLimitMiddleware:
         settings = get_settings()
         self.default_limit = settings.max_request_bytes
         self.upload_limit = settings.max_upload_bytes + 64 * 1024
+        self.lab_upload_limit = settings.max_lab_upload_bytes + 64 * 1024
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or scope.get("method") in ("GET", "HEAD", "OPTIONS"):
             await self.app(scope, receive, send)
             return
-        limit = self.upload_limit if UPLOAD_PATH_RE.match(scope.get("path", "")) else self.default_limit
+        path = scope.get("path", "")
+        if LAB_UPLOAD_PATH_RE.match(path):
+            limit = self.lab_upload_limit
+        elif UPLOAD_PATH_RE.match(path):
+            limit = self.upload_limit
+        else:
+            limit = self.default_limit
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
         declared = headers.get("content-length")
         if declared and declared.isdigit() and int(declared) > limit:

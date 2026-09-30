@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Literal
 
+import structlog
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,10 @@ LabTier = Literal["research", "execution", "model", "download"]
 
 def get_actor(request: Request, principal: Principal = Depends(get_current_principal)) -> Actor:
     actor = Actor.from_principal(principal)
+    # Contextual ids for structured logs (only after successful authentication).
+    structlog.contextvars.bind_contextvars(
+        tenant_id=str(actor.organization_id), user_id=str(actor.user_id) if actor.user_id else None
+    )
     trace_id = getattr(request.state, "trace_id", None)
     if trace_id:
         from dataclasses import replace

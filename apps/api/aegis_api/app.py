@@ -73,6 +73,7 @@ async def lifespan(app: FastAPI):
     if settings.uses_dev_secrets and settings.is_production:
         raise RuntimeError("Refusing to start in production without SECRETS_ENCRYPTION_KEY and API_KEY_PEPPER")
     _seed_reference_data()
+    _seed_lab_catalogs()
     yield
 
 
@@ -90,6 +91,16 @@ def _seed_reference_data() -> None:
             session.close()
     except Exception:
         log.warning("framework_seed_skipped", exc_info=True)
+
+
+def _seed_lab_catalogs() -> None:
+    """Built-in lab catalogs: RBAC roles/permissions, prompts, billing plans, evaluators, benchmarks."""
+    try:
+        from aegis_api.lab.startup import run_startup_seeders
+
+        run_startup_seeders()
+    except Exception:
+        log.warning("lab_seed_skipped", exc_info=True)
 
 
 def create_app() -> FastAPI:

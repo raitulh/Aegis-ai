@@ -103,11 +103,14 @@ exclude = ["apps/web", "database/migrations/versions", "node_modules", ".venv", 
 
 [tool.pytest.ini_options]
 pythonpath = [".", "apps/api", "packages/sdk/python", "packages/mcp"]
-testpaths = ["tests/unit", "tests/integration", "tests/evaluation"]
+testpaths = ["tests/unit", "tests/integration", "tests/evaluation", "tests/lab"]
 addopts = "-q --strict-markers"
 markers = [
   "db: requires a PostgreSQL database (TEST_DATABASE_URL)",
   "redis: requires Redis (REDIS_URL)",
+  "docker: requires a Docker daemon (sandbox backend tests)",
+  "temporal: requires a Temporal server (TEMPORAL_ADDRESS)",
+  "s3: requires an S3-compatible object store (MinIO)",
 ]
 filterwarnings = ["ignore::DeprecationWarning:celery.*", "ignore::DeprecationWarning:kombu.*", "ignore::DeprecationWarning:starlette.*"]
 

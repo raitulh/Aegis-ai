@@ -196,6 +196,11 @@ class Settings(BaseSettings):
     execution_cpu_price_per_hour_usd: float = 0.0
     execution_memory_gb_price_per_hour_usd: float = 0.0
     execution_gpu_price_per_hour_json: str = "{}"  # {"nvidia-a100": 3.2}
+    # Optional egress for allowlisted sandbox networking: containers join an internal network whose only
+    # route out is an allowlisting HTTP(S) proxy. Without these, sandboxes only support network mode "none".
+    execution_egress_network: str | None = None
+    execution_egress_proxy_url: str | None = None
+    k8s_fetcher_image: str = "curlimages/curl:8.10.1"
     k8s_api_url: str = "https://kubernetes.default.svc"
     k8s_namespace: str = "aegis-sandbox"
     k8s_token_path: str = "/var/run/secrets/kubernetes.io/serviceaccount/token"  # noqa: S105 - a file path
