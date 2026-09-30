@@ -1,0 +1,61 @@
+{
+ "suite": "experiment_design_bench",
+ "cases": [
+  {
+   "id": "design-1",
+   "input": {
+    "hypothesis": "Simulated annealing with restarts beats random search on 5D Rastrigin at 2000 evaluations",
+    "harnesses": [
+     "objective",
+     "classification",
+     "regression"
+    ]
+   },
+   "expected": {
+    "must_include": [
+     "baseline",
+     "harness",
+     "seeds"
+    ]
+   }
+  },
+  {
+   "id": "design-2",
+   "input": {
+    "hypothesis": "Class-weighted logistic regression improves macro-F1 on an imbalanced split",
+    "harnesses": [
+     "objective",
+     "classification",
+     "regression"
+    ]
+   },
+   "expected": {
+    "must_include": [
+     "baseline",
+     "harness",
+     "seeds",
+     "controls"
+    ]
+   }
+  },
+  {
+   "id": "design-3",
+   "input": {
+    "hypothesis": "Larger population sizes improve hypervolume in NSGA-II on ZDT1",
+    "harnesses": [
+     "objective",
+     "classification",
+     "regression"
+    ]
+   },
+   "expected": {
+    "must_include": [
+     "baseline",
+     "harness",
+     "seeds",
+     "ablation"
+    ]
+   }
+  }
+ ]
+}

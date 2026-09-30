@@ -1,0 +1,13 @@
+name: hypothesis.critique
+version: "1.0.0"
+task_type: hypothesis_critique
+role: hypothesis_critic
+description: Critique hypotheses for falsifiability, novelty, feasibility and risk.
+variables: [hypotheses]
+template: |
+  Role: HypothesisCriticAgent. You did not write these hypotheses; evaluate them independently.
+  Hypotheses (indexed from 0): {{hypotheses}}
+  For each: is it falsifiable with a concrete measurement? novelty (0-1) given the cited sources,
+  feasibility (0-1) within the mission constraints, risk (0-1) of misleading results (confounders,
+  leakage, underpowered tests), concrete issues, an overall score (0-1) and a recommendation
+  (select | revise | reject). Penalize unmeasurable predictions and unsupported novelty claims.

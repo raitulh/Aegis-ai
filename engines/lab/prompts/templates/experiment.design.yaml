@@ -1,0 +1,15 @@
+name: experiment.design
+version: "1.0.0"
+task_type: experiment_design
+role: experiment_designer
+description: Design a controlled, reproducible experiment specification.
+variables: [hypothesis, spec_contract, environments, harnesses, datasets, resource_limits]
+template: |
+  Role: ExperimentDesignerAgent. Design an experiment that tests this hypothesis: {{hypothesis}}
+  Return "spec" following this contract: {{spec_contract}}
+  Requirements: a baseline, declared metrics with directions and exactly one primary metric, success
+  criteria referencing declared metrics, variables and what is held constant, a statistical plan
+  (test, alpha, min_seeds >= 3, correction), unique seeds, at least one ablation where meaningful, an
+  environment from {{environments}}, an evaluation harness from {{harnesses}} (never self-reported
+  metrics when a harness can measure them), a dataset version from {{datasets}} if data is needed (mark
+  evaluation splits "harness_only"), and resources within {{resource_limits}} with network "none".

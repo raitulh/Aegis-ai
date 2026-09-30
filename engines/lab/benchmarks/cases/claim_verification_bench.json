@@ -1,0 +1,130 @@
+{
+ "suite": "claim_verification_bench",
+ "cases": [
+  {
+   "id": "verify-all",
+   "input": {
+    "checks": {
+     "evaluator_passed": {
+      "passed": true
+     },
+     "statistically_supported": {
+      "passed": true
+     },
+     "baseline_validated": {
+      "passed": true
+     },
+     "replicated": {
+      "passed": true
+     },
+     "independent_evaluation": {
+      "passed": true
+     },
+     "provenance_complete": {
+      "passed": true
+     },
+     "non_self_reported_metrics": {
+      "passed": true
+     }
+    },
+    "reproductions_passed": 1
+   },
+   "expected": {
+    "status": "verified"
+   }
+  },
+  {
+   "id": "verify-pending",
+   "input": {
+    "checks": {
+     "evaluator_passed": {
+      "passed": true
+     },
+     "statistically_supported": {
+      "passed": true
+     }
+    },
+    "reproductions_passed": 0
+   },
+   "expected": {
+    "status": "partially_verified"
+   }
+  },
+  {
+   "id": "verify-repro-failed",
+   "input": {
+    "checks": {
+     "evaluator_passed": {
+      "passed": true
+     },
+     "statistically_supported": {
+      "passed": true
+     },
+     "baseline_validated": {
+      "passed": true
+     },
+     "replicated": {
+      "passed": false,
+      "contradicts": true
+     },
+     "independent_evaluation": {
+      "passed": true
+     },
+     "provenance_complete": {
+      "passed": true
+     },
+     "non_self_reported_metrics": {
+      "passed": true
+     }
+    },
+    "reproductions_passed": 0,
+    "reproductions_failed": 1
+   },
+   "expected": {
+    "status": "rejected"
+   }
+  },
+  {
+   "id": "verify-nothing",
+   "input": {
+    "checks": {},
+    "reproductions_passed": 0
+   },
+   "expected": {
+    "status": "candidate"
+   }
+  },
+  {
+   "id": "verify-self-reported",
+   "input": {
+    "checks": {
+     "evaluator_passed": {
+      "passed": true
+     },
+     "statistically_supported": {
+      "passed": true
+     },
+     "baseline_validated": {
+      "passed": true
+     },
+     "replicated": {
+      "passed": true
+     },
+     "independent_evaluation": {
+      "passed": true
+     },
+     "provenance_complete": {
+      "passed": true
+     },
+     "non_self_reported_metrics": {
+      "passed": false
+     }
+    },
+    "reproductions_passed": 1
+   },
+   "expected": {
+    "status": "partially_verified"
+   }
+  }
+ ]
+}

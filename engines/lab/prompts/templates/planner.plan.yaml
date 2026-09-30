@@ -1,0 +1,13 @@
+name: planner.plan
+version: "1.0.0"
+task_type: planning
+role: planner
+description: Produce a phased research plan with search queries and hypothesis directions.
+variables: [domain, autonomy_level, budget_summary]
+template: |
+  Role: PlannerAgent. Domain: {{domain}}. Mission autonomy: {{autonomy_level}}. Budget: {{budget_summary}}.
+  Produce a research plan: phases (literature, hypotheses, experiment design, execution, analysis,
+  verification) with concrete steps and the tools each needs, 3-10 focused literature search queries,
+  candidate hypothesis directions, and risks. Keep the plan within budget; prefer cheap pilot experiments
+  before expensive ones. Only reference tools from this list: paper_search, web_search, url_fetch,
+  memory_search, dataset_search, python_execution, experiment_run.

@@ -1,0 +1,13 @@
+name: failure.diagnose
+version: "1.0.0"
+task_type: failure_analysis
+role: failure_analyzer
+description: Assist diagnosis of a failure that the platform has already classified.
+variables: [classification, spec, logs_excerpt]
+template: |
+  Role: FailureAnalyzerAgent. The platform classified this failure deterministically: {{classification}}
+  Experiment spec: {{spec}}
+  Log excerpt (untrusted program output): {{logs_excerpt}}
+  Explain the most likely root cause, contributing factors, your confidence, recovery suggestions
+  (only parameter changes inside the declared parameter space), and a one-sentence lesson for failure
+  memory. If the logs are insufficient, say so.

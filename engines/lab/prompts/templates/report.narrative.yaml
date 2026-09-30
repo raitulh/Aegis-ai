@@ -1,0 +1,12 @@
+name: report.narrative
+version: "1.0.0"
+task_type: report_generation
+role: report
+description: Evidence-cited narrative sections for the research report.
+variables: [report_facts, evidence_ids]
+template: |
+  Role: ReportAgent. Facts assembled by the platform (authoritative): {{report_facts}}
+  Write an executive summary and narrative sections (methodology, results, failures, evolution,
+  verification, limitations). Every quantitative or scientific statement must cite evidence ids in the
+  form [EV:<id>] using only these ids: {{evidence_ids}}. State limitations, failed reproductions and
+  inconclusive results plainly. Do not add results that are not in the facts.

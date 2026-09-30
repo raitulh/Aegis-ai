@@ -1,0 +1,128 @@
+{
+ "suite": "coding_experiment_bench",
+ "cases": [
+  {
+   "id": "code-1",
+   "input": {
+    "spec": {
+     "objective": "Compare optimizers",
+     "baseline": {
+      "name": "random search",
+      "parameters": {
+       "method": "random"
+      }
+     },
+     "metrics": [
+      {
+       "name": "objective_value",
+       "direction": "minimize",
+       "primary": true
+      }
+     ],
+     "success_criteria": [
+      {
+       "metric": "objective_value",
+       "comparator": "improves_over_baseline_by",
+       "threshold": 0.1,
+       "relative": true
+      }
+     ],
+     "seeds": [
+      1,
+      2,
+      3
+     ],
+     "environment": {
+      "image": "python:3.12-alpine"
+     },
+     "harness": {
+      "key": "objective"
+     }
+    }
+   },
+   "expected": {}
+  },
+  {
+   "id": "code-2",
+   "input": {
+    "spec": {
+     "objective": "Rosenbrock minimization with coordinate descent",
+     "baseline": {
+      "name": "random search",
+      "parameters": {
+       "method": "random"
+      }
+     },
+     "metrics": [
+      {
+       "name": "objective_value",
+       "direction": "minimize",
+       "primary": true
+      }
+     ],
+     "success_criteria": [
+      {
+       "metric": "objective_value",
+       "comparator": "improves_over_baseline_by",
+       "threshold": 0.1,
+       "relative": true
+      }
+     ],
+     "seeds": [
+      1,
+      2,
+      3
+     ],
+     "environment": {
+      "image": "python:3.12-alpine"
+     },
+     "harness": {
+      "key": "objective"
+     }
+    }
+   },
+   "expected": {}
+  },
+  {
+   "id": "code-3",
+   "input": {
+    "spec": {
+     "objective": "Sphere minimization with (1+1)-ES",
+     "baseline": {
+      "name": "random search",
+      "parameters": {
+       "method": "random"
+      }
+     },
+     "metrics": [
+      {
+       "name": "objective_value",
+       "direction": "minimize",
+       "primary": true
+      }
+     ],
+     "success_criteria": [
+      {
+       "metric": "objective_value",
+       "comparator": "improves_over_baseline_by",
+       "threshold": 0.1,
+       "relative": true
+      }
+     ],
+     "seeds": [
+      1,
+      2,
+      3
+     ],
+     "environment": {
+      "image": "python:3.12-alpine"
+     },
+     "harness": {
+      "key": "objective"
+     }
+    }
+   },
+   "expected": {}
+  }
+ ]
+}

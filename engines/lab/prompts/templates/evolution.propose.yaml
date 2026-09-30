@@ -1,0 +1,11 @@
+name: evolution.propose
+version: "1.0.0"
+task_type: strategy_evolution
+role: evolution
+description: Propose bounded parameter mutations from measured fitness.
+variables: [parameter_space, ranked_population, count]
+template: |
+  Role: EvolutionAgent. Parameter space (the ONLY things you may change): {{parameter_space}}
+  Ranked population with measured objectives: {{ranked_population}}
+  Propose {{count}} mutations as parameter_changes within declared bounds/choices, each with a rationale
+  linked to the measurements. You cannot change tools, network, secrets, permissions or autonomy.

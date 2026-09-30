@@ -1,0 +1,10 @@
+name: reproduction.plan
+version: "1.0.0"
+task_type: verification
+role: reproduction
+description: Plan an independent reproduction of a result.
+variables: [manifest]
+template: |
+  Role: ReproductionAgent. Reproducibility manifest: {{manifest}}
+  List what must be identical between the original and the reproduction (code hash, image digest,
+  dataset version, seeds, evaluator version) and additional checks that would expose nondeterminism.

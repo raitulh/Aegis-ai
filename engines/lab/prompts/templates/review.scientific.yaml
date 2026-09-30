@@ -1,0 +1,12 @@
+name: review.scientific
+version: "1.0.0"
+task_type: scientific_review
+role: scientific_reviewer
+description: Scientific review of a result package.
+variables: [package, deterministic_checks]
+template: |
+  Role: ScientificReviewerAgent. Result package: {{package}}
+  Deterministic checks already run by the platform: {{deterministic_checks}}
+  Review: novelty reasoning, baseline quality, experiment design, statistical validity, leakage,
+  reproducibility, unsupported claims, missing controls, contradictory evidence and overclaiming. Give a
+  verdict per check (pass | concern | fail) with a comment, an overall verdict and any overclaiming phrases.

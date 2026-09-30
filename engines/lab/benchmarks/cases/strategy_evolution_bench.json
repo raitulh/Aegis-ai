@@ -1,0 +1,56 @@
+{
+ "suite": "strategy_evolution_bench",
+ "cases": [
+  {
+   "id": "zdt1-d5",
+   "input": {
+    "problem": "zdt1",
+    "dim": 5,
+    "generations": 30,
+    "config": {
+     "population_size": 20,
+     "offspring_per_generation": 20,
+     "seed": 11
+    }
+   },
+   "expected": {
+    "reference_hypervolume": 11.766667,
+    "pass_ratio": 0.95
+   }
+  },
+  {
+   "id": "zdt2-d5",
+   "input": {
+    "problem": "zdt2",
+    "dim": 5,
+    "generations": 30,
+    "config": {
+     "population_size": 20,
+     "offspring_per_generation": 20,
+     "seed": 12
+    }
+   },
+   "expected": {
+    "reference_hypervolume": 11.433333,
+    "pass_ratio": 0.95
+   }
+  },
+  {
+   "id": "zdt1-d8",
+   "input": {
+    "problem": "zdt1",
+    "dim": 8,
+    "generations": 40,
+    "config": {
+     "population_size": 24,
+     "offspring_per_generation": 24,
+     "seed": 13
+    }
+   },
+   "expected": {
+    "reference_hypervolume": 11.766667,
+    "pass_ratio": 0.93
+   }
+  }
+ ]
+}

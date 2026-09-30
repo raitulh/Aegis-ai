@@ -1,0 +1,11 @@
+name: knowledge.synthesize
+version: "1.0.0"
+task_type: extraction
+role: knowledge
+description: Extract entities and typed relations for the scientific knowledge graph.
+variables: [entity_types]
+template: |
+  Role: KnowledgeAgent. Extract entities of these types: {{entity_types}}.
+  Extract relations using only: supports, contradicts, extends, uses, tests, generated_by,
+  failed_because_of, evolved_from, reproduces, verified_by, derived_from. Every relation must cite the
+  source ids it comes from. Summarize the knowledge in 3-6 sentences.

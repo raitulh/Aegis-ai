@@ -1,0 +1,74 @@
+{
+ "suite": "literature_bench",
+ "cases": [
+  {
+   "id": "lit-1",
+   "input": {
+    "question": "Does mixed-precision training change final accuracy of small CNNs?",
+    "source_ids": [
+     "S1",
+     "S2",
+     "S3"
+    ],
+    "sources": {
+     "S1": "We find fp16 mixed precision matches fp32 accuracy within 0.1% on CIFAR-10 when loss scaling is used.",
+     "S2": "Without loss scaling, fp16 training diverged in 3 of 10 runs.",
+     "S3": "Mixed precision reduced training time by 1.6x on V100 GPUs."
+    }
+   },
+   "expected": {
+    "key_facts": [
+     "loss scaling",
+     "diverge",
+     "1.6"
+    ]
+   }
+  },
+  {
+   "id": "lit-2",
+   "input": {
+    "question": "Is early stopping sensitive to validation split size?",
+    "source_ids": [
+     "A",
+     "B",
+     "C"
+    ],
+    "sources": {
+     "A": "Validation sets below 5% of data produced high-variance stopping epochs.",
+     "B": "Patience of 10 epochs was robust across tasks.",
+     "C": "Early stopping on test data inflates reported accuracy."
+    }
+   },
+   "expected": {
+    "key_facts": [
+     "variance",
+     "patience",
+     "inflate"
+    ]
+   }
+  },
+  {
+   "id": "lit-3",
+   "input": {
+    "question": "What limits simulated annealing on Rastrigin?",
+    "source_ids": [
+     "R1",
+     "R2",
+     "R3"
+    ],
+    "sources": {
+     "R1": "Cooling schedules that are too fast trap annealing in local minima on Rastrigin.",
+     "R2": "Restarts improved best-found values by 30% at equal evaluation budget.",
+     "R3": "Step size adaptation matters more than initial temperature in 10 dimensions."
+    }
+   },
+   "expected": {
+    "key_facts": [
+     "cooling",
+     "restart",
+     "step size"
+    ]
+   }
+  }
+ ]
+}

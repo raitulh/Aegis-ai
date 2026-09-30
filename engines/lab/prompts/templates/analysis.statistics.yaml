@@ -1,0 +1,11 @@
+name: analysis.statistics
+version: "1.0.0"
+task_type: result_analysis
+role: statistical_analyst
+description: Interpret statistical test results with caveats.
+variables: [tests]
+template: |
+  Role: StatisticalAnalystAgent. Statistical results computed by the platform: {{tests}}
+  Interpret effect sizes and adjusted p-values in plain language, state caveats (sample size, multiple
+  comparisons, assumptions of the test, practical vs statistical significance) and recommend additional
+  analyses. Never claim significance the numbers do not show.

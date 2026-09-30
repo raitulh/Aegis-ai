@@ -1,0 +1,220 @@
+{
+ "suite": "reproducibility_bench",
+ "cases": [
+  {
+   "id": "repro-complete",
+   "input": {
+    "manifest": {
+     "experiment_id": "e",
+     "experiment_version": 1,
+     "run_id": "r",
+     "run_kind": "candidate",
+     "code": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "entrypoint": [
+       "python",
+       "main.py"
+      ]
+     },
+     "environment": {
+      "image": "python:3.12-alpine",
+      "image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     },
+     "seeds": [
+      1,
+      2,
+      3
+     ],
+     "command": [
+      "python",
+      "main.py"
+     ],
+     "hardware": {
+      "backend": "docker"
+     },
+     "outputs": [
+      {
+       "name": "solution.json",
+       "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+     ],
+     "harness": {
+      "key": "objective"
+     },
+     "evaluators": [
+      {
+       "key": "benchmark",
+       "version": "1.0.0"
+      }
+     ],
+     "spec_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+   },
+   "expected": {
+    "missing": []
+   }
+  },
+  {
+   "id": "repro-no-digest",
+   "input": {
+    "manifest": {
+     "experiment_id": "e",
+     "experiment_version": 1,
+     "run_id": "r",
+     "run_kind": "candidate",
+     "code": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "entrypoint": [
+       "python",
+       "main.py"
+      ]
+     },
+     "environment": {
+      "image": "python:3.12-alpine"
+     },
+     "seeds": [
+      1,
+      2,
+      3
+     ],
+     "command": [
+      "python",
+      "main.py"
+     ],
+     "hardware": {
+      "backend": "docker"
+     },
+     "outputs": [
+      {
+       "name": "solution.json",
+       "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+     ],
+     "harness": {
+      "key": "objective"
+     },
+     "evaluators": [
+      {
+       "key": "benchmark",
+       "version": "1.0.0"
+      }
+     ],
+     "spec_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+   },
+   "expected": {
+    "missing": [
+     "container image digest"
+    ]
+   }
+  },
+  {
+   "id": "repro-no-seeds",
+   "input": {
+    "manifest": {
+     "experiment_id": "e",
+     "experiment_version": 1,
+     "run_id": "r",
+     "run_kind": "candidate",
+     "code": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "entrypoint": [
+       "python",
+       "main.py"
+      ]
+     },
+     "environment": {
+      "image": "python:3.12-alpine",
+      "image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     },
+     "seeds": [],
+     "command": [
+      "python",
+      "main.py"
+     ],
+     "hardware": {
+      "backend": "docker"
+     },
+     "outputs": [
+      {
+       "name": "solution.json",
+       "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+     ],
+     "harness": {
+      "key": "objective"
+     },
+     "evaluators": [
+      {
+       "key": "benchmark",
+       "version": "1.0.0"
+      }
+     ],
+     "spec_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+   },
+   "expected": {
+    "missing": [
+     "random seeds"
+    ]
+   }
+  },
+  {
+   "id": "repro-no-dataset",
+   "input": {
+    "manifest": {
+     "experiment_id": "e",
+     "experiment_version": 1,
+     "run_id": "r",
+     "run_kind": "candidate",
+     "code": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "entrypoint": [
+       "python",
+       "main.py"
+      ]
+     },
+     "environment": {
+      "image": "python:3.12-alpine",
+      "image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     },
+     "seeds": [
+      1,
+      2,
+      3
+     ],
+     "command": [
+      "python",
+      "main.py"
+     ],
+     "hardware": {
+      "backend": "docker"
+     },
+     "outputs": [
+      {
+       "name": "solution.json",
+       "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+     ],
+     "harness": {
+      "key": "objective"
+     },
+     "evaluators": [
+      {
+       "key": "benchmark",
+       "version": "1.0.0"
+      }
+     ],
+     "spec_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "requires_dataset": true
+   },
+   "expected": {
+    "missing": [
+     "dataset version",
+     "dataset checksum"
+    ]
+   }
+  }
+ ]
+}

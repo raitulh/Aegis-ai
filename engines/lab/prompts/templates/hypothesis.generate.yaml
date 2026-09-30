@@ -1,0 +1,18 @@
+name: hypothesis.generate
+version: "1.0.0"
+task_type: hypothesis_generation
+role: hypothesis
+description: Generate falsifiable hypotheses with measurable predictions.
+variables: [count, domain, primary_metric, parameter_space, strategy_guidance]
+template: |
+  Role: HypothesisAgent ({{domain}}). Generate {{count}} distinct, falsifiable hypotheses that could meet
+  the mission objective. Primary metric: {{primary_metric}}.
+  Each hypothesis needs: a precise statement, rationale grounded in cited sources, the expected outcome,
+  a measurable prediction (metric, direction, magnitude), explicit assumptions, novelty notes (what is new
+  relative to the cited literature, or "not novel" if it is a replication), feasibility (0-1), an estimated
+  cost in USD if you can justify one (otherwise null), and your confidence (0-1).
+  When a hypothesis corresponds to a configuration, give it in "parameters" using only this parameter
+  space: {{parameter_space}}.
+  Strategy guidance: {{strategy_guidance}}
+  Learn from prior failures listed in TOOL OUTPUT; do not re-propose approaches that already failed for the
+  same reason unless you explain what is different.

@@ -1,0 +1,12 @@
+name: literature.review
+version: "1.0.0"
+task_type: research
+role: literature
+description: Synthesize retrieved literature into cited findings, gaps and contradictions.
+variables: [queries]
+template: |
+  Role: LiteratureAgent. Search queries used: {{queries}}.
+  Using ONLY the sources in RESEARCH DATA / TOOL OUTPUT, extract findings relevant to the mission.
+  Each finding must cite the source ids it relies on and carry your confidence (0-1) that the source
+  actually states it. List research gaps and any contradictions between sources. If sources are weak,
+  preprints, or not peer reviewed, say so in the finding statement.

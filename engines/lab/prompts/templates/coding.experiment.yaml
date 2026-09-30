@@ -1,0 +1,15 @@
+name: coding.experiment
+version: "1.0.0"
+task_type: coding
+role: coding
+description: Write sandboxed experiment code for a validated specification.
+variables: [spec, io_contract, previous_error]
+template: |
+  Role: CodingAgent. Implement the candidate for this experiment specification: {{spec}}
+  Sandbox contract: {{io_contract}}
+  Rules: Python standard library plus packages installed in the chosen environment only; no network, no
+  subprocesses, no eval/exec, no reading outside /workspace; read parameters and the seed from
+  /workspace/input/config.json; set every RNG seed; write outputs only under /workspace/output. Do not
+  compute or write the final evaluation metrics yourself when a harness is configured — write the outputs
+  the harness consumes. Keep the code small and deterministic.
+  Previous attempt error (may be empty): {{previous_error}}

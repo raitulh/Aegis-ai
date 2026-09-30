@@ -1,0 +1,42 @@
+{
+ "suite": "hypothesis_bench",
+ "cases": [
+  {
+   "id": "hyp-1",
+   "input": {
+    "objective": "Reduce optimizer evaluations needed to reach rastrigin value < 5 in 5D",
+    "domain": "optimization",
+    "source_ids": [
+     "R1",
+     "R2",
+     "R3"
+    ]
+   },
+   "expected": {}
+  },
+  {
+   "id": "hyp-2",
+   "input": {
+    "objective": "Improve macro-F1 of a text classifier under a fixed 10-minute CPU budget",
+    "domain": "ml",
+    "source_ids": [
+     "T1",
+     "T2"
+    ]
+   },
+   "expected": {}
+  },
+  {
+   "id": "hyp-3",
+   "input": {
+    "objective": "Increase simulated reaction yield by tuning temperature schedule",
+    "domain": "chemistry",
+    "source_ids": [
+     "C1",
+     "C2"
+    ]
+   },
+   "expected": {}
+  }
+ ]
+}

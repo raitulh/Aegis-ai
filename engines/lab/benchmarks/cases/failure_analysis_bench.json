@@ -1,0 +1,142 @@
+{
+ "suite": "failure_analysis_bench",
+ "cases": [
+  {
+   "id": "fail-timeout",
+   "input": {
+    "signal": {
+     "stage": "execution",
+     "timed_out": true,
+     "exit_code": null
+    }
+   },
+   "expected": {
+    "failure_type": "resource_failure"
+   }
+  },
+  {
+   "id": "fail-oom",
+   "input": {
+    "signal": {
+     "stage": "execution",
+     "exit_code": 137
+    }
+   },
+   "expected": {
+    "failure_type": "resource_failure"
+   }
+  },
+  {
+   "id": "fail-import",
+   "input": {
+    "signal": {
+     "stage": "execution",
+     "exit_code": 1,
+     "stderr_tail": "Traceback (most recent call last):\n  File \"main.py\", line 2\nModuleNotFoundError: No module named 'torch'"
+    }
+   },
+   "expected": {
+    "failure_type": "code_failure"
+   }
+  },
+  {
+   "id": "fail-data",
+   "input": {
+    "signal": {
+     "stage": "execution",
+     "exit_code": 1,
+     "stderr_tail": "FileNotFoundError: [Errno 2] No such file or directory: '/workspace/data/train.csv'"
+    }
+   },
+   "expected": {
+    "failure_type": "data_failure"
+   }
+  },
+  {
+   "id": "fail-nan",
+   "input": {
+    "signal": {
+     "stage": "execution",
+     "exit_code": 0,
+     "stdout_tail": "epoch 3: loss is nan, stopping"
+    }
+   },
+   "expected": {
+    "failure_type": "model_failure"
+   }
+  },
+  {
+   "id": "fail-policy",
+   "input": {
+    "signal": {
+     "stage": "policy",
+     "policy_denied": true
+    }
+   },
+   "expected": {
+    "failure_type": "policy_failure"
+   }
+  },
+  {
+   "id": "fail-stat",
+   "input": {
+    "signal": {
+     "stage": "evaluation",
+     "evaluator_verdicts": {
+      "statistical": "inconclusive",
+      "benchmark": "pass"
+     },
+     "evaluator_warnings": [
+      "'accuracy': 2/2 samples < min_seeds 3"
+     ]
+    }
+   },
+   "expected": {
+    "failure_type": "statistical_failure"
+   }
+  },
+  {
+   "id": "fail-repro",
+   "input": {
+    "signal": {
+     "stage": "reproduction",
+     "evaluator_verdicts": {
+      "reproduction": "fail"
+     },
+     "reproduction_relative_difference": 0.12
+    }
+   },
+   "expected": {
+    "failure_type": "reproducibility_failure"
+   }
+  },
+  {
+   "id": "fail-hyp",
+   "input": {
+    "signal": {
+     "stage": "evaluation",
+     "evaluator_verdicts": {
+      "benchmark": "fail",
+      "statistical": "fail"
+     }
+    }
+   },
+   "expected": {
+    "failure_type": "hypothesis_failure"
+   }
+  },
+  {
+   "id": "fail-syntax",
+   "input": {
+    "signal": {
+     "stage": "execution",
+     "exit_code": 1,
+     "stderr_tail": "  File \"main.py\", line 7\n    def f(:\nSyntaxError: invalid syntax"
+    }
+   },
+   "expected": {
+    "failure_type": "code_failure"
+   }
+  }
+ ]
+}

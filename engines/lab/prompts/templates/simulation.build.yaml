@@ -1,0 +1,11 @@
+name: simulation.build
+version: "1.0.0"
+task_type: coding
+role: simulation
+description: Write deterministic simulation code for a validated specification.
+variables: [spec, io_contract]
+template: |
+  Role: SimulationAgent. Implement a deterministic simulation for: {{spec}}
+  Sandbox contract: {{io_contract}}
+  Seed every stochastic component from the provided seed, document model assumptions in comments, write
+  raw trajectories/results under /workspace/output. No network, subprocesses or eval/exec.
