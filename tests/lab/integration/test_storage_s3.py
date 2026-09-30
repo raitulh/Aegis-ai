@@ -26,7 +26,11 @@ from aegis_api.lab.storage.base import ObjectNotFound, StorageUnavailable
 from aegis_api.lab.storage.keys import object_key
 from aegis_api.lab.storage.s3 import S3Storage
 
-MINIO_IMAGE = os.environ.get("TEST_MINIO_IMAGE", "minio/minio:latest")
+# Upstream minio/minio is no longer published on Docker Hub; default to the pinned build docker-compose.yml uses.
+MINIO_IMAGE = os.environ.get(
+    "TEST_MINIO_IMAGE",
+    "pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372",
+)
 MIB = 1024 * 1024
 
 

@@ -63,6 +63,8 @@ x-app-env: &app-env
   #     minio-init — never the MinIO root credentials. dev-only defaults. ---
   OBJECT_STORAGE_BACKEND: s3
   OBJECT_STORAGE_ENDPOINT: http://minio:9000
+  # Browser-facing endpoint embedded in presigned download URLs (the API itself talks to minio:9000).
+  OBJECT_STORAGE_PUBLIC_ENDPOINT: ${OBJECT_STORAGE_PUBLIC_ENDPOINT:-http://localhost:${MINIO_PORT:-9000}}
   OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-aegis-lab}
   OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-aegis-lab-app}
   OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-aegis-lab-app-dev-only-secret}

@@ -9,6 +9,7 @@
 # (docker-compose.yml / deploy/k8s).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=/dev/null
 [ -f .env ] && set -a && . ./.env && set +a
 
 pids=()

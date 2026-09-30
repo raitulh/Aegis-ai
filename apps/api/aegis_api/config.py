@@ -26,6 +26,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        # A blank value (e.g. `GEMINI_API_KEY=` in .env) means "unset" rather than an invalid empty value.
+        env_ignore_empty=True,
     )
 
     # --- runtime -----------------------------------------------------------------------------

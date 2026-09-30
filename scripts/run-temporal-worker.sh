@@ -9,6 +9,7 @@
 # Docker socket — equivalent to root on this host; see docker-compose.yml). Metrics: METRICS_PORT (default 9104).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=/dev/null
 [ -f .env ] && set -a && . ./.env && set +a
 export PYTHONPATH="apps/api:.:${PYTHONPATH:-}"
 QUEUES="${1:-${TEMPORAL_WORKER_QUEUES:-default}}"

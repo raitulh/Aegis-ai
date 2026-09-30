@@ -1,0 +1,29 @@
+# OPTIONAL — trade-off, read before applying.
+# By default sandbox pods in network mode "none" have no DNS at all, so the object-storage endpoint used
+# by the input/output transfer helpers must be reachable without cluster DNS (a stable ClusterIP or
+# private IP). If your storage endpoint can only be addressed by name, apply this policy. It lets EVERY
+# sandbox pod query cluster DNS, which untrusted code can abuse as a low-bandwidth exfiltration channel
+# (queries for attacker-controlled domains are forwarded upstream). Mitigate by restricting what CoreDNS /
+# NodeLocal DNSCache resolves for this namespace (e.g. only cluster.local and your storage domain).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-allow-dns
+  namespace: aegis-sandbox
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sandbox
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}

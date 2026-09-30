@@ -4,6 +4,7 @@
 # METRICS_PORT (default 9102).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=/dev/null
 [ -f .env ] && set -a && . ./.env && set +a
 export PYTHONPATH="apps/api:.:${PYTHONPATH:-}"
 exec uv run python -m aegis_api.lab.events.consumer

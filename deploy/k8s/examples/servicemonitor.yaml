@@ -1,0 +1,44 @@
+# Optional: Prometheus Operator scraping for every Aegis Service labelled aegis.io/metrics=true
+# (API /metrics on "http", worker metrics on "metrics"). The API endpoint sends METRICS_TOKEN from
+# aegis-secrets as a bearer token; worker metric ports are unauthenticated and reachable only from the
+# monitoring namespace (networkpolicies-aegis.yaml). Dashboard: docker/observability/grafana/dashboards.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aegis-api
+  namespace: aegis
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-api
+      aegis.io/metrics: "true"
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      authorization:
+        type: Bearer
+        credentials:
+          name: aegis-secrets
+          key: METRICS_TOKEN
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aegis-workers
+  namespace: aegis
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  selector:
+    matchExpressions:
+      - key: aegis.io/metrics
+        operator: In
+        values: ["true"]
+      - key: app.kubernetes.io/name
+        operator: NotIn
+        values: [aegis-api]
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s

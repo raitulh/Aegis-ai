@@ -30,6 +30,8 @@ ARG UV_VERSION=0.8.17
 # builder: resolve the locked dependency set into /opt/venv (uv never ships in
 # the runtime image).
 # ------------------------------------------------------------------------------
+# The tag is pinned through the PYTHON_IMAGE build arg above.
+# hadolint ignore=DL3006
 FROM ${PYTHON_IMAGE} AS builder
 ARG UV_VERSION
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -69,6 +71,7 @@ RUN --mount=type=secret,id=build_ca,required=false \
 # runtime: slim Python + the prebuilt venv + application source. Source is
 # root-owned and read-only for the runtime user; only /app/var is writable.
 # ------------------------------------------------------------------------------
+# hadolint ignore=DL3006
 FROM ${PYTHON_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="aegis-api" \

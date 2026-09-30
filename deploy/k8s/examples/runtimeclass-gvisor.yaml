@@ -1,0 +1,20 @@
+# Optional: run sandbox Jobs under gVisor (a user-space kernel) for defence in depth against container
+# escapes. Cluster-scoped, so it is NOT part of the kustomize base — apply it once per cluster, then set
+# K8S_RUNTIME_CLASS=gvisor (the prod overlay does) so the Job builder adds runtimeClassName: gvisor.
+#
+# Requirements: nodes whose container runtime has the `runsc` handler configured (GKE Sandbox nodes use
+# handler "gvisor"; containerd + runsc installs usually use "runsc"). The scheduling block keeps sandbox
+# pods on those nodes; label them with `kubectl label node <node> aegis.io/sandbox-runtime=gvisor`.
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+  labels: {app.kubernetes.io/part-of: aegis}
+handler: runsc
+overhead:
+  podFixed:
+    cpu: 100m
+    memory: 64Mi
+scheduling:
+  nodeSelector:
+    aegis.io/sandbox-runtime: gvisor

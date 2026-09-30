@@ -15,9 +15,12 @@ env:
   UV_VERSION: "0.8.17"
   PNPM_VERSION: "10.28.0"
   NODE_VERSION: "22"
-  # Pinned service images used by the backend job (Temporal dev server = CLI image; sandbox base image).
+  # Pinned service images used by the backend job (Temporal dev server = CLI image; sandbox base image;
+  # TEST_MINIO_IMAGE is read by tests marked `s3` (tests/lab/integration/test_storage_s3.py) — upstream
+  # minio/minio is no longer published on Docker Hub, so this is the pinned build docker-compose.yml uses).
   TEMPORAL_DEV_IMAGE: "temporalio/temporal:1.9.1"
   SANDBOX_TEST_IMAGE: "python:3.12-slim"
+  TEST_MINIO_IMAGE: "pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -50,8 +53,10 @@ jobs:
       TEST_DATABASE_URL: postgresql://aegis:aegis@127.0.0.1:5432/aegis_test
       TEST_DATABASE_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/aegis_test
       TEST_REDIS_URL: redis://127.0.0.1:6379/0
-      # Tests marked `temporal` target this server. TEMPORAL_ADDRESS stays unset so the
-      # rest of the suite keeps the local workflow engine.
+      # Tests marked `temporal` target this server (tests read TEST_TEMPORAL_ADDRESS; the
+      # alias is exported for tooling). TEMPORAL_ADDRESS stays unset so the rest of the
+      # suite keeps the local workflow engine.
+      TEST_TEMPORAL_ADDRESS: 127.0.0.1:7233
       TEMPORAL_TEST_ADDRESS: 127.0.0.1:7233
       PGPASSWORD: postgres
       ENVIRONMENT: test
@@ -65,8 +70,10 @@ jobs:
           docker run -d --name temporal-dev --network host "$TEMPORAL_DEV_IMAGE" \
             server start-dev --ip 0.0.0.0 --headless --log-level warn
 
-      - name: Pull sandbox image (tests marked `docker`)
-        run: docker pull "$SANDBOX_TEST_IMAGE"
+      - name: Pull test images (sandbox base for `docker` tests, MinIO for `s3` tests)
+        run: |
+          docker pull "$SANDBOX_TEST_IMAGE"
+          docker pull "$TEST_MINIO_IMAGE"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
