@@ -95,3 +95,45 @@ APPROVALS = Counter("aegis_approvals_total", "Approval requests", ["action", "st
 POLICY_DECISIONS = Counter("aegis_policy_decisions_total", "Policy decisions", ["action", "effect"], registry=REGISTRY)
 BUDGET_EXCEEDED = Counter("aegis_budget_exceeded_total", "Budget limit hits", ["kind"], registry=REGISTRY)
 WEBHOOK_DELIVERIES = Counter("aegis_webhook_deliveries_total", "Webhook deliveries", ["outcome"], registry=REGISTRY)
+
+# --- events, SSE, webhooks, readiness (A6) -------------------------------------------------------
+SSE_EVENTS_SENT = Counter("aegis_sse_events_sent_total", "Events written to SSE streams", registry=REGISTRY)
+EVENT_BUS_NOTIFICATIONS = Counter(
+    "aegis_event_bus_notifications_total", "Event bus notifications", ["backend", "outcome"], registry=REGISTRY
+)
+EVENTS_CONSUMED = Counter(
+    "aegis_event_consumer_events_total",
+    "Outbox events processed by event consumers",
+    ["consumer", "outcome"],
+    registry=REGISTRY,
+)
+EVENT_CONSUMER_RUNS = Counter(
+    "aegis_event_consumer_runs_total", "Event consumer passes", ["consumer", "outcome"], registry=REGISTRY
+)
+WEBHOOK_DELIVERY_LATENCY = Histogram(
+    "aegis_webhook_delivery_duration_seconds",
+    "Outbound webhook HTTP latency",
+    ["outcome"],
+    buckets=_LATENCY_BUCKETS,
+    registry=REGISTRY,
+)
+DEPENDENCY_UP = Gauge(
+    "aegis_dependency_up", "Readiness check result per dependency (1 ok, 0 failing)", ["dependency"], registry=REGISTRY
+)
+
+_runtime_collectors_registered = False
+
+
+def register_runtime_collectors() -> None:
+    """Register the process/platform/GC collectors on ``REGISTRY`` exactly once (idempotent)."""
+    global _runtime_collectors_registered
+    if _runtime_collectors_registered:
+        return
+    from prometheus_client import GCCollector, PlatformCollector, ProcessCollector
+
+    for factory in (ProcessCollector, PlatformCollector, GCCollector):
+        try:
+            factory(registry=REGISTRY)
+        except ValueError:  # already registered (duplicated timeseries)
+            continue
+    _runtime_collectors_registered = True

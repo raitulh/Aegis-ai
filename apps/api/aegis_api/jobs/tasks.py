@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 
 from celery import Celery
 
@@ -22,9 +23,19 @@ celery_app.conf.update(
 )
 
 
+def _resolve_lab_job(dotted: str) -> Callable[..., object] | None:
+    """Lab job functions are addressed by dotted path; only ``aegis_api.lab.*`` modules are resolvable."""
+    import importlib
+
+    module_name, _, attr = dotted.partition(":")
+    if not module_name.startswith("aegis_api.lab.") or not attr or attr.startswith("_"):
+        return None
+    return getattr(importlib.import_module(module_name), attr, None)
+
+
 @celery_app.task(name="aegis.run_service_job", bind=True, max_retries=2)
 def run_service_job(self, dotted: str, organization_id: str, args: list) -> None:
-    fn = JOB_REGISTRY.get(dotted)
+    fn = JOB_REGISTRY.get(dotted) or _resolve_lab_job(dotted)
     if fn is None:
         raise ValueError(f"Unknown job {dotted}")
     session = session_factory()()
