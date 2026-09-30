@@ -1,0 +1,179 @@
+# NetworkPolicies for the platform namespace (aegis). Default deny in both directions, then explicit
+# allows. Requires a CNI that enforces NetworkPolicy (Calico, Cilium, GKE Dataplane V2, …).
+#
+# PLACEHOLDERS to adapt per cluster (overlays):
+#   * ingress controller namespace  kubernetes.io/metadata.name: ingress-nginx
+#   * monitoring namespace          kubernetes.io/metadata.name: monitoring
+#   * backend egress uses ports (5432 Postgres, 6379 Redis, 7233 Temporal, 443 HTTPS: model providers,
+#     object storage, Temporal Cloud; 9000 MinIO; 587/465 SMTP) to any address except the cloud metadata
+#     endpoint. Kubernetes NetworkPolicy has no FQDN rules: narrow the ipBlocks to your managed
+#     database / cache / Temporal CIDRs, or use Cilium/Calico FQDN policies for provider hostnames.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: aegis
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Name resolution for every pod in the namespace (cluster DNS only).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: aegis
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+# The API accepts traffic only from the ingress controller (and an in-namespace web/BFF if you run one).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-ingress
+  namespace: aegis
+  labels: {app.kubernetes.io/part-of: aegis, app.kubernetes.io/name: aegis-api}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx   # PLACEHOLDER: your ingress controller namespace
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-web            # Next.js BFF, if deployed in this namespace
+      ports:
+        - {protocol: TCP, port: 8000}
+---
+# Prometheus scraping (API /metrics — token-protected when METRICS_TOKEN is set — and worker ports).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics-scrape-ingress
+  namespace: aegis
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: aegis
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring      # PLACEHOLDER: your Prometheus namespace
+      ports:
+        - {protocol: TCP, port: 8000}
+        - {protocol: TCP, port: 9102}
+        - {protocol: TCP, port: 9103}
+        - {protocol: TCP, port: 9104}
+        - {protocol: TCP, port: 9105}
+---
+# Backend processes → database, cache, Temporal, object storage, model providers, SMTP.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-egress
+  namespace: aegis
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [api, worker, temporal-worker, execution-worker, scheduler, event-consumer, migrate]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        # In-cluster services (e.g. Temporal from its Helm chart, an in-cluster MinIO).
+        - namespaceSelector: {}
+        # External / managed services. Cloud metadata endpoints are never reachable.
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [169.254.169.254/32, 169.254.170.2/32]
+      ports:
+        - {protocol: TCP, port: 5432}   # PostgreSQL
+        - {protocol: TCP, port: 6379}   # Redis
+        - {protocol: TCP, port: 7233}   # Temporal frontend
+        - {protocol: TCP, port: 443}    # HTTPS: LLM providers, object storage, Temporal Cloud
+        - {protocol: TCP, port: 9000}   # MinIO / S3-compatible on a custom port
+        - {protocol: TCP, port: 587}    # SMTP submission (only used when SMTP_HOST is set)
+        - {protocol: TCP, port: 465}
+---
+# The execution worker additionally talks to the Kubernetes API server (Jobs/Pods in aegis-sandbox).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: execution-worker-apiserver-egress
+  namespace: aegis
+  labels: {app.kubernetes.io/part-of: aegis, app.kubernetes.io/name: aegis-execution-worker}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-execution-worker
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0     # narrow to your control-plane endpoint(s) if known
+            except: [169.254.169.254/32, 169.254.170.2/32]
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}
+---
+# Egress proxy: only allowlist-mode sandbox pods may connect; it may only reach public addresses on
+# 80/443 (private ranges and metadata endpoints are excluded, so an allowlisted name that resolves
+# to an internal address is still unreachable).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-proxy
+  namespace: aegis
+  labels: {app.kubernetes.io/part-of: aegis, app.kubernetes.io/name: aegis-egress-proxy}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-egress-proxy
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: aegis-sandbox
+          podSelector:
+            matchLabels:
+              aegis.io/egress: allowlist
+      ports:
+        - {protocol: TCP, port: 8888}
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+              - 127.0.0.0/8
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 80}

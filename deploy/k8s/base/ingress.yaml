@@ -1,0 +1,32 @@
+# Public entry point for the API (ingress-nginx example). Hostname and TLS secret are PLACEHOLDERS
+# patched per overlay. Annotations: long read timeout + no buffering for Server-Sent Events
+# (/events/stream, /missions/{id}/events/stream), and a body limit matching MAX_LAB_UPLOAD_BYTES (200 MiB).
+# The TLS certificate is expected from cert-manager or your platform (secret aegis-api-tls).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aegis-api
+  namespace: aegis
+  labels: {app.kubernetes.io/name: aegis-api, app.kubernetes.io/part-of: aegis}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-body-size: 200m
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [api.aegis.example.com]
+      secretName: aegis-api-tls
+  rules:
+    - host: api.aegis.example.com   # PLACEHOLDER
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aegis-api
+                port:
+                  name: http

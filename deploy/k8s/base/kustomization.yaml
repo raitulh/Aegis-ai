@@ -1,0 +1,39 @@
+# Aegis AI — Kubernetes base (kustomize). Do not apply the base directly: use an overlay.
+#
+#   kubectl kustomize deploy/k8s/overlays/dev          # render
+#   kubectl apply -k deploy/k8s/overlays/prod          # apply
+#
+# Not included (bring your own / managed): PostgreSQL 16 + pgvector, Redis, Temporal (Cloud or the
+# official Helm chart), S3-compatible object storage, the ingress controller, Prometheus, and the
+# Secret `aegis-secrets` (see examples/external-secret.yaml for its keys). The web frontend (Next.js)
+# is not part of these manifests.
+#
+# Security model:
+#   * every pod: non-root (uid 10001), read-only root filesystem (+ emptyDir /tmp and /app/var), all
+#     capabilities dropped, no privilege escalation, RuntimeDefault seccomp; namespaces enforce the
+#     "restricted" Pod Security Standard;
+#   * no service-account tokens except the execution worker, whose Role is limited to Jobs/Pods/logs in
+#     aegis-sandbox;
+#   * default-deny NetworkPolicies in both namespaces; sandbox pods reach only object storage (and, in
+#     allowlist mode, the egress proxy);
+#   * secrets only via secretKeyRef to an externally managed Secret — no literal secrets in git.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespaces.yaml
+  - serviceaccounts.yaml
+  - rbac-execution.yaml
+  - configmap.yaml
+  - migrate-job.yaml
+  - api.yaml
+  - worker.yaml
+  - temporal-worker.yaml
+  - execution-worker.yaml
+  - scheduler.yaml
+  - event-consumer.yaml
+  - egress-proxy.yaml
+  - networkpolicies-aegis.yaml
+  - networkpolicies-sandbox.yaml
+  - sandbox-quota.yaml
+  - ingress.yaml

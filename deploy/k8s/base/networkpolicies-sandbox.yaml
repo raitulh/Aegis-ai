@@ -1,0 +1,83 @@
+# NetworkPolicies for untrusted experiment Jobs (namespace aegis-sandbox). Nothing may connect IN to a
+# sandbox pod, and egress is denied unless one of the narrow rules below matches.
+#
+# Pod labels set by the Job builder (engines/lab/sandbox.py):
+#   app.kubernetes.io/component=sandbox     every sandbox pod
+#   aegis.io/network=none|allowlist         the job's network mode
+#   aegis.io/egress=allowlist               allowlist-mode pods only
+#
+# Why sandbox pods need object storage at all: every Job has a `fetch-inputs` init container (downloads
+# the inputs tarball from a presigned GET URL) and an `upload-outputs` sidecar (PUTs results to a presigned
+# URL). NetworkPolicy is per pod, not per container, so the experiment container can reach the same
+# endpoint — it never sees the presigned URLs and holds no credentials, but it could use an
+# attacker-supplied presigned URL on the SAME endpoint. Therefore the storage endpoint allowed here MUST
+# be dedicated to you (in-cluster MinIO, or a private/VPC endpoint whose policy only admits your bucket),
+# never a shared public S3 front door.
+#
+# DNS: network=none pods get NO DNS (DNS queries are an exfiltration channel). Use an object-storage
+# endpoint that needs no cluster DNS (a stable ClusterIP / private IP), or apply
+# examples/sandbox-allow-dns.yaml and accept that trade-off. Allowlist pods get DNS to find the proxy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: aegis-sandbox
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Input/output transfer helpers → object storage only. PLACEHOLDER CIDR (TEST-NET-1 = matches nothing):
+# patch it in your overlay to the address(es) of your dedicated storage endpoint.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-object-storage-egress
+  namespace: aegis-sandbox
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sandbox
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.10/32   # PLACEHOLDER: dedicated object-storage endpoint
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 9000}
+---
+# Allowlist-mode pods → the egress proxy (and cluster DNS to resolve its Service name). The proxy then
+# enforces the domain allowlist. Nothing else is reachable.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-allowlist-egress
+  namespace: aegis-sandbox
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  podSelector:
+    matchLabels:
+      aegis.io/egress: allowlist
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: aegis
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-egress-proxy
+      ports:
+        - {protocol: TCP, port: 8888}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}

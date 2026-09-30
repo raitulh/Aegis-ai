@@ -94,9 +94,11 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
-            tcpSocket:
-              port: proxy
+            # Same probe (a bare TCP check would make tinyproxy log a read error on every probe).
+            exec:
+              command: ["sh", "-c", "[ \"$(curl -s -o /dev/null -w '%{http_code}' -x http://127.0.0.1:8888 http://healthcheck.invalid/)\" = 403 ]"]
             periodSeconds: 30
+            timeoutSeconds: 5
           resources:
             requests: {cpu: 50m, memory: 32Mi, ephemeral-storage: 16Mi}
             limits: {cpu: 500m, memory: 128Mi, ephemeral-storage: 64Mi}

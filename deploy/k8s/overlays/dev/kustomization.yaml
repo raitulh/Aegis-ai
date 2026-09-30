@@ -1,0 +1,84 @@
+# Development overlay: single replicas, small requests, a locally built image, verbose logs, full trace
+# sampling, demo data enabled. Suitable for kind / minikube / a shared dev cluster.
+#
+#   docker build -f docker/Dockerfile.api -t aegis-api:dev . && kind load docker-image aegis-api:dev
+#   kubectl apply -k deploy/k8s/overlays/dev
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+images:
+  - name: aegis-api
+    newName: aegis-api
+    newTag: dev
+
+replicas:
+  - name: aegis-api
+    count: 1
+  - name: aegis-worker
+    count: 1
+  - name: aegis-temporal-worker
+    count: 1
+  - name: aegis-execution-worker
+    count: 1
+
+patches:
+  # Non-secret settings for development.
+  - target: {kind: ConfigMap, name: aegis-config}
+    patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: aegis-config
+      data:
+        ENVIRONMENT: development
+        LOG_LEVEL: DEBUG
+        API_BASE_URL: http://api.aegis.localtest.me
+        WEB_BASE_URL: http://aegis.localtest.me
+        CORS_ORIGINS: http://aegis.localtest.me,http://localhost:3000
+        TEMPORAL_NAMESPACE: default
+        OTEL_TRACES_SAMPLER_RATIO: "1.0"
+        DEMO_ENABLED: "true"
+  # Small footprint: every Aegis container gets the same modest requests/limits.
+  - target: {kind: Deployment, labelSelector: "app.kubernetes.io/part-of=aegis,app.kubernetes.io/component notin (egress-proxy)"}
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: {cpu: 50m, memory: 256Mi, ephemeral-storage: 128Mi}
+          limits: {cpu: "1", memory: 1Gi, ephemeral-storage: 2Gi}
+  # Autoscaling bounds for a single-node dev cluster.
+  - target: {kind: HorizontalPodAutoscaler, name: aegis-api}
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+  - target: {kind: HorizontalPodAutoscaler, name: aegis-temporal-worker}
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+  # With one API replica, "minAvailable: 1" would block node drains; allow the single pod to move.
+  - target: {kind: PodDisruptionBudget, name: aegis-api}
+    patch: |-
+      - op: remove
+        path: /spec/minAvailable
+      - op: add
+        path: /spec/maxUnavailable
+        value: 1
+  # Plain-HTTP dev hostname (*.localtest.me resolves to 127.0.0.1); no TLS.
+  - target: {kind: Ingress, name: aegis-api}
+    patch: |-
+      - op: remove
+        path: /spec/tls
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.aegis.localtest.me
+      - op: replace
+        path: /metadata/annotations/nginx.ingress.kubernetes.io~1ssl-redirect
+        value: "false"

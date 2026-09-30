@@ -1,0 +1,98 @@
+# Production overlay: HA replicas, production-sized resources, immutable image reference, gVisor for
+# sandbox Jobs, tightened sandbox storage egress. Every PLACEHOLDER must be replaced before use.
+#
+#   kubectl apply -k deploy/k8s/overlays/prod
+#
+# Prerequisites: the Secret `aegis-secrets` (examples/external-secret.yaml), managed Postgres/Redis,
+# Temporal, object storage, an ingress controller, and — for K8S_RUNTIME_CLASS=gvisor — nodes with the
+# runsc handler plus examples/runtimeclass-gvisor.yaml applied.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+images:
+  - name: aegis-api
+    newName: registry.example.com/aegis/aegis-api   # PLACEHOLDER
+    newTag: "1.0.0"                                 # PLACEHOLDER — prefer `digest: sha256:…` for immutability
+
+replicas:
+  - name: aegis-api
+    count: 3
+  - name: aegis-worker
+    count: 2
+  - name: aegis-temporal-worker
+    count: 3
+  - name: aegis-execution-worker
+    count: 2
+  - name: aegis-egress-proxy
+    count: 2
+
+patches:
+  - target: {kind: ConfigMap, name: aegis-config}
+    patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: aegis-config
+      data:
+        API_BASE_URL: https://api.aegis.example.com   # PLACEHOLDER
+        WEB_BASE_URL: https://aegis.example.com       # PLACEHOLDER
+        CORS_ORIGINS: https://aegis.example.com       # PLACEHOLDER
+        # Sandbox Jobs run under gVisor (user-space kernel) — requires examples/runtimeclass-gvisor.yaml.
+        K8S_RUNTIME_CLASS: gvisor
+        OTEL_TRACES_SAMPLER_RATIO: "0.05"
+  # API: production sizing.
+  - target: {kind: Deployment, name: aegis-api}
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: {cpu: 500m, memory: 1Gi, ephemeral-storage: 256Mi}
+          limits: {cpu: "2", memory: 2Gi, ephemeral-storage: 2Gi}
+  # Default-queue workers run agents / LLM calls / analysis activities.
+  - target: {kind: Deployment, name: aegis-temporal-worker}
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: {cpu: 500m, memory: 1Gi, ephemeral-storage: 256Mi}
+          limits: {cpu: "2", memory: 2Gi, ephemeral-storage: 4Gi}
+  - target: {kind: Deployment, name: aegis-worker}
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: {cpu: 500m, memory: 1Gi, ephemeral-storage: 256Mi}
+          limits: {cpu: "2", memory: 2Gi, ephemeral-storage: 4Gi}
+  - target: {kind: HorizontalPodAutoscaler, name: aegis-api}
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 12
+  - target: {kind: HorizontalPodAutoscaler, name: aegis-temporal-worker}
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 10
+  - target: {kind: Ingress, name: aegis-api}
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: api.aegis.example.com   # PLACEHOLDER
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.aegis.example.com   # PLACEHOLDER
+  # Sandbox transfer helpers may reach ONLY your dedicated object-storage endpoint.
+  - target: {kind: NetworkPolicy, namespace: aegis-sandbox, name: sandbox-object-storage-egress}
+    patch: |-
+      - op: replace
+        path: /spec/egress/0/to/0/ipBlock/cidr
+        value: 10.20.30.40/32   # PLACEHOLDER: private storage endpoint address

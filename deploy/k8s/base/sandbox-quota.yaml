@@ -1,0 +1,41 @@
+# Hard ceilings for the untrusted sandbox namespace. Per-job limits are enforced by the application
+# (EXECUTION_MAX_* settings + org execution policy); these quotas bound the blast radius of the whole
+# namespace even if that logic were bypassed. Tune per cluster (overlays).
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sandbox-quota
+  namespace: aegis-sandbox
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  hard:
+    count/jobs.batch: "50"
+    pods: "50"
+    requests.cpu: "32"
+    limits.cpu: "32"
+    requests.memory: 128Gi
+    limits.memory: 128Gi
+    requests.ephemeral-storage: 256Gi
+    limits.ephemeral-storage: 256Gi
+    # GPUs are off by default; raise together with EXECUTION_GPU_ENABLED (examples/sandbox-gpu.yaml).
+    requests.nvidia.com/gpu: "0"
+    # Sandboxes need no Services, volumes or credentials of their own. (Raise `secrets` only if you set
+    # K8S_IMAGE_PULL_SECRET — that pull secret must live in this namespace.)
+    services: "0"
+    persistentvolumeclaims: "0"
+    secrets: "0"
+    configmaps: "1"   # kube-root-ca.crt, created automatically in every namespace
+---
+# Defaults/ceilings for any container that does not declare resources (the Job builder always does).
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: sandbox-limits
+  namespace: aegis-sandbox
+  labels: {app.kubernetes.io/part-of: aegis}
+spec:
+  limits:
+    - type: Container
+      default: {cpu: "1", memory: 1Gi, ephemeral-storage: 1Gi}
+      defaultRequest: {cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi}
+      max: {cpu: "8", memory: 32Gi, ephemeral-storage: 64Gi}
