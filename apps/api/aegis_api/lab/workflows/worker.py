@@ -46,15 +46,11 @@ async def run_workers(queues: list[str], *, max_activities: int | None = None) -
     """Connect, build one worker per queue and run until SIGTERM/SIGINT."""
     from temporalio.worker import Worker
 
-    from aegis_api.lab.workflows.temporal_engine import build_worker, connect_client
+    from aegis_api.lab.workflows.temporal_engine import build_workers, connect_client
 
     client = await connect_client()
     identity = f"aegis-worker@{socket.gethostname()}:{os.getpid()}"
-    workers: list[Worker] = []
-    for queue in queues:
-        worker = build_worker(client, queue, max_concurrent_activities=max_activities, identity=identity)
-        if worker is not None:
-            workers.append(worker)
+    workers: list[Worker] = build_workers(client, queues, max_concurrent_activities=max_activities, identity=identity)
     if not workers:
         raise RuntimeError("Nothing to run: no workflows or activities are registered for the requested queues")
     stop = asyncio.Event()

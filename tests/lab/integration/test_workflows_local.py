@@ -986,3 +986,84 @@ def test_workflow_runs_api_permissions(lab, no_autostart) -> None:  # type: igno
     approval = client.post(f"/api/v1/workflow-runs/{run_id}/signal", json={"name": "approval"}, headers=headers)
     assert approval.status_code == 403
     assert get_run(lab, run_id).status == "PENDING"
+
+
+def test_default_scheduler_tasks_run_for_an_organization(lab, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Every default task (incl. other contexts' maintenance activities) runs, scoped to this test's tenant."""
+    from aegis_api.lab.workflows import maintenance, scheduler
+
+    monkeypatch.setattr(maintenance, "organization_ids", lambda: [lab.org_id])
+    monkeypatch.setattr(maintenance, "organization_ids_with_open_workflows", lambda: [lab.org_id])
+    monkeypatch.setattr(maintenance, "organization_ids_where", lambda stmt: [lab.org_id])
+    sched = scheduler.Scheduler(interval_seconds=15)
+    results = sched.run_once(force=True)
+    assert set(results) == {
+        "start_pending",
+        "resume_stale",
+        "deliver_signals",
+        "reconcile_jobs",
+        "expire_approvals",
+        "retention_purge",
+        "rollup_usage",
+        "mcp_health",
+    }
+    for name, result in results.items():
+        assert result.status in ("ok", "skipped"), (name, result)
+        if result.status == "ok":  # activities of other contexts receive payloads they accept
+            assert result.detail.get("failed", 0) == 0, (name, result.detail)
+    for name in ("start_pending", "resume_stale", "deliver_signals", "retention_purge"):
+        assert results[name].detail["organizations"] == 1
+    # Periodic tasks are not due again right away; per-tick tasks are.
+    again = sched.run_once()
+    assert {"start_pending", "resume_stale", "deliver_signals", "reconcile_jobs"} <= set(again)
+    assert not {"retention_purge", "rollup_usage", "expire_approvals", "mcp_health"} & set(again)
+
+
+def test_generic_flow_launch_helpers_link_their_subjects(lab, no_autostart) -> None:  # type: ignore[no-untyped-def]
+    from types import SimpleNamespace
+
+    from aegis_api.lab.models import Agent, AgentRun, AgentVersion
+    from aegis_api.lab.workflows.launcher import dispatch_compute_job, run_agent_async
+
+    job = SimpleNamespace(id=uuid.uuid4(), project_id=lab.project_id, mission_id=None, attempt=2, workflow_run_id=None)
+    with lab.db() as db:
+        run = dispatch_compute_job(db, lab.actor(), job)
+        assert (run.kind, run.subject_type, run.subject_id) == ("ExecutionJobWorkflow", "compute_job", str(job.id))
+        assert run.external_id.endswith(":attempt-2")
+        assert run.input["flow_input"] == {"job_id": str(job.id)}
+        assert job.workflow_run_id == run.id
+
+    with lab.db() as db:
+        agent = Agent(organization_id=lab.org_id, role="LiteratureAgent", name=f"lit-{uuid.uuid4().hex[:8]}")
+        db.add(agent)
+        db.flush()
+        version = AgentVersion(
+            organization_id=lab.org_id,
+            agent_id=agent.id,
+            version=1,
+            prompt_key="literature.synthesize",
+            config_hash="0" * 64,
+        )
+        db.add(version)
+        db.flush()
+        agent_run = AgentRun(
+            organization_id=lab.org_id,
+            workspace_id=lab.workspace_id,
+            project_id=lab.project_id,
+            agent_id=agent.id,
+            agent_version_id=version.id,
+            role="LiteratureAgent",
+            input={"query": "graph neural networks"},
+        )
+        db.add(agent_run)
+        db.flush()
+        run = run_agent_async(db, lab.actor(), agent_run)
+        assert run.kind == "AgentRunWorkflow"
+        assert agent_run.workflow_run_id == run.id
+        assert run.input["flow_input"] == {
+            "agent_run_id": str(agent_run.id),
+            "role": "LiteratureAgent",
+            "project_id": str(lab.project_id),
+            "input": {"query": "graph neural networks"},
+        }
+    assert len(no_autostart) == 2

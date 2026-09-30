@@ -338,7 +338,7 @@ def retry_workflow(
 # ---------------------------------------------------------------------------------------------------
 def dispatch_compute_job(db: Session, actor: Actor, job: Any) -> WorkflowRun:
     """Launch ``ExecutionJobWorkflow`` for a submitted ``ComputeJob`` (one run per job attempt)."""
-    return launch_workflow(
+    run = launch_workflow(
         db,
         actor,
         "ExecutionJobWorkflow",
@@ -349,6 +349,10 @@ def dispatch_compute_job(db: Session, actor: Actor, job: Any) -> WorkflowRun:
         mission_id=job.mission_id,
         workflow_key=f"attempt-{int(getattr(job, 'attempt', 1) or 1)}",
     )
+    if hasattr(job, "workflow_run_id") and job.workflow_run_id != run.id:
+        job.workflow_run_id = run.id
+        db.flush()
+    return run
 
 
 def run_agent_async(db: Session, actor: Actor, agent_run: Any) -> WorkflowRun:

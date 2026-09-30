@@ -423,3 +423,19 @@ def build_worker(
         graceful_shutdown_timeout=timedelta(seconds=graceful_shutdown_seconds),
         identity=identity,
     )
+
+
+def build_workers(
+    client: Client,
+    queues: list[str] | tuple[str, ...] = ("default", "execution"),
+    *,
+    max_concurrent_activities: int | None = None,
+    identity: str | None = None,
+) -> list[Worker]:
+    """One worker per logical queue (queues with nothing registered are skipped)."""
+    workers: list[Worker] = []
+    for queue in dict.fromkeys(queues):
+        worker = build_worker(client, queue, max_concurrent_activities=max_concurrent_activities, identity=identity)
+        if worker is not None:
+            workers.append(worker)
+    return workers

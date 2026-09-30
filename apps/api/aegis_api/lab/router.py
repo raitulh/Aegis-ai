@@ -24,6 +24,7 @@ from aegis_api.lab.strategies.router import router as strategies_router
 from aegis_api.lab.tools.router import router as tools_router
 from aegis_api.lab.usage.router import router as usage_router
 from aegis_api.lab.verification.router import router as verification_router
+from aegis_api.lab.workflows.router import router as workflows_router
 
 api_router = APIRouter()
 for _router in (
@@ -47,6 +48,7 @@ for _router in (
     tools_router,
     usage_router,
     events_router,
+    workflows_router,
 ):
     api_router.include_router(_router)
 
@@ -80,6 +82,7 @@ LAB_TAGS_METADATA = [
         "description": "Claims, lineage, reproduction, verification, discoveries, reviews, reports.",
     },
     {"name": "Governance", "description": "Governance policies, approvals, budgets and quotas."},
+    {"name": "Workflows", "description": "Durable workflow runs: status, recorded steps, cancel, retry and signals."},
     {"name": "Tools", "description": "Tool broker, tool invocations and MCP servers/tools."},
     {"name": "Usage", "description": "Usage, cost aggregation and billing."},
     {"name": "Events", "description": "Event log, live SSE streams and webhooks."},

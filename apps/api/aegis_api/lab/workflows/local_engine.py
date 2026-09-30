@@ -546,16 +546,23 @@ class LocalWorkflowContext:
         if found:
             return payload
         self._enter_wait(name)
-        normal_exit = False
         try:
             value = await self._poll_signal(name, key, deadline)
-            normal_exit = True
-            return value
-        finally:
+        except (Exception, asyncio.CancelledError):
+            # The flow abandoned the wait (e.g. a sibling in gather() failed). Engine-initiated cancellation
+            # leaves the status to the finalizer.
             self._waits -= 1
-            if (normal_exit or self.cancel_reason is None) and self._waits == 0:
+            if self.cancel_reason is None and self._waits == 0:
                 with contextlib.suppress(_LeaseLost):
-                    self._set_status(W.RUNNING, reason="signal_received" if normal_exit else "wait_abandoned")
+                    self._set_status(W.RUNNING, reason="wait_abandoned")
+            raise
+        except BaseException:
+            self._waits -= 1  # crash / lease loss: record nothing
+            raise
+        self._waits -= 1
+        if self._waits == 0:
+            self._set_status(W.RUNNING, reason="signal_received")
+        return value
 
     async def sleep(self, seconds: float) -> None:
         if seconds < 0:

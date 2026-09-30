@@ -143,6 +143,7 @@ ACTIVITY_MODULES: tuple[str, ...] = (
     "aegis_api.lab.verification.activities",
     "aegis_api.lab.governance.activities",
     "aegis_api.lab.data.activities",
+    "aegis_api.lab.workflows.activities",
 )
 
 
