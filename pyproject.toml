@@ -27,6 +27,18 @@ dependencies = [
   "pyyaml>=6.0",
   "numpy>=2.0",
   "reportlab>=4.2",
+  "temporalio>=1.9",
+  "docker>=7.1",
+  "boto3>=1.35",
+  "jsonschema>=4.23",
+  "defusedxml>=0.7",
+  "prometheus-client>=0.21",
+  "opentelemetry-api>=1.27",
+  "opentelemetry-sdk>=1.27",
+  "opentelemetry-exporter-otlp-proto-http>=1.27",
+  "opentelemetry-instrumentation-fastapi>=0.48b0",
+  "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
+  "opentelemetry-instrumentation-httpx>=0.48b0",
 ]
 
 [dependency-groups]
@@ -37,6 +49,8 @@ dev = [
   "mypy>=1.11",
   "types-PyYAML>=6.0",
   "celery-types>=0.22",
+  "moto[s3]>=5.0",
+  "types-jsonschema>=4.23",
 ]
 
 [tool.uv]
@@ -76,6 +90,8 @@ ignore = [
 "scripts/**" = ["T20"]
 # The SDK targets Python >=3.10, so it keeps typing.Generic instead of PEP 695 syntax.
 "packages/sdk/python/**" = ["UP046", "UP047"]
+# "/tmp" here is a path *inside* the sandbox container (tmpfs), not a host temp file.
+"apps/api/aegis_api/infrastructure/execution/**" = ["S108"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["aegis_api", "engines", "workers", "database", "aegis_ai", "aegis_mcp"]
@@ -92,6 +108,11 @@ no_implicit_optional = true
 check_untyped_defs = true
 disallow_incomplete_defs = false
 exclude = ["apps/web", "database/migrations/versions", "node_modules", ".venv", "packages/sdk/python/build"]
+
+[[tool.mypy.overrides]]
+module = ["docker", "docker.*", "boto3", "boto3.*", "botocore", "botocore.*", "moto", "moto.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 pythonpath = [".", "apps/api", "packages/sdk/python", "packages/mcp"]

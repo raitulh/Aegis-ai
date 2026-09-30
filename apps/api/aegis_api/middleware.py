@@ -12,10 +12,15 @@ import structlog
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from aegis_api.config import get_settings
+from aegis_api.infrastructure.observability import metrics
+from aegis_api.infrastructure.observability.telemetry import current_trace_ids
 
 log = structlog.get_logger("aegis.http")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9\-_.]{8,64}$")
 UPLOAD_PATH_RE = re.compile(r"^/api/v1/policies(/upload|/[0-9a-f-]{36}/version)$")
+LAB_UPLOAD_PATH_RE = re.compile(
+    r"^/api/v1/projects/[0-9a-f-]{36}/(documents|artifacts|datasets)(/[0-9a-f-]{36}/versions)?$"
+)
 
 
 class RequestContextMiddleware:
@@ -31,9 +36,11 @@ class RequestContextMiddleware:
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
         incoming = headers.get("x-request-id", "")
         request_id = incoming if _REQUEST_ID_RE.match(incoming) else f"req_{uuid.uuid4().hex[:20]}"
+        trace_id, _span_id = current_trace_ids(headers)
         scope.setdefault("state", {})["request_id"] = request_id
+        scope["state"]["trace_id"] = trace_id
         structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(request_id=request_id)
+        structlog.contextvars.bind_contextvars(request_id=request_id, trace_id=trace_id)
         started = time.perf_counter()
         status_holder: dict[str, int] = {"status": 500}
 
@@ -42,6 +49,7 @@ class RequestContextMiddleware:
                 status_holder["status"] = message["status"]
                 raw = list(message.get("headers", []))
                 raw.append((b"x-request-id", request_id.encode()))
+                raw.append((b"x-trace-id", trace_id.encode()))
                 message["headers"] = raw
             await send(message)
 
@@ -49,7 +57,12 @@ class RequestContextMiddleware:
             await self.app(scope, receive, send_wrapper)
         finally:
             path = scope.get("path", "")
-            if path not in ("/health", "/ready"):
+            route = scope.get("route")
+            template = getattr(route, "path", None) or "unmatched"
+            elapsed = time.perf_counter() - started
+            metrics.HTTP_REQUESTS.labels(scope.get("method", "?"), template, str(status_holder["status"])).inc()
+            metrics.HTTP_LATENCY.labels(scope.get("method", "?"), template).observe(elapsed)
+            if path not in ("/health", "/ready", "/health/live", "/health/ready", "/metrics"):
                 log.info(
                     "request",
                     method=scope.get("method"),
@@ -101,12 +114,19 @@ class BodySizeLimitMiddleware:
         settings = get_settings()
         self.default_limit = settings.max_request_bytes
         self.upload_limit = settings.max_upload_bytes + 64 * 1024
+        self.artifact_limit = settings.max_artifact_upload_bytes + 64 * 1024
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or scope.get("method") in ("GET", "HEAD", "OPTIONS"):
             await self.app(scope, receive, send)
             return
-        limit = self.upload_limit if UPLOAD_PATH_RE.match(scope.get("path", "")) else self.default_limit
+        path = scope.get("path", "")
+        if LAB_UPLOAD_PATH_RE.match(path):
+            limit = self.artifact_limit
+        elif UPLOAD_PATH_RE.match(path):
+            limit = self.upload_limit
+        else:
+            limit = self.default_limit
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
         declared = headers.get("content-length")
         if declared and declared.isdigit() and int(declared) > limit:
