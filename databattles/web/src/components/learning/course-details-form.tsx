@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Save } from "lucide-react";
+import { Award, FileText, Palette, Save, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useAction } from "@/components/discussions/use-action";
@@ -108,8 +108,10 @@ export function CourseDetailsForm({ course, onSaved }: { course: AuthoringCourse
   const categoryOptions = categories.data ?? [form.category];
 
   return (
-    <form onSubmit={submit} noValidate className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="space-y-5">
+    <form onSubmit={submit} noValidate className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <Card className="min-w-0 self-start">
+        <CardHeader icon={<FileText aria-hidden />} title="Content" description="What learners see on the course page and in the catalogue." />
+        <CardBody className="space-y-5 py-5">
         <Field label="Title" required error={errors.title}>
           {(p) => <Input {...p} value={form.title} maxLength={140} onChange={(e) => set({ title: e.target.value })} />}
         </Field>
@@ -125,11 +127,12 @@ export function CourseDetailsForm({ course, onSaved }: { course: AuthoringCourse
         <Field label="Tags" hint="Press Enter after each tag." error={errors.tags}>
           {(p) => <TagInput id={p.id} value={form.tags} onChange={(tags) => set({ tags })} max={20} placeholder="pandas, eda…" />}
         </Field>
-      </div>
+        </CardBody>
+      </Card>
 
-      <div className="space-y-5">
+      <div className="min-w-0 space-y-5">
         <Card>
-          <CardHeader title="Settings" />
+          <CardHeader icon={<SlidersHorizontal aria-hidden />} title="Settings" />
           <CardBody className="space-y-4">
             <Field label="Category" error={errors.category}>
               {(p) => (
@@ -166,7 +169,7 @@ export function CourseDetailsForm({ course, onSaved }: { course: AuthoringCourse
         </Card>
 
         <Card>
-          <CardHeader title="Credentials" description="What learners earn when they finish every lesson." />
+          <CardHeader icon={<Award aria-hidden />} title="Credentials" description="What learners earn when they finish every lesson." />
           <CardBody className="space-y-4">
             <Switch
               checked={form.issues_certificate}
@@ -191,9 +194,13 @@ export function CourseDetailsForm({ course, onSaved }: { course: AuthoringCourse
         </Card>
 
         <Card>
-          <CardHeader title="Cover" />
+          <CardHeader icon={<Palette aria-hidden />} title="Cover" />
           <CardBody className="space-y-3">
-            <Cover style={form.cover_style} className="h-20 rounded-[var(--radius-md)]" />
+            <Cover style={form.cover_style} className="h-24 rounded-[var(--radius-md)] border border-border">
+              <span className="absolute bottom-2 left-2 rounded-md bg-black/45 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-white/85 backdrop-blur-md">
+                Preview
+              </span>
+            </Cover>
             <Field label="Cover style" error={errors.cover_style}>
               {(p) => (
                 <Select {...p} value={form.cover_style} onChange={(e) => set({ cover_style: e.target.value })}>
@@ -206,8 +213,15 @@ export function CourseDetailsForm({ course, onSaved }: { course: AuthoringCourse
         </Card>
       </div>
 
-      <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg/90 px-4 py-3 backdrop-blur lg:col-span-2 lg:mx-0 lg:rounded-[var(--radius-lg)] lg:border">
-        {dirty ? <span className="mr-auto text-sm text-warning">You have unsaved changes</span> : <span className="mr-auto text-sm text-subtle">All changes saved</span>}
+      <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-[var(--glass-strong)] px-4 py-3 shadow-elevated backdrop-blur-xl sm:-mx-6 sm:px-6 lg:bottom-3 lg:col-span-2 lg:mx-0 lg:rounded-[var(--radius-lg)] lg:border lg:px-4">
+        {dirty ? (
+          <span className="mr-auto inline-flex items-center gap-2 text-sm text-warning">
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />
+            You have unsaved changes
+          </span>
+        ) : (
+          <span className="mr-auto text-sm text-subtle">All changes saved</span>
+        )}
         {dirty ? (
           <Button variant="ghost" onClick={() => { setForm(JSON.parse(baseline) as DetailsForm); setErrors({}); }}>
             Discard

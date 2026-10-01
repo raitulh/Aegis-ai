@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Plus, Save, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ListChecks, Plus, Save, Trash2, X } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { useAction } from "@/components/discussions/use-action";
@@ -125,27 +125,37 @@ export function QuestionsEditor({ courseSlug, lesson, onSaved }: { courseSlug: s
 
   return (
     <section aria-labelledby={`questions-${lesson.id}`} className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h4 id={`questions-${lesson.id}`} className="font-semibold text-fg">Quiz questions</h4>
-          <p className="text-xs text-muted">
-            Graded on the server. Learners see correct answers and explanations only after they pass.
-          </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border bg-accent-soft text-accent-strong">
+            <ListChecks className="h-3.5 w-3.5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h4 id={`questions-${lesson.id}`} className="font-semibold tracking-[-0.01em] text-fg">Quiz questions</h4>
+            <p className="text-xs leading-relaxed text-muted">
+              Graded on the server. Learners see correct answers and explanations only after they pass.
+            </p>
+          </div>
         </div>
-        <span className="text-xs text-subtle">{items.length} / {MAX_QUESTIONS}</span>
+        <span className="tabular rounded-full border border-border bg-bg-elevated px-2 py-0.5 font-mono text-[11px] text-subtle">
+          {items.length} / {MAX_QUESTIONS}
+        </span>
       </div>
 
       {items.length === 0 ? (
-        <EmptyState title="No questions yet" description="Quizzes need at least one question before the course can be published." />
+        <EmptyState icon={<ListChecks />} title="No questions yet" description="Quizzes need at least one question before the course can be published." />
       ) : (
-        <ol className="space-y-4">
+        <ol className="space-y-3">
           {items.map((q, i) => (
             <li key={q.key}>
               <fieldset
-                className={cn("rounded-[var(--radius-lg)] border bg-bg-elevated p-4", errors[i] ? "border-danger/60" : "border-border")}
+                className={cn(
+                  "rounded-[var(--radius-lg)] border bg-bg-elevated p-4 shadow-[inset_0_1px_0_var(--hairline-highlight)]",
+                  errors[i] ? "border-[color-mix(in_oklab,var(--danger)_60%,transparent)]" : "border-border",
+                )}
                 aria-describedby={errors[i] ? `qerr-${q.key}` : undefined}
               >
-                <legend className="float-left py-1.5 text-sm font-semibold text-fg">Question {i + 1}</legend>
+                <legend className="tabular float-left py-1.5 text-eyebrow text-accent-strong">Question {i + 1}</legend>
                 <div className="float-right flex gap-1">
                   <Button id={`qmove-${q.key}-up`} variant="ghost" size="icon" className="h-8 w-8" aria-label={`Move question ${i + 1} up`} disabled={i === 0} onClick={() => move(i, -1)}>
                     <ArrowUp className="h-4 w-4" aria-hidden />
@@ -185,44 +195,56 @@ export function QuestionsEditor({ courseSlug, lesson, onSaved }: { courseSlug: s
                     <legend className="text-sm font-medium text-fg">
                       Options <span className="font-normal text-subtle">(select the correct answer)</span>
                     </legend>
-                    {q.options.map((opt, oi) => (
-                      <div key={oi} className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name={`correct-${q.key}`}
-                          checked={q.correct === oi}
-                          onChange={() => update(i, { correct: oi })}
-                          aria-label={`Option ${oi + 1} is correct`}
-                          className="h-4 w-4 shrink-0 accent-[var(--success)]"
-                        />
-                        <input
-                          value={opt}
-                          maxLength={300}
-                          aria-label={`Option ${oi + 1}`}
-                          placeholder={`Option ${oi + 1}`}
-                          onChange={(e) => update(i, { options: q.options.map((o, k) => (k === oi ? e.target.value : o)) })}
-                          className={cn(
-                            "h-9 w-full rounded-[var(--radius-md)] border bg-bg-elevated px-3 text-sm text-fg placeholder:text-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-[var(--ring)]",
-                            q.correct === oi ? "border-success/60" : "border-border",
-                          )}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0"
-                          aria-label={`Remove option ${oi + 1}`}
-                          disabled={q.options.length <= 2}
-                          onClick={() =>
-                            update(i, {
-                              options: q.options.filter((_, k) => k !== oi),
-                              correct: q.correct === oi ? 0 : q.correct > oi ? q.correct - 1 : q.correct,
-                            })
-                          }
-                        >
-                          <X className="h-4 w-4" aria-hidden />
-                        </Button>
-                      </div>
-                    ))}
+                    {q.options.map((opt, oi) => {
+                      const isCorrect = q.correct === oi;
+                      return (
+                        <div key={oi} className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name={`correct-${q.key}`}
+                            checked={isCorrect}
+                            onChange={() => update(i, { correct: oi })}
+                            aria-label={`Option ${oi + 1} is correct`}
+                            className="h-4 w-4 shrink-0 accent-[var(--success)]"
+                          />
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border font-mono text-[10.5px] font-medium",
+                              isCorrect ? "border-transparent bg-success text-bg" : "border-border-strong text-subtle",
+                            )}
+                          >
+                            {isCorrect ? <Check className="h-3.5 w-3.5" strokeWidth={2.6} /> : "ABCDEFGH"[oi]}
+                          </span>
+                          <input
+                            value={opt}
+                            maxLength={300}
+                            aria-label={`Option ${oi + 1}`}
+                            placeholder={`Option ${oi + 1}`}
+                            onChange={(e) => update(i, { options: q.options.map((o, k) => (k === oi ? e.target.value : o)) })}
+                            className={cn(
+                              "h-9 w-full min-w-0 rounded-[var(--radius-md)] border bg-surface px-3 text-sm text-fg placeholder:text-subtle transition-[border-color,box-shadow] duration-200 focus:border-accent focus:outline-none focus:ring-2 focus:ring-[var(--ring)]",
+                              isCorrect ? "border-[color-mix(in_oklab,var(--success)_60%,transparent)]" : "border-border hover:border-border-strong",
+                            )}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            aria-label={`Remove option ${oi + 1}`}
+                            disabled={q.options.length <= 2}
+                            onClick={() =>
+                              update(i, {
+                                options: q.options.filter((_, k) => k !== oi),
+                                correct: q.correct === oi ? 0 : q.correct > oi ? q.correct - 1 : q.correct,
+                              })
+                            }
+                          >
+                            <X className="h-4 w-4" aria-hidden />
+                          </Button>
+                        </div>
+                      );
+                    })}
                     {q.options.length < MAX_OPTIONS ? (
                       <Button variant="link" size="sm" icon={<Plus className="h-3.5 w-3.5" aria-hidden />} onClick={() => update(i, { options: [...q.options, ""] })}>
                         Add option
@@ -243,7 +265,7 @@ export function QuestionsEditor({ courseSlug, lesson, onSaved }: { courseSlug: s
 
       {generalError ? <InlineNotice tone="danger">{generalError}</InlineNotice> : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
         <Button variant="secondary" icon={<Plus className="h-4 w-4" aria-hidden />} onClick={add} disabled={items.length >= MAX_QUESTIONS}>
           Add question
         </Button>

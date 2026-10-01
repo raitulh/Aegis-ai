@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Clock, Layers, Plus, Save, Trash2, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useAction } from "@/components/discussions/use-action";
@@ -121,7 +121,7 @@ function LessonForm({
   return (
     <div className="space-y-6">
       <form onSubmit={submit} className="space-y-4" noValidate aria-label={`Edit lesson ${lesson.title}`}>
-        <div className="grid gap-4 sm:grid-cols-[1fr_160px_140px]">
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_160px_140px]">
           <Field label="Title" required error={errors.title}>
             {(p) => <Input {...p} value={form.title} maxLength={140} onChange={(e) => set({ title: e.target.value })} />}
           </Field>
@@ -155,12 +155,13 @@ function LessonForm({
         ) : null}
 
         {form.kind === "challenge" ? (
-          <div className="space-y-4 rounded-[var(--radius-lg)] border border-border bg-surface-2 p-4">
-            <p className="text-sm text-muted">
+          <div className="space-y-4 rounded-[var(--radius-lg)] border border-border bg-bg-elevated p-4">
+            <p className="text-eyebrow text-subtle">Challenge settings</p>
+            <p className="-mt-2 text-sm leading-relaxed text-muted">
               Learners complete a challenge by making a scored submission to the linked competition (optionally reaching a minimum score). The server checks the
               evidence — it can&apos;t be self-reported.
             </p>
-            <div className="grid gap-4 sm:grid-cols-[1fr_200px]">
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_200px]">
               <Field label="Competition slug" required hint="From the competition URL: /competitions/<slug>" error={errors.challenge}>
                 {(p) => (
                   <Input {...p} value={form.competition_slug} onChange={(e) => set({ competition_slug: e.target.value })} placeholder="titanic-practice" autoComplete="off" spellCheck={false} />
@@ -203,7 +204,7 @@ function LessonForm({
       </form>
 
       {lesson.kind === "quiz" && !kindChanged ? (
-        <div className="border-t border-border pt-6">
+        <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-4">
           <QuestionsEditor
             key={`${id}-questions`}
             courseSlug={courseSlug}
@@ -285,91 +286,114 @@ export function LessonsEditor({ course, onUpdate }: { course: AuthoringCourse; o
     });
   }
 
+  const totalMinutes = lessons.reduce((sum, l) => sum + (l.estimated_minutes || 0), 0);
+  const attention = lessons.filter((l) => lessonWarning(l) !== null).length;
+
   return (
     <div className="space-y-6">
       <p className="sr-only" aria-live="polite">{announce}</p>
 
       {lessons.length === 0 ? (
-        <EmptyState title="No lessons yet" description="Add your first lesson below. Courses need at least one lesson to be published." />
+        <EmptyState icon={<Layers />} title="No lessons yet" description="Add your first lesson below. Courses need at least one lesson to be published." />
       ) : (
-        <ol className="space-y-3" aria-label="Lessons">
-          {lessons.map((l, i) => {
-            const open = openId === l.id;
-            const warning = lessonWarning(l);
-            return (
-              <li key={l.id} id={`lesson-${l.id}`} className={cn("scroll-mt-20 rounded-[var(--radius-lg)] border bg-surface", open ? "border-border-strong" : "border-border")}>
-                <div className="flex items-center gap-2 px-3 py-2.5 sm:gap-3">
-                  <div className="flex shrink-0 flex-col sm:flex-row">
-                    <button
-                      type="button"
-                      id={`move-${l.id}-up`}
-                      aria-label={`Move “${l.title}” up`}
-                      disabled={i === 0}
-                      onClick={() => move(i, -1)}
-                      className="rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-[var(--ring)] disabled:opacity-30"
+        <div className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface shadow-card">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-bg-elevated/60 px-4 py-2.5 text-xs text-muted">
+            <span className="text-eyebrow text-subtle">Syllabus</span>
+            <span className="inline-flex items-center gap-1">
+              <Layers className="h-3.5 w-3.5 text-subtle" aria-hidden /> <span className="tabular text-fg">{lessons.length}</span> lesson{lessons.length === 1 ? "" : "s"}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5 text-subtle" aria-hidden /> <span className="tabular text-fg">{formatMinutes(totalMinutes)}</span>
+            </span>
+            {attention ? (
+              <span className="inline-flex items-center gap-1 text-warning">
+                <TriangleAlert className="h-3.5 w-3.5" aria-hidden /> <span className="tabular">{attention}</span> need{attention === 1 ? "s" : ""} attention
+              </span>
+            ) : null}
+            <span className="ml-auto hidden text-subtle sm:inline">Reorder with the arrow buttons</span>
+          </div>
+          <ol className="divide-y divide-border" aria-label="Lessons">
+            {lessons.map((l, i) => {
+              const open = openId === l.id;
+              const warning = lessonWarning(l);
+              return (
+                <li key={l.id} id={`lesson-${l.id}`} className={cn("relative scroll-mt-36 transition-colors duration-200", open && "bg-surface-2/40")}>
+                  {open ? <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-brand" /> : null}
+                  <div className="flex items-center gap-2 px-3 py-2.5 sm:gap-3">
+                    <div className="flex shrink-0 flex-col sm:flex-row">
+                      <button
+                        type="button"
+                        id={`move-${l.id}-up`}
+                        aria-label={`Move “${l.title}” up`}
+                        disabled={i === 0}
+                        onClick={() => move(i, -1)}
+                        className="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:outline-2 focus-visible:outline-[var(--ring)] disabled:opacity-30"
+                      >
+                        <ArrowUp className="h-4 w-4" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        id={`move-${l.id}-down`}
+                        aria-label={`Move “${l.title}” down`}
+                        disabled={i === lessons.length - 1}
+                        onClick={() => move(i, 1)}
+                        className="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:outline-2 focus-visible:outline-[var(--ring)] disabled:opacity-30"
+                      >
+                        <ArrowDown className="h-4 w-4" aria-hidden />
+                      </button>
+                    </div>
+                    <span className="tabular w-6 shrink-0 text-center font-mono text-xs text-subtle">{String(i + 1).padStart(2, "0")}</span>
+                    <span className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-bg-elevated text-muted sm:flex">
+                      <LessonKindIcon kind={l.kind} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium tracking-[-0.01em] text-fg">{l.title}</p>
+                      <p className="flex flex-wrap gap-x-1.5 text-xs text-subtle">
+                        <span>{KIND_LABEL[l.kind]}</span>
+                        <span aria-hidden>·</span>
+                        <span className="tabular">{formatMinutes(l.estimated_minutes)}</span>
+                        {l.kind === "quiz" ? (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span className="tabular">{l.questions.length} question{l.questions.length === 1 ? "" : "s"} · pass {l.pass_threshold}%</span>
+                          </>
+                        ) : null}
+                        {l.kind === "challenge" && l.challenge ? (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span className="truncate font-mono">{l.challenge.competition_slug}</span>
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+                    {warning ? <Badge tone="warning" icon={<TriangleAlert className="h-3 w-3" aria-hidden />} className="hidden sm:inline-flex">{warning}</Badge> : null}
+                    <Button
+                      size="sm"
+                      variant={open ? "ghost" : "secondary"}
+                      aria-expanded={open}
+                      aria-controls={`lesson-editor-${l.id}`}
+                      onClick={() => setOpenId(open ? null : l.id)}
+                      icon={open ? <ChevronUp className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />}
                     >
-                      <ArrowUp className="h-4 w-4" aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      id={`move-${l.id}-down`}
-                      aria-label={`Move “${l.title}” down`}
-                      disabled={i === lessons.length - 1}
-                      onClick={() => move(i, 1)}
-                      className="rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-[var(--ring)] disabled:opacity-30"
-                    >
-                      <ArrowDown className="h-4 w-4" aria-hidden />
-                    </button>
+                      {open ? "Close" : "Edit"}
+                    </Button>
                   </div>
-                  <span className="w-5 shrink-0 text-center text-sm tabular-nums text-subtle">{i + 1}</span>
-                  <LessonKindIcon kind={l.kind} className="hidden text-muted sm:block" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-fg">{l.title}</p>
-                    <p className="flex flex-wrap gap-x-1.5 text-xs text-subtle">
-                      <span>{KIND_LABEL[l.kind]}</span>
-                      <span aria-hidden>·</span>
-                      <span>{formatMinutes(l.estimated_minutes)}</span>
-                      {l.kind === "quiz" ? (
-                        <>
-                          <span aria-hidden>·</span>
-                          <span>{l.questions.length} question{l.questions.length === 1 ? "" : "s"} · pass {l.pass_threshold}%</span>
-                        </>
-                      ) : null}
-                      {l.kind === "challenge" && l.challenge ? (
-                        <>
-                          <span aria-hidden>·</span>
-                          <span className="font-mono">{l.challenge.competition_slug}</span>
-                        </>
-                      ) : null}
-                    </p>
-                  </div>
-                  {warning ? <Badge tone="warning" className="hidden sm:inline-flex">{warning}</Badge> : null}
-                  <Button
-                    size="sm"
-                    variant={open ? "ghost" : "secondary"}
-                    aria-expanded={open}
-                    aria-controls={`lesson-editor-${l.id}`}
-                    onClick={() => setOpenId(open ? null : l.id)}
-                    icon={open ? <ChevronUp className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />}
-                  >
-                    {open ? "Close" : "Edit"}
-                  </Button>
-                </div>
-                {open ? (
-                  <div id={`lesson-editor-${l.id}`} className="border-t border-border p-4">
-                    {warning ? <div className="mb-4 sm:hidden"><Badge tone="warning">{warning}</Badge></div> : null}
-                    <LessonForm key={l.id} courseSlug={slug} lesson={l} onUpdate={onUpdate} onDeleted={() => setOpenId(null)} />
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ol>
+                  {open ? (
+                    <div id={`lesson-editor-${l.id}`} className="border-t border-border bg-bg/30 p-4 animate-slide-down">
+                      {warning ? <div className="mb-4 sm:hidden"><Badge tone="warning" icon={<TriangleAlert className="h-3 w-3" aria-hidden />}>{warning}</Badge></div> : null}
+                      <LessonForm key={l.id} courseSlug={slug} lesson={l} onUpdate={onUpdate} onDeleted={() => setOpenId(null)} />
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       )}
       {reorder.isPending ? <p className="text-xs text-muted" role="status">Saving lesson order…</p> : null}
 
       <form
-        className="rounded-[var(--radius-lg)] border border-dashed border-border-strong p-4"
+        className="rounded-[var(--radius-lg)] border border-dashed border-border-strong bg-surface/40 p-4 sm:p-5"
         onSubmit={(e) => {
           e.preventDefault();
           if (newTitle.trim().length < 2) {
@@ -380,8 +404,13 @@ export function LessonsEditor({ course, onUpdate }: { course: AuthoringCourse; o
         }}
         aria-labelledby="add-lesson-heading"
       >
-        <h3 id="add-lesson-heading" className="mb-3 text-sm font-semibold text-fg">Add a lesson</h3>
-        <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+        <h3 id="add-lesson-heading" className="mb-4 flex items-center gap-2 text-sm font-semibold text-fg">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-accent-soft text-accent-strong">
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+          </span>
+          Add a lesson
+        </h3>
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-end">
           <Field label="Title" error={addError}>
             {(p) => <Input {...p} value={newTitle} maxLength={140} onChange={(e) => setNewTitle(e.target.value)} placeholder="e.g. Train/test splits" />}
           </Field>
