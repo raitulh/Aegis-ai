@@ -297,11 +297,79 @@ def seed_workspace(session: Session, org: Organization, *, minimal: bool = False
         created.append({"system": spec["name"], "audit_id": str(audit.id)})
 
     result: dict[str, Any] = {"systems": created}
+    first = session.scalar(
+        select(AISystem)
+        .where(AISystem.organization_id == org.id, AISystem.is_demo.is_(True))
+        .order_by(AISystem.created_at)
+    )
+    if first is not None:
+        result["runtime"] = _seed_runtime(session, principal, first)
     if not minimal:
         _seed_monitoring(session, org)
         result["flagship"] = _flagship_remediation(session, org, principal)
     log.info("demo_seeded", org=str(org.id), systems=len(created))
     return result
+
+
+def _seed_runtime(session: Session, principal: Principal, system: AISystem) -> dict[str, Any]:
+    """A short simulated agent session pushed through the real Runtime Guard: two library policies are
+    published and assigned, the system runs in enforce mode, and every decision, finding, approval and
+    evidence record is produced by the same code paths as production traffic. Marked demo like the rest."""
+    from aegis_api.services import runtime_policy_service, runtime_service
+    from engines.runtime.schema import RuntimeEventIn
+
+    for template in ("prevent-sensitive-exfiltration", "human-approval-for-irreversible-actions"):
+        policy, version = runtime_policy_service.create_policy(
+            session, principal, name=None, source_yaml=None, template_key=template
+        )
+        runtime_policy_service.publish(session, principal, policy, version)
+        runtime_policy_service.assign(session, principal, policy, scope_type="system", system_id=str(system.id))
+    runtime_service.set_mode(session, principal, system, "enforce")
+
+    sid, trace = str(system.id), uuid.uuid4().hex
+    base = {
+        "system_id": sid,
+        "agent": "hiring-assistant",
+        "session_id": f"demo-{trace[:8]}",
+        "trace_id": trace,
+        "source": "sdk",
+    }
+    steps: list[dict[str, Any]] = [
+        {"event_type": "agent.start", "payload": {"task": "Shortlist candidates for the analyst role"}},
+        {
+            "event_type": "tool.call",
+            "tool": "search_candidates",
+            "payload": {"destination": "internal", "query": "senior data analyst"},
+        },
+        {"event_type": "model.request", "payload": {"model": "hiring_agent-sim", "purpose": "summarise CVs"}},
+        {
+            "event_type": "tool.call",
+            "tool": "schedule_interview",
+            "payload": {"destination": "internal", "candidate": "cand-6685"},
+        },
+        {
+            "event_type": "network.request",
+            "tool": "share_shortlist",
+            "payload": {
+                "url": "https://recruiting-partner.example/upload",
+                "method": "POST",
+                "data_classification": "confidential",
+                "body": "shortlist incl. contact alex.morgan@example.com",
+            },
+        },
+        {
+            "event_type": "database.query",
+            "tool": "ats_db",
+            "payload": {"statement": "DELETE FROM applications WHERE status = 'rejected'"},
+        },
+        {"event_type": "agent.stop", "payload": {"outcome": "waiting for approval"}},
+    ]
+    events = [
+        RuntimeEventIn.model_validate({**base, **step, "event_id": f"demo-{trace[:12]}-{i}"})
+        for i, step in enumerate(steps)
+    ]
+    decisions = runtime_service.process(session, principal, events)
+    return {"events": len(decisions), "decisions": [d["effective_decision"] for d in decisions]}
 
 
 def _flagship_remediation(session: Session, org: Organization, principal: Principal) -> dict[str, Any]:

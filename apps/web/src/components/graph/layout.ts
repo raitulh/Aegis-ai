@@ -68,9 +68,12 @@ export function layerOf(type: string): number {
 const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 
 export function layout(nodes: GraphNode[], opts: { columnWidth?: number; rowHeight?: number; padding?: number } = {}) {
-  const { columnWidth = 220, rowHeight = 30, padding = 24 } = opts;
-  const columns: GraphNode[][] = LAYERS.map(() => []);
-  for (const n of nodes) columns[layerOf(n.type)].push(n);
+  const { columnWidth = 196, rowHeight = 30, padding = 24 } = opts;
+  const all: GraphNode[][] = LAYERS.map(() => []);
+  for (const n of nodes) all[layerOf(n.type)].push(n);
+  // Empty layers take no space: columns are packed left to right in chain order.
+  const present = LAYERS.map((_, i) => i).filter((i) => all[i].length);
+  const columns = present.map((i) => all[i]);
   for (const col of columns) {
     col.sort((a, b) => {
       const s = (SEVERITY_RANK[a.severity ?? ""] ?? 9) - (SEVERITY_RANK[b.severity ?? ""] ?? 9);
@@ -82,14 +85,15 @@ export function layout(nodes: GraphNode[], opts: { columnWidth?: number; rowHeig
   const rows = Math.max(1, ...columns.map((c) => c.length));
   const height = padding * 2 + 28 + rows * rowHeight;
   const positioned = new Map<string, Positioned>();
-  columns.forEach((col, layer) => {
+  columns.forEach((col, column) => {
     // Center short columns vertically so edges stay readable.
     const offset = ((rows - col.length) * rowHeight) / 2;
     col.forEach((n, i) => {
-      positioned.set(n.id, { ...n, layer, x: padding + layer * columnWidth, y: padding + 28 + offset + i * rowHeight + rowHeight / 2 });
+      positioned.set(n.id, { ...n, layer: present[column], x: padding + column * columnWidth, y: padding + 28 + offset + i * rowHeight + rowHeight / 2 });
     });
   });
-  return { positioned, width: padding * 2 + (LAYERS.length - 1) * columnWidth + 170, height, columnWidth, padding };
+  const headers = present.map((i, column) => ({ key: LAYERS[i].key, label: LAYERS[i].label, x: padding + column * columnWidth }));
+  return { positioned, headers, width: padding * 2 + Math.max(0, columns.length - 1) * columnWidth + 170, height, columnWidth, padding };
 }
 
 /** Node ids directly connected to `id` (both directions). */

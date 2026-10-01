@@ -225,7 +225,7 @@ def _record_violation(session: Session, system: AISystem, event: RuntimeEvent, v
     if finding is None:
         finding = Finding(
             organization_id=system.organization_id,
-            number=finding_service.allocate_finding_number(system.organization_id),
+            number=finding_service.allocate_finding_number(system.organization_id, session),
             title=f"Runtime policy violation: {primary['message']}"[:300],
             category="agent_action"
             if event.event_type in ("tool.call", "mcp.tool.call", "file.write", "file.read", "database.query")

@@ -604,3 +604,29 @@ def test_audit_log_filters_by_action_prefix_and_resource(demo_provider_and_syste
     assert ws.get("/api/v1/audit-log", params={"action": "%"}).json()["items"] == []
     by_resource = ws.get("/api/v1/audit-log", params={"resource_type": "ai_system", "page_size": 200}).json()["items"]
     assert all(e["resource_type"] == "ai_system" for e in by_resource)
+
+
+def test_guest_sandbox_is_seeded_with_real_results_and_marked_demo(client):
+    """The sandbox runs real audits against simulated systems inside the not-yet-committed signup
+    transaction; findings must still get numbers and everything must be marked demo."""
+    r = client.post("/api/v1/auth/guest")
+    assert r.status_code == 200, r.text
+    session = r.json()
+    assert session["organization"]["is_demo"] and session["organization"]["is_sandbox"]
+    assert session["organization"]["expires_at"]
+    systems = client.get("/api/v1/systems").json()["items"]
+    assert systems and all(s["is_demo"] for s in systems)
+    audits = client.get("/api/v1/audits", params={"page_size": 50}).json()["items"]
+    assert audits and all(a["status"] in ("completed", "partially_completed") for a in audits)
+    findings = client.get("/api/v1/findings", params={"page_size": 200}).json()["items"]
+    numbers = [f["number"] for f in findings]
+    assert findings and len(numbers) == len(set(numbers))
+    verdict = client.get(f"/api/v1/audits/{audits[0]['id']}/evidence/verify").json()
+    assert verdict["status"] == "VERIFIED"
+    # Runtime Guard has real decisions from a simulated agent session (enforce mode → approvals).
+    overview = client.get("/api/v1/runtime/overview").json()
+    assert overview["events"] > 0 and overview["decisions"]["require_approval"] > 0
+    assert overview["pending_approvals"] == overview["decisions"]["require_approval"]
+    assert any(f["source"] == "runtime" for f in findings)
+    # Every surface reports the same plan for the sandbox.
+    assert session["organization"]["plan"] == client.get("/api/v1/usage").json()["plan_key"]

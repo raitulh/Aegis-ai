@@ -1,13 +1,19 @@
 import { ContentPage, FeatureRow } from "@/components/marketing/content-page";
-export const metadata = { title: "Product" };
+
+export const metadata = { title: "Product", description: "The Aegis assurance loop." };
+
 export default function Page() {
   return (
-    <ContentPage eyebrow="Product" title="The AI assurance loop" lede="Observe → generate tests → execute → verify → detect risk → map to policy → collect evidence → create finding → recommend remediation → re-test → monitor.">
+    <ContentPage eyebrow="Product" title="The AI assurance loop" lede="Policy → test → guard → evidence → finding → fix → re-test, in one system of record.">
       <div className="grid gap-3 sm:grid-cols-2">
-        <FeatureRow title="Six audit engines" body="Fairness, truth, safety, privacy, security and governance — each with a documented methodology and limitations." />
-        <FeatureRow title="Policy compiler" body="Compile natural-language policies into executable controls with full source provenance." />
-        <FeatureRow title="Adaptive red team" body="Run adversarial probes from an imported corpus and track the full attack lineage." />
-        <FeatureRow title="Evidence & re-test" body="Immutable, hash-chained evidence and measured before/after re-testing." />
+        <FeatureRow title="Audit engines" body="Fairness (counterfactual), grounding, safety, privacy, injection and agent-action tests, each with a documented method and stated limitations." />
+        <FeatureRow title="Runtime Guard" body="Check agent actions as they happen. Observe, audit (findings with evidence) or enforce (block, or hold for human approval) per system." />
+        <FeatureRow title="Policy Studio" body="Versioned runtime policies with validation, diff, simulation on your recorded traffic, publish, rollback and scoped assignments." />
+        <FeatureRow title="Policy compiler" body="Compile written policies (PDF, DOCX, text) into testable controls, each traced to its source section and page." />
+        <FeatureRow title="Continuous assurance" body="Scheduled and change-triggered audits with risk-based test selection, baselines and regression alerts." />
+        <FeatureRow title="Evidence & findings" body="Hash-chained evidence, signed export packages, and a finding lifecycle with SLAs, risk acceptance with expiry and verified re-tests." />
+        <FeatureRow title="Red team" body="Adaptive campaigns driven by a corpus you import, with full attack lineage. Aegis ships no attack payloads." />
+        <FeatureRow title="Assurance graph" body="See how policies, systems, tests, evidence, findings and fixes connect — built from your records, not illustrations." />
       </div>
     </ContentPage>
   );

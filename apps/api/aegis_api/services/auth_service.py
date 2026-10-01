@@ -71,6 +71,8 @@ def _provision_org(
         is_sandbox=is_sandbox,
         expires_at=(utcnow() + timedelta(hours=ttl_hours)) if ttl_hours else None,
         onboarding={"steps": {}, "completed": False},
+        # Sandboxes showcase paid capabilities; store the plan they actually run on so every surface agrees.
+        **({"plan": "pro"} if (is_sandbox or is_demo) else {}),
     )
     session.add(org)
     session.flush()

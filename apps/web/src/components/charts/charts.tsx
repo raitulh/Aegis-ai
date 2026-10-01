@@ -35,11 +35,16 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
+/** Only dimensions that were actually measured are plotted — an untested dimension is not a score of 0. */
 export function TrustPostureRadar({ current, previous }: { current: Record<string, number>; previous?: Record<string, number> }) {
-  const data = DIMENSIONS.map((d) => ({ dimension: titleCase(d), current: current[d] ?? 0, previous: previous?.[d] ?? 0 }));
+  const measured = DIMENSIONS.filter((d) => current[d] !== undefined);
+  const data = measured.map((d) => ({ dimension: titleCase(d), current: current[d], previous: previous?.[d] ?? 0 }));
+  if (data.length < 3) {
+    return <p className="text-sm text-[var(--color-text-subtle)]">A radar needs at least three measured dimensions; see the scores alongside.</p>;
+  }
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <RadarChart data={data} outerRadius="72%">
+      <RadarChart data={data} outerRadius="62%" margin={{ top: 8, right: 28, bottom: 8, left: 28 }}>
         <PolarGrid stroke={GRID} />
         <PolarAngleAxis dataKey="dimension" tick={{ fill: "var(--color-text-muted)", fontSize: 11 }} />
         {previous && Object.keys(previous).length ? <Radar name="Previous" dataKey="previous" stroke="var(--color-text-subtle)" fill="var(--color-text-subtle)" fillOpacity={0.08} strokeDasharray="3 3" /> : null}

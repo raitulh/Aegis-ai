@@ -5,7 +5,6 @@ import { useState } from "react";
 import { ArrowRight, FileText, FlaskConical, Gauge, Network, ScrollText, ShieldAlert, ShieldCheck, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/logo";
-import { LiveAuditDemo } from "@/components/marketing/live-audit-demo";
 import { Button } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 
@@ -29,7 +28,7 @@ export default function DemoPage() {
       await api.post("/auth/guest");
       router.push("/dashboard");
     } catch {
-      toast.error("Could not start the sandbox — is the API running?");
+      toast.error("Could not start the sandbox. Please try again in a moment.");
       setLoading(false);
     }
   }
@@ -46,15 +45,15 @@ export default function DemoPage() {
 
         <div className="mt-16 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border-strong)] bg-[var(--color-surface)]/60 px-3 py-1 text-xs text-[var(--color-text-muted)]">
-            <FlaskConical className="h-3.5 w-3.5 text-[var(--color-accent-bright)]" /> Guided product walkthrough — no signup
+            <FlaskConical className="h-3.5 w-3.5 text-[var(--color-accent-bright)]" /> DEMO sandbox — no signup
           </div>
           <h1 className="mt-5 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">See Aegis audit an AI hiring agent.</h1>
           <p className="mx-auto mt-4 max-w-xl text-lg text-[var(--color-text-muted)]">
-            Start a temporary sandbox pre-loaded with three simulated AI systems, real audits, findings and evidence — produced by the actual assurance engines.
+            Start a temporary sandbox with a simulated hiring agent: a completed audit, runtime decisions waiting for your approval, findings and signed evidence — all produced by the real assurance engines.
           </p>
           <div className="mt-8 flex justify-center gap-3">
             <Button size="lg" loading={loading} onClick={start} icon={ShieldCheck}>
-              Start Walkthrough
+              Start the sandbox
             </Button>
             <Link href="/"><Button size="lg" variant="secondary">Back to home</Button></Link>
           </div>
@@ -75,8 +74,17 @@ export default function DemoPage() {
           </div>
         </div>
 
-        <div className="mx-auto mt-14 max-w-5xl">
-          <LiveAuditDemo />
+        <div className="mx-auto mt-14 grid max-w-5xl gap-3 sm:grid-cols-3">
+          {[
+            ["Real engines, simulated systems", "Audits, findings, runtime decisions and evidence are produced by the same code that runs on your systems. The AI systems themselves are simulators."],
+            ["Clearly marked", "Everything in the sandbox carries a DEMO marker. Nothing in it describes a real organization, person or model."],
+            ["Temporary and isolated", "Each sandbox is its own workspace, expires automatically and is deleted with its data. Create a workspace to keep your work."],
+          ].map(([title, body]) => (
+            <div key={title} className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+              <p className="text-sm font-semibold">{title}</p>
+              <p className="mt-1.5 text-sm text-[var(--color-text-muted)]">{body}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>

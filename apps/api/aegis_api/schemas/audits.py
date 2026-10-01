@@ -55,6 +55,7 @@ class AuditOut(ORMModel):
     missing_categories: list[dict[str, Any]]
     summary: dict[str, Any]
     cost: dict[str, Any]
+    evidence_head_hash: str | None = None
     is_demo: bool
     created_at: datetime
 

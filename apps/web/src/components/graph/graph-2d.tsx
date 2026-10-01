@@ -1,22 +1,22 @@
 "use client";
 import { useMemo } from "react";
 import type { GraphEdge, GraphNode } from "@/lib/types";
-import { LAYERS, layout, neighbours, nodeColor } from "./layout";
+import { layout, neighbours, nodeColor } from "./layout";
 
 /**
  * Layered SVG view of the assurance graph. Every node is keyboard-focusable (Enter/Space selects);
  * selecting a node highlights its direct relationships and dims the rest.
  */
 export function Graph2D({ nodes, edges, selected, onSelect }: { nodes: GraphNode[]; edges: GraphEdge[]; selected: string | null; onSelect: (id: string | null) => void }) {
-  const { positioned, width, height, columnWidth, padding } = useMemo(() => layout(nodes), [nodes]);
+  const { positioned, headers, width, height, padding } = useMemo(() => layout(nodes), [nodes]);
   const focus = useMemo(() => (selected ? neighbours(selected, edges) : null), [selected, edges]);
 
   return (
     <div className="max-h-[70vh] overflow-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]">
       <svg width={width} height={height} role="group" aria-label={`Assurance graph with ${nodes.length} nodes and ${edges.length} relationships`} className="block select-none" onClick={() => onSelect(null)}>
-        {LAYERS.map((l, i) => (
-          <text key={l.key} x={padding + i * columnWidth} y={padding} className="fill-[var(--color-text-subtle)] text-[10px] font-semibold uppercase tracking-wider" aria-hidden>
-            {l.label}
+        {headers.map((h) => (
+          <text key={h.key} x={h.x} y={padding} className="fill-[var(--color-text-subtle)] text-[10px] font-semibold uppercase tracking-wider" aria-hidden>
+            {h.label}
           </text>
         ))}
         <g aria-hidden>
@@ -65,7 +65,7 @@ export function Graph2D({ nodes, edges, selected, onSelect }: { nodes: GraphNode
             >
               <circle r={isSel ? 7 : 5.5} fill={nodeColor(n)} stroke={isSel ? "var(--color-accent-bright)" : "var(--color-bg)"} strokeWidth={2} />
               <text x={11} y={4} className="fill-[var(--color-text-muted)] text-[11px]">
-                {n.label.length > 26 ? `${n.label.slice(0, 25)}…` : n.label}
+                {n.label.length > 24 ? `${n.label.slice(0, 23)}…` : n.label}
               </text>
             </g>
           );

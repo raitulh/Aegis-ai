@@ -1,3 +1,4 @@
+import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
@@ -23,5 +24,14 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       </main>
     );
   }
-  return <DashboardShell>{children}</DashboardShell>;
+  // Seed the session (already fetched for the auth guard) into the query cache so permission-gated UI
+  // renders identically on the server and on the client — no hydration mismatch, no button flicker.
+  // The key mirrors `keys.session` in lib/queries.ts.
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(["session"], result.data);
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <DashboardShell>{children}</DashboardShell>
+    </HydrationBoundary>
+  );
 }

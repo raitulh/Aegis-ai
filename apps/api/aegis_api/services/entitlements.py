@@ -169,7 +169,12 @@ def snapshot(session: Session, organization_id: uuid.UUID) -> dict[str, Any]:
         used = usage_for(session, organization_id, metric, start)
         limit = plan.limits.get(metric)
         periodic = metric not in ("systems", "seats")
-        projected = round(used * span / elapsed) if periodic and used else used
+        # A linear projection from a few hours of data is noise: only project once a meaningful share of the
+        # period has elapsed (and never below what is already used).
+        if periodic and used and elapsed >= min(span * 0.1, 3 * 86400):
+            projected: int | None = max(used, round(used * span / elapsed))
+        else:
+            projected = None
         quotas.append(
             {
                 "metric": metric,
@@ -180,8 +185,8 @@ def snapshot(session: Session, organization_id: uuid.UUID) -> dict[str, Any]:
                 "percent": None if not limit else round(100 * used / limit, 1),
                 "periodic": periodic,
                 # Linear projection over the billing period from usage so far (labelled as a projection).
-                "projected": projected if periodic else None,
-                "projected_over_limit": bool(limit is not None and periodic and projected > limit),
+                "projected": projected,
+                "projected_over_limit": bool(limit is not None and projected is not None and projected > limit),
                 "threshold_reached": next((t for t in reversed(THRESHOLDS) if limit and used * 100 >= t * limit), None),
             }
         )

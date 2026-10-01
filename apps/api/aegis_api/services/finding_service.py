@@ -36,24 +36,34 @@ POLICY_IMPORTANCE = {
 }
 
 
-def allocate_finding_number(organization_id: uuid.UUID) -> int:
+_ALLOCATE_SQL = text(
+    "UPDATE organizations SET finding_seq = coalesce(finding_seq, 1000) + 1 WHERE id = :id RETURNING finding_seq"
+)
+
+
+def allocate_finding_number(organization_id: uuid.UUID, session: Session | None = None) -> int:
     """Atomically allocate the next human-readable finding number for a workspace.
 
     Runs in its own short transaction so concurrent audits never hold (or race on) the organization row
     for the duration of an audit. A rolled-back audit leaves a gap in the sequence, which is acceptable:
-    numbers are identifiers, not counts."""
+    numbers are identifiers, not counts.
+
+    If the workspace is not visible to a new transaction, it was created in the caller's still-open
+    transaction (sandbox seeding runs audits inline before committing). Nothing else can see that row, so
+    allocating inside the caller's ``session`` cannot race."""
     with session_scope(org_id=organization_id) as s:
-        value: int = s.execute(
-            text(
-                "UPDATE organizations SET finding_seq = coalesce(finding_seq, 1000) + 1 WHERE id = :id RETURNING finding_seq"
-            ),
-            {"id": organization_id},
-        ).scalar_one()
+        value = s.execute(_ALLOCATE_SQL, {"id": organization_id}).scalar_one_or_none()
+    if value is None and session is not None:
+        value = session.execute(_ALLOCATE_SQL, {"id": organization_id}).scalar_one_or_none()
+    if value is None:
+        from aegis_api.errors import NotFound
+
+        raise NotFound("Workspace not found")
     return int(value)
 
 
 def _next_number(session: Session, org: Organization) -> int:
-    return allocate_finding_number(org.id)
+    return allocate_finding_number(org.id, session)
 
 
 # Statuses from which a re-detected issue is treated as a regression and reopened.
@@ -347,8 +357,24 @@ def sla_due(severity: str, created: Any = None) -> Any:
     return (created or utcnow()) + timedelta(days=SLA_DAYS.get(severity, 90))
 
 
+# Workflow order for presenting next steps. "acknowledged" is a legacy alias of "triaged": still accepted
+# from older clients, never offered.
+_STATUS_ORDER = [
+    "triaged",
+    "in_remediation",
+    "fixed",
+    "retesting",
+    "resolved",
+    "accepted_risk",
+    "false_positive",
+    "open",
+]
+LEGACY_STATUSES = {"acknowledged"}
+
+
 def allowed_transitions(status: str) -> list[str]:
-    return sorted(TRANSITIONS.get(status, set()))
+    allowed = TRANSITIONS.get(status, set()) - LEGACY_STATUSES
+    return [s for s in _STATUS_ORDER if s in allowed]
 
 
 def transition(

@@ -189,7 +189,7 @@ def _create_findings(session: Session, run: RedTeamRun, system: Any, org: Organi
         if finding is None:
             finding = Finding(
                 organization_id=run.organization_id,
-                number=finding_service.allocate_finding_number(run.organization_id),
+                number=finding_service.allocate_finding_number(run.organization_id, session),
                 title=f"Red-team bypass: {category.replace('_', ' ')}",
                 category=cat,
                 dimension=CATEGORY_DIMENSION.get(cat, "security"),
