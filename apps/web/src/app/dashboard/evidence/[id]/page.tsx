@@ -6,14 +6,14 @@ import { QueryBoundary } from "@/components/dashboard/query-boundary";
 import { Badge, Card, CardBody, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { EvidenceGraph } from "@/components/dashboard/evidence-graph";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, path } from "@/lib/api";
 import type { Evidence } from "@/lib/types";
 import { formatDateTime, titleCase } from "@/lib/utils";
 
 export default function EvidenceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const query = useQuery({ queryKey: ["evidence", id], queryFn: () => api.get<Evidence>(`/evidence/${id}`) });
-  const graph = useQuery({ queryKey: ["evidence", id, "graph"], queryFn: () => api.get<any>(`/evidence/${id}/graph`) });
+  const query = useQuery({ queryKey: ["evidence", id], queryFn: () => api.get<Evidence>(path`/evidence/${id}`) });
+  const graph = useQuery({ queryKey: ["evidence", id, "graph"], queryFn: () => api.get<Parameters<typeof EvidenceGraph>[0]["data"]>(path`/evidence/${id}/graph`) });
   return (
     <QueryBoundary query={query} skeleton={<div className="h-96 skeleton rounded-[var(--radius-lg)]" />}>
       {(e) => (

@@ -15,7 +15,7 @@ export function Sheet({ open, onOpenChange, children }: { open: boolean; onOpenC
   );
 }
 
-export function SheetContent({ children, title, description, side = "right", className }: { children: ReactNode; title?: string; description?: string; side?: "right" | "center"; className?: string }) {
+export function SheetContent({ children, title, description, side = "right", className }: { children: ReactNode; title?: string; description?: string; side?: "right" | "left" | "center"; className?: string }) {
   return (
     <Dialog.Portal>
       <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity data-[starting-style]:opacity-0 data-[ending-style]:opacity-0" />
@@ -24,7 +24,9 @@ export function SheetContent({ children, title, description, side = "right", cla
           "fixed z-50 flex flex-col border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] shadow-[var(--shadow-lg)] transition-transform",
           side === "right"
             ? "right-0 top-0 h-full w-full max-w-xl border-l data-[starting-style]:translate-x-full data-[ending-style]:translate-x-full"
-            : "left-1/2 top-1/2 max-h-[85vh] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-lg)] border data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
+            : side === "left"
+              ? "left-0 top-0 h-full w-full max-w-xs border-r data-[starting-style]:-translate-x-full data-[ending-style]:-translate-x-full"
+              : "left-1/2 top-1/2 max-h-[85vh] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-lg)] border data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
           className,
         )}
       >
@@ -34,7 +36,7 @@ export function SheetContent({ children, title, description, side = "right", cla
               {title ? <Dialog.Title className="text-base font-semibold">{title}</Dialog.Title> : null}
               {description ? <Dialog.Description className="mt-0.5 text-sm text-[var(--color-text-muted)]">{description}</Dialog.Description> : null}
             </div>
-            <Dialog.Close className="rounded-md p-1 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)] focus-ring">
+            <Dialog.Close aria-label="Close" className="rounded-md p-1 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)] focus-ring">
               <X className="h-4 w-4" />
             </Dialog.Close>
           </div>

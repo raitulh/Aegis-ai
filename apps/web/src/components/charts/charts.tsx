@@ -112,3 +112,23 @@ export function MiniSpark({ data, color = "var(--color-accent)" }: { data: numbe
 }
 
 const COLORS = ["#4c8dff", "#3ecf8e", "#f5c451", "#ff8a4c", "#a78bfa", "#6ba3ff"];
+
+/** Runtime events vs. policy violations over time (real counts from the runtime ledger). */
+export function RuntimeTimelineChart({ data, hourly }: { data: { t: string; events: number; violations: number }[]; hourly: boolean }) {
+  const rows = data.map((d) => ({
+    ...d,
+    label: new Date(d.t).toLocaleString(undefined, hourly ? { hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" }),
+  }));
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <AreaChart data={rows} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+        <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="label" {...AXIS} tickLine={false} axisLine={false} minTickGap={24} />
+        <YAxis {...AXIS} tickLine={false} axisLine={false} allowDecimals={false} />
+        <Tooltip content={<ChartTooltip />} />
+        <Area type="monotone" dataKey="events" name="events" stroke="var(--color-accent)" fill="var(--color-accent)" fillOpacity={0.15} strokeWidth={2} isAnimationActive={false} />
+        <Area type="monotone" dataKey="violations" name="violations" stroke="var(--color-high)" fill="var(--color-high)" fillOpacity={0.2} strokeWidth={2} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}

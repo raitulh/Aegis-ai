@@ -39,6 +39,9 @@ export type SystemSummary = {
 };
 
 export type System = SystemSummary & {
+  runtime_mode?: "observe" | "audit" | "enforce";
+  baseline_audit_id?: string | null;
+  endpoint_url?: string | null;
   description: string | null;
   owner_name: string | null;
   business_purpose: string | null;
@@ -88,9 +91,13 @@ export type Audit = {
     dimensions?: Record<string, number>;
     posture?: string;
     test_matrix?: TestMatrixRow[];
-    findings?: { total: number; by_severity: Record<string, number>; by_dimension: Record<string, number> };
+    findings?: { total: number; new?: number; by_severity: Record<string, number>; by_dimension: Record<string, number> };
+    tests?: { total: number; failed: number; errors: number };
     high_risk?: number;
+    regression?: RegressionReport;
   };
+  config?: Record<string, unknown>;
+  evidence_head_hash?: string | null;
   cost: Record<string, unknown>;
   is_demo: boolean;
   created_at: string;
@@ -135,14 +142,78 @@ export type Finding = {
   sample_size: number;
   details: Record<string, unknown>;
   evidence_unavailable_reason: string | null;
+  assignee_id: string | null;
+  due_date: string | null;
+  last_audit_id: string | null;
+  last_seen_at: string | null;
+  source: string;
+  tags: string[];
+  priority: string | null;
+  sla_due_at: string | null;
+  risk_acceptance: { reason: string; expires_at: string; approved_by: string; approved_at: string; owner_id: string } | null;
+  risk_accepted_until: string | null;
   created_at: string;
   updated_at: string;
 };
 
 export type FindingSummary = Pick<
   Finding,
-  "id" | "number" | "title" | "category" | "dimension" | "severity" | "status" | "risk_level" | "risk_score" | "system_id" | "control_ref" | "confidence" | "occurrences" | "sample_size" | "created_at"
+  | "id"
+  | "number"
+  | "title"
+  | "category"
+  | "dimension"
+  | "severity"
+  | "status"
+  | "risk_level"
+  | "risk_score"
+  | "system_id"
+  | "control_ref"
+  | "confidence"
+  | "occurrences"
+  | "sample_size"
+  | "created_at"
+  | "source"
+  | "tags"
+  | "priority"
+  | "sla_due_at"
+  | "audit_id"
+  | "assignee_id"
+  | "last_seen_at"
 >;
+
+export type AuditFinding = FindingSummary & {
+  observed_severity: string;
+  observed_risk_level: string | null;
+  observed_occurrences: number;
+  observed_sample_size: number;
+  first_detected_here: boolean;
+};
+
+export type FindingComment = { id: string; finding_id: string; author_label: string | null; body: string; created_at: string };
+
+export type FindingEvent = {
+  id: string;
+  type: string;
+  actor_label: string | null;
+  from_status: string | null;
+  to_status: string | null;
+  note: string | null;
+  created_at: string;
+};
+
+export type Explanation = {
+  generated_by: string;
+  disclaimer: string;
+  what_happened: string;
+  why_it_matters: string;
+  risk: { level: string; score: number; reasons: string[] };
+  affected: { system: string | null; environment: string | null; system_version: string | null; model: string | null; control: string | null };
+  evidence: { id: string; kind: string; title: string; content_hash: string; confidence: string }[];
+  evidence_unavailable_reason: string | null;
+  remediation: { category: string; title: string; description: string };
+  next_steps: string[];
+};
 
 export type Evidence = {
   id: string;
@@ -173,6 +244,17 @@ export type Control = {
   confidence: number;
   needs_human_review: boolean;
   source: string;
+  requirement_id?: string | null;
+  provenance?: {
+    requirement_key: string;
+    text: string;
+    modality: string;
+    page_number: number | null;
+    section: string | null;
+    source_excerpt: string;
+    source_hash: string;
+    confidence: number;
+  } | null;
 };
 
 export type Requirement = {
@@ -387,3 +469,286 @@ export type SearchResponse = {
   groups: Record<string, { type: string; id: string; title: string; subtitle: string | null; url: string; score: number }[]>;
   total: number;
 };
+
+export type ChainVerification = {
+  audit_id?: string;
+  status: "VERIFIED" | "TAMPERED" | "EMPTY" | "PENDING" | "INCOMPLETE" | "UNSIGNED";
+  records: number;
+  content_checked: number;
+  purged: number;
+  head: string | null;
+  recorded_head?: string | null;
+  problems: { index?: number; check: string; detail: string }[];
+  checked_at?: string;
+};
+
+export type IntegritySummary = {
+  status: string;
+  audits_checked: number;
+  audits_verified: number;
+  evidence_total: number;
+  results: { audit_id: string; audit_name: string; status: string; records: number; head: string | null; completed_at: string | null }[];
+  signing_key_id: string;
+  signing_key_development: boolean;
+  checked_at: string;
+};
+
+export type PackageVerification = {
+  format: string;
+  status: string;
+  checks: { check: string; [k: string]: unknown }[];
+  problems: { check: string; detail: string }[];
+  audit?: { id: string; name: string; system_name: string | null } | null;
+  generated_at?: string;
+  root_hash?: string;
+  chain?: ChainVerification;
+  signature?: { algorithm: string; key_id: string; trusted_key_supplied: boolean; valid: boolean | null };
+};
+
+export type EvidenceExport = {
+  id: string;
+  audit_id: string | null;
+  scope: string;
+  root_hash: string;
+  artifact_count: number;
+  integrity_status: string;
+  key_id: string | null;
+  created_at: string;
+  counts: Record<string, number>;
+};
+
+export type RuntimeDecision = "allow" | "flag" | "require_approval" | "block";
+
+export type RuntimeEvent = {
+  id: string;
+  event_id: string;
+  system_id: string;
+  event_type: string;
+  source: string;
+  environment: string | null;
+  agent_name: string | null;
+  actor: string | null;
+  session_id: string | null;
+  trace_id: string | null;
+  tool_name: string | null;
+  occurred_at: string;
+  payload: Record<string, unknown>;
+  signals: Record<string, unknown>;
+  mode: string;
+  decision: RuntimeDecision;
+  effective_decision: RuntimeDecision;
+  decision_reason: string | null;
+  policy_matches: { policy_key: string; rule_id: string; action: string; severity: string; message: string; version: number | string }[];
+  risk_level: string | null;
+  finding_id: string | null;
+  approval_id: string | null;
+  evidence_id: string | null;
+};
+
+export type RuntimeOverview = {
+  window_hours: number;
+  events: number;
+  decisions: Record<RuntimeDecision, number>;
+  event_types: Record<string, number>;
+  timeline: { t: string; events: number; violations: number }[];
+  agents: { agent: string; events: number; violations: number }[];
+  pending_approvals: number;
+  systems: { id: string; name: string; mode: string }[];
+};
+
+export type Approval = {
+  id: string;
+  system_id: string;
+  runtime_event_id: string;
+  status: "pending" | "approved" | "denied" | "expired";
+  summary: string;
+  rule_ref: string | null;
+  request: Record<string, unknown>;
+  expires_at: string;
+  decided_by_label: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  created_at: string;
+};
+
+export type RuntimePolicy = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  status: "draft" | "published" | "disabled";
+  published_version_id: string | null;
+  latest_version: number;
+  template_key: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RuntimePolicyVersion = {
+  id: string;
+  policy_id: string;
+  version: number;
+  source_yaml: string;
+  compiled: { name: string; rules: { id: string; action: string; severity: string; message?: string; description?: string }[] };
+  checksum: string;
+  status: "draft" | "published" | "superseded";
+  change_note: string | null;
+  published_at: string | null;
+  created_at: string;
+};
+
+export type PolicyAssignment = { id: string; policy_id: string; scope_type: string; scope_key: string; system_id: string | null; enabled: boolean; created_at: string };
+
+export type PolicyTemplate = { key: string; name: string; category: string; summary: string; source_yaml: string };
+
+export type Simulation = {
+  window_days: number;
+  events_available: number;
+  events_evaluated: number;
+  truncated: boolean;
+  allowed: number;
+  flagged: number;
+  require_approval: number;
+  blocked: number;
+  by_rule: Record<string, number>;
+  by_system: Record<string, { events: number; flag: number; require_approval: number; block: number }>;
+  workflows_requiring_approval: number;
+  workflows_blocked: number;
+  decisions_changed_vs_recorded: number;
+  samples: { event_id: string; event_type: string; system_id: string; agent: string | null; tool: string | null; occurred_at: string; decision: string; rules: string[] }[];
+};
+
+export type Schedule = {
+  id: string;
+  system_id: string;
+  name: string;
+  enabled: boolean;
+  interval_hours: number | null;
+  trigger_on: string[];
+  categories: string[];
+  intensity: string;
+  policy_version_ids: string[];
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_audit_id: string | null;
+  created_at: string;
+};
+
+export type Trigger = {
+  id: string;
+  system_id: string;
+  schedule_id: string | null;
+  event_type: string;
+  ref: string;
+  source: string;
+  categories: string[];
+  selection_reason: string | null;
+  audit_id: string | null;
+  created_at: string;
+};
+
+export type RegressionReport = {
+  audit_id: string;
+  regression: boolean;
+  comparisons: Record<
+    string,
+    {
+      audit_id: string;
+      new_findings: number;
+      resolved_findings: number;
+      severity_regressions: number;
+      severe_new_findings: { id: string; number: number; title: string; severity: string }[];
+      score_drops: Record<string, number>;
+      regression: boolean;
+    }
+  >;
+};
+
+export type Quota = {
+  metric: string;
+  label: string;
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  percent: number | null;
+  periodic: boolean;
+  projected: number | null;
+  projected_over_limit: boolean;
+  threshold_reached: number | null;
+};
+
+export type PlanPublic = {
+  key: string;
+  name: string;
+  audience: string;
+  limits: Record<string, number | null>;
+  features: Record<string, { included: boolean; roadmap: boolean; label: string }>;
+  retention_days: number | null;
+  support: string;
+  price_display: string | null;
+  self_serve: boolean;
+};
+
+export type Usage = {
+  organization_id: string;
+  plan: PlanPublic;
+  plan_key: string;
+  sandbox: boolean;
+  subscription: { status: string; provider: string; cancel_at_period_end: boolean };
+  period: { start: string; end: string };
+  quotas: Quota[];
+  billing_provider: string;
+  self_serve_checkout: boolean;
+};
+
+export type PlanCatalogue = { plans: PlanPublic[]; quotas: Record<string, string>; features: Record<string, string>; roadmap_features: string[] };
+
+export type Webhook = { id: string; url: string; description: string | null; events: string[]; active: boolean; failure_count: number; last_delivery_at: string | null; created_at: string };
+
+export type WebhookDelivery = {
+  id: string;
+  event_type: string;
+  event_id: string;
+  status: string;
+  attempts: number;
+  next_attempt_at: string | null;
+  response_status: number | null;
+  last_error: string | null;
+  delivered_at: string | null;
+  created_at: string;
+};
+
+export type GraphNode = {
+  id: string;
+  type: "system" | "agent" | "model" | "tool" | "runtime_policy" | "policy" | "control" | "test" | "finding" | "evidence" | "remediation" | "retest";
+  label: string;
+  href?: string | null;
+  severity?: string;
+  status?: string;
+  risk_level?: string;
+  [k: string]: unknown;
+};
+
+export type GraphEdge = { source: string; target: string; relation: string; [k: string]: unknown };
+
+export type AssuranceGraph = { nodes: GraphNode[]; edges: GraphEdge[]; counts: Record<string, number>; generated_at: string };
+
+export type AuditLogEntry = { id: string; action: string; resource_type: string; resource_id: string | null; actor: string | null; created_at: string; request_id: string | null };
+
+export type RoleInfo = { role: string; rank: number; assignable: boolean; description: string; permissions: string[] };
+
+export type OrganizationInfo = {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  is_demo: boolean;
+  is_sandbox: boolean;
+  expires_at: string | null;
+  retention: { runtime_events_days: number; custom_allowed: boolean; evidence: string };
+  finding_sla_days: Record<string, number>;
+  features: Record<string, boolean>;
+};
+
+export type JobInfo = { id: string; job: string; status: string; attempts: number; max_attempts: number; error_class: string | null; error: string | null; duration_ms: number | null; created_at: string; finished_at: string | null };

@@ -5,7 +5,8 @@ import { Check, ChevronLeft, ChevronRight, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button, Card, CardBody } from "@/components/ui/primitives";
-import { api, ApiError } from "@/lib/api";
+import { PlanLimitNotice } from "@/components/ui/display";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { usePolicies, useSystems } from "@/lib/queries";
 import { cn, titleCase } from "@/lib/utils";
 import type { Audit } from "@/lib/types";
@@ -43,6 +44,9 @@ export default function NewAuditPage() {
   const [policyVersionIds, setPolicyVersionIds] = useState<string[]>([]);
   const [intensity, setIntensity] = useState("standard");
   const [launching, setLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<unknown>(null);
+  // One key per launch attempt: a double-click or network retry cannot start two audits.
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   const system = useMemo(() => systems?.items.find((s) => s.id === systemId), [systems, systemId]);
   const canNext = [!!systemId, categories.length > 0, true, !!intensity, true][step];
@@ -50,10 +54,16 @@ export default function NewAuditPage() {
   async function launch() {
     setLaunching(true);
     try {
-      const audit = await api.post<Audit>("/audits", { system_id: systemId, categories, policy_version_ids: policyVersionIds, intensity, config: { seed: 7 }, start: true });
+      setLaunchError(null);
+      const audit = await api.post<Audit>(
+        "/audits",
+        { system_id: systemId, categories, policy_version_ids: policyVersionIds, intensity, config: { seed: 7 }, start: true },
+        { "Idempotency-Key": `${idempotencyKey}:${systemId}:${intensity}:${[...categories].sort().join(",")}` },
+      );
       router.push(`/dashboard/audits/${audit.id}`);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to launch audit");
+      setLaunchError(err);
+      if (!(err instanceof ApiError && err.isPlanLimit)) toast.error(errorMessage(err, "Failed to launch audit"));
       setLaunching(false);
     }
   }
@@ -155,6 +165,11 @@ export default function NewAuditPage() {
         </CardBody>
       </Card>
 
+      {launchError ? (
+        <div className="mt-4">
+          <PlanLimitNotice error={launchError} />
+        </div>
+      ) : null}
       <div className="mt-4 flex items-center justify-between">
         <Button variant="ghost" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0} icon={ChevronLeft}>
           Back

@@ -1,18 +1,31 @@
 "use client";
-import {use} from "react";
+import { use } from "react";
 import { ShieldCheck, ShieldX } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { QueryBoundary } from "@/components/dashboard/query-boundary";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState, SeverityBadge, StatusBadge } from "@/components/ui/primitives";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, path } from "@/lib/api";
 import { cn, titleCase } from "@/lib/utils";
 import type { RedTeamProbe, RedTeamRun } from "@/lib/types";
 
+const TERMINAL = ["completed", "failed", "cancelled"];
+
 export default function RedTeamRunPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const runQuery = useQuery({ queryKey: ["redteam", id], queryFn: () => api.get<RedTeamRun>(`/redteam/runs/${id}`), refetchInterval: (q) => (["completed", "failed"].includes((q.state.data as RedTeamRun)?.status) ? false : 1500) });
-  const probesQuery = useQuery({ queryKey: ["redteam", id, "probes"], queryFn: () => api.get<RedTeamProbe[]>(`/redteam/runs/${id}/probes`), enabled: ["completed", "failed"].includes(runQuery.data?.status ?? "") });
+  const runQuery = useQuery({
+    queryKey: ["redteam", id],
+    queryFn: () => api.get<RedTeamRun>(path`/redteam/runs/${id}`),
+    refetchInterval: (q) => (TERMINAL.includes((q.state.data as RedTeamRun | undefined)?.status ?? "") ? false : 2000),
+  });
+  const running = !!runQuery.data && !TERMINAL.includes(runQuery.data.status);
+  // Probes stream in while the run is active: poll them too, then stop once the run is terminal.
+  const probesQuery = useQuery({
+    queryKey: ["redteam", id, "probes"],
+    queryFn: () => api.get<RedTeamProbe[]>(path`/redteam/runs/${id}/probes`),
+    enabled: !!runQuery.data,
+    refetchInterval: running ? 2000 : false,
+  });
 
   return (
     <QueryBoundary query={runQuery} skeleton={<div className="h-64 skeleton rounded-[var(--radius-lg)]" />}>
@@ -20,7 +33,7 @@ export default function RedTeamRunPage({ params }: { params: Promise<{ id: strin
         const s = run.summary ?? {};
         return (
           <div>
-            <PageHeader title={run.name} breadcrumbs={[{ label: "Red Team", href: "/dashboard/red-team" }, { label: run.id.slice(0, 8) }]} actions={<StatusBadge status={run.status} />} />
+            <PageHeader title={run.name} breadcrumbs={[{ label: "Red Team", href: "/dashboard/red-team" }, { label: run.name }]} actions={<StatusBadge status={run.status} />} />
             {(s.empty_corpus as boolean) ? (
               <EmptyState icon={ShieldCheck} title="No probes executed" description="This run used an empty corpus. Import an adversarial dataset to populate the attack tree." />
             ) : (
@@ -35,7 +48,7 @@ export default function RedTeamRunPage({ params }: { params: Promise<{ id: strin
                   <CardHeader><CardTitle>Attack Lineage</CardTitle><span className="text-xs text-[var(--color-text-subtle)]">corpus: {(run.config?.corpus_name as string) ?? "custom"}</span></CardHeader>
                   <CardBody>
                     <QueryBoundary query={probesQuery} skeleton={<div className="h-40 skeleton" />}>
-                      {(probes) => (probes.length ? <AttackTree probes={probes} /> : <p className="text-sm text-[var(--color-text-subtle)]">Waiting for probe results…</p>)}
+                      {(probes) => (probes.length ? <AttackTree probes={probes} /> : <p className="text-sm text-[var(--color-text-subtle)]">{running ? "Waiting for the first probe result…" : "No probe results were recorded for this run."}</p>)}
                     </QueryBoundary>
                   </CardBody>
                 </Card>

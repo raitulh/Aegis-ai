@@ -163,7 +163,39 @@ def policy_controls(
     controls = db.scalars(
         select(Control).where(Control.policy_id == policy_id, Control.policy_version_id == policy.current_version_id)
     ).all()
-    return [ControlOut.model_validate(c) for c in controls]
+    from aegis_api.models import PolicyRequirement
+
+    requirement_ids = {c.requirement_id for c in controls if c.requirement_id}
+    requirements = (
+        {
+            r.id: r
+            for r in db.scalars(
+                select(PolicyRequirement).where(
+                    PolicyRequirement.id.in_(requirement_ids),
+                    PolicyRequirement.organization_id == principal.organization_id,
+                )
+            ).all()
+        }
+        if requirement_ids
+        else {}
+    )
+    out = []
+    for c in controls:
+        item = ControlOut.model_validate(c)
+        req = requirements.get(c.requirement_id) if c.requirement_id else None
+        if req is not None:
+            item.provenance = {
+                "requirement_key": req.requirement_key,
+                "text": req.text,
+                "modality": req.modality,
+                "page_number": req.page_number,
+                "section": req.section,
+                "source_excerpt": req.source_excerpt,
+                "source_hash": req.source_hash,
+                "confidence": req.confidence,
+            }
+        out.append(item)
+    return out
 
 
 @router.post("/policies/{policy_id}/controls", response_model=ControlOut, status_code=201)

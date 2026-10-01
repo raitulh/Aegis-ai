@@ -136,7 +136,11 @@ def create_webhook(
     unknown = [e for e in events if e not in WEBHOOK_EVENTS]
     if unknown:
         raise ValidationFailed(f"Unknown webhook events: {', '.join(unknown)}")
-    clean_url = validate_outbound_url(url, allowed_schemes=frozenset({"https", "http"}))
+    # Payloads describe findings and decisions: production requires TLS; plain HTTP is for local development.
+    from aegis_api.config import get_settings
+
+    schemes = frozenset({"https"}) if get_settings().is_production else frozenset({"https", "http"})
+    clean_url = validate_outbound_url(url, allowed_schemes=schemes)
     secret_value = "whsec_" + pysecrets.token_urlsafe(32)
     secret = secrets_service.create_secret(
         session,

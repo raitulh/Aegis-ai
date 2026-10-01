@@ -113,6 +113,8 @@ class SystemOut(ORMModel):
     config: dict[str, Any]
     is_demo: bool
     status: str
+    runtime_mode: str = "observe"
+    baseline_audit_id: str | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -1,7 +1,7 @@
 """MCP server exposing Aegis AI assurance tools.
 
 Authentication and workspace scoping are enforced by the API: the server calls Aegis with the API key in
-``AEGIS_API_KEY`` (create one under Settings → API Keys), so every tool respects that key's role, scopes
+``AEGIS_API_KEY`` (create one under API & SDK → API keys), so every tool respects that key's role, scopes
 and organization. Configure ``AEGIS_BASE_URL`` for non-local deployments.
 
 Security model
@@ -36,7 +36,7 @@ mcp = _Server("aegis-ai")
 def _client() -> Aegis:
     api_key = os.environ.get("AEGIS_API_KEY", "")
     if not api_key:
-        raise RuntimeError("AEGIS_API_KEY is not set. Create an API key under Settings → API Keys.")
+        raise RuntimeError("AEGIS_API_KEY is not set. Create an API key under API & SDK → API keys.")
     return Aegis(api_key=api_key, base_url=os.environ.get("AEGIS_BASE_URL", "http://localhost:8000"))
 
 

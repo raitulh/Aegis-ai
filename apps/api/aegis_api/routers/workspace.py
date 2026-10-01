@@ -532,17 +532,21 @@ def mark_all_read(principal: Principal = Depends(require("org:read")), db: Sessi
 @router.get("/audit-log")
 def audit_log_list(
     params: PageParams = Depends(),
+    action: str | None = Query(None, max_length=64, description="Action prefix, e.g. 'policy.' or 'auth.login'"),
+    resource_type: str | None = Query(None, max_length=64),
     principal: Principal = Depends(require("audit_logs:read")),
     db: Session = Depends(get_db),
 ) -> Page:
-    stmt = (
-        select(AuditLog)
-        .where(AuditLog.organization_id == principal.organization_id)
-        .order_by(AuditLog.created_at.desc())
-    )
+    stmt = select(AuditLog).where(AuditLog.organization_id == principal.organization_id)
+    if action:
+        # Escape LIKE wildcards so the filter is a literal prefix.
+        prefix = action.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        stmt = stmt.where(AuditLog.action.like(f"{prefix}%", escape="\\"))
+    if resource_type:
+        stmt = stmt.where(AuditLog.resource_type == resource_type)
     return paginate(
         db,
-        stmt,
+        stmt.order_by(AuditLog.created_at.desc()),
         params,
         lambda e: {
             "id": str(e.id),

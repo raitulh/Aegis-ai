@@ -29,6 +29,11 @@ def test_policy_compile_creates_controls_with_provenance(workspace):
     control_id = controls[0]["id"]
     mappings = workspace.get(f"/api/v1/controls/{control_id}/mappings").json()
     assert isinstance(mappings, list)
+    # Provenance is persisted and returned with the controls on later reads (not only in the compile response).
+    listed = workspace.get(f"/api/v1/policies/{policy['id']}/controls").json()
+    compiled = [c for c in listed if c["source"] == "compiled"]
+    assert compiled and all(c["provenance"] and c["provenance"]["source_excerpt"] for c in compiled)
+    assert {c["provenance"]["requirement_key"] for c in compiled} <= {r["requirement_key"] for r in reqs}
 
 
 def test_frameworks_seeded_and_labeled(workspace):

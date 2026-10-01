@@ -33,7 +33,7 @@ class _Transport:
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         if not api_key:
-            raise ValueError("An API key is required (create one in Settings → API Keys)")
+            raise ValueError("An API key is required (create one under API & SDK → API keys)")
         self.base_url = base_url.rstrip("/")
         self.max_retries = max_retries
         self.backoff = 0.75
@@ -697,7 +697,7 @@ class AsyncAegis:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         if not api_key:
-            raise ValueError("An API key is required (create one in Settings → API Keys)")
+            raise ValueError("An API key is required (create one under API & SDK → API keys)")
         self.max_retries = max_retries
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),

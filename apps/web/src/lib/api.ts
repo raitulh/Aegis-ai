@@ -1,6 +1,11 @@
 /**
- * Typed API client. In the browser, requests go to the same-origin BFF proxy (`/bff/*`) which forwards
- * to the API and carries the httpOnly session cookie. Server components pass an absolute base + cookie.
+ * Typed API client. In the browser every request goes to the same-origin BFF proxy (`/bff/api/v1`), which
+ * forwards the httpOnly session cookie to the API.
+ *
+ * - Path parameters must be interpolated with {@link path} so they are URL-encoded (a crafted id can never
+ *   turn into a different API path).
+ * - Every request has a timeout; network failures surface as `ApiError` with code `network_error`.
+ * - A 401 on an authenticated call emits `aegis:unauthenticated` so the app can send the user to sign in.
  */
 
 export type ApiErrorBody = {
@@ -18,13 +23,21 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
-}
 
-function browserBase() {
-  return "/bff/api/v1";
+  get isPlanLimit() {
+    return this.status === 403 && ["plan_limit_exceeded", "feature_not_in_plan", "feature_unavailable"].includes(this.code);
+  }
 }
 
 export type Page<T> = { items: T[]; meta: { page: number; page_size: number; total: number; total_pages: number } };
+
+export const API_BASE = "/bff/api/v1";
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** Tagged template that URL-encodes every interpolated value: path`/findings/${id}/comments`. */
+export function path(strings: TemplateStringsArray, ...values: (string | number)[]): string {
+  return strings.reduce((out, s, i) => out + s + (i < values.length ? encodeURIComponent(String(values[i])) : ""), "");
+}
 
 async function parse(res: Response) {
   const text = await res.text();
@@ -36,88 +49,86 @@ async function parse(res: Response) {
   }
 }
 
-export async function apiFetch<T>(
-  path: string,
-  opts: RequestInit & { params?: Record<string, unknown>; base?: string } = {},
-): Promise<T> {
-  const { params, base, ...init } = opts;
-  const url = new URL((base ?? browserBase()) + path, typeof window === "undefined" ? "http://internal" : window.location.origin);
+type FetchOptions = RequestInit & { params?: Record<string, unknown>; timeoutMs?: number };
+
+function buildUrl(p: string, params?: Record<string, unknown>) {
+  const url = new URL(API_BASE + p, typeof window === "undefined" ? "http://internal" : window.location.origin);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
     }
   }
-  const res = await fetch(base ? url.toString() : url.pathname + url.search, {
-    ...init,
-    headers: {
-      ...(init.body && !(init.body instanceof FormData) ? { "content-type": "application/json" } : {}),
-      ...init.headers,
-    },
-    credentials: "include",
-    cache: "no-store",
-  });
-  const body = await parse(res);
-  if (!res.ok) {
-    const e = (body as ApiErrorBody | null)?.error;
-    throw new ApiError(res.status, e?.code ?? "error", e?.message ?? res.statusText, e?.request_id, e?.details);
-  }
-  return body as T;
+  return url.pathname + url.search;
 }
+
+async function request(p: string, opts: FetchOptions = {}): Promise<Response> {
+  const { params, timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init } = opts;
+  const timeout = AbortSignal.timeout(timeoutMs);
+  try {
+    return await fetch(buildUrl(p, params), {
+      ...init,
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      headers: {
+        ...(init.body && !(init.body instanceof FormData) ? { "content-type": "application/json" } : {}),
+        ...init.headers,
+      },
+      credentials: "include",
+      cache: "no-store",
+    });
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError" && signal?.aborted) throw e;
+    const timedOut = (e as Error)?.name === "TimeoutError";
+    throw new ApiError(0, timedOut ? "timeout" : "network_error", timedOut ? "The request timed out." : "Network unavailable — check your connection.");
+  }
+}
+
+async function failure(res: Response, p: string): Promise<never> {
+  const body = await parse(res);
+  const e = (body as ApiErrorBody | null)?.error;
+  if (res.status === 401 && typeof window !== "undefined" && !p.startsWith("/auth/")) {
+    window.dispatchEvent(new CustomEvent("aegis:unauthenticated"));
+  }
+  throw new ApiError(res.status, e?.code ?? "error", e?.message ?? (res.statusText || `Request failed (${res.status})`), e?.request_id, e?.details);
+}
+
+export async function apiFetch<T>(p: string, opts: FetchOptions = {}): Promise<T> {
+  const res = await request(p, opts);
+  if (!res.ok) return failure(res, p);
+  return (await parse(res)) as T;
+}
+
+/** POST/GET that returns a file; triggers a browser download and returns the response headers. */
+export async function download(p: string, opts: FetchOptions & { filename?: string } = {}): Promise<Headers> {
+  const { filename, ...rest } = opts;
+  const res = await request(p, { timeoutMs: 120_000, ...rest });
+  if (!res.ok) return failure(res, p);
+  const blob = await res.blob();
+  const disposition = res.headers.get("content-disposition") ?? "";
+  const name = filename ?? /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? "download";
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return res.headers;
+}
+
+const json = (body: unknown) => (body === undefined ? undefined : JSON.stringify(body));
 
 export const api = {
-  get: <T>(path: string, params?: Record<string, unknown>) => apiFetch<T>(path, { method: "GET", params }),
-  post: <T>(path: string, body?: unknown) => apiFetch<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
-  patch: <T>(path: string, body?: unknown) => apiFetch<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
-  delete: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
-  upload: <T>(path: string, form: FormData) => apiFetch<T>(path, { method: "POST", body: form }),
+  get: <T>(p: string, params?: Record<string, unknown>, signal?: AbortSignal) => apiFetch<T>(p, { method: "GET", params, signal }),
+  post: <T>(p: string, body?: unknown, headers?: Record<string, string>) => apiFetch<T>(p, { method: "POST", body: json(body), headers }),
+  patch: <T>(p: string, body?: unknown) => apiFetch<T>(p, { method: "PATCH", body: json(body) }),
+  put: <T>(p: string, body?: unknown) => apiFetch<T>(p, { method: "PUT", body: json(body) }),
+  delete: <T>(p: string) => apiFetch<T>(p, { method: "DELETE" }),
+  upload: <T>(p: string, form: FormData, params?: Record<string, unknown>) => apiFetch<T>(p, { method: "POST", body: form, params, timeoutMs: 120_000 }),
 };
 
-/** Subscribe to an audit's SSE progress stream. Returns an unsubscribe function. */
-export function streamAudit(auditId: string, onEvent: (ev: AuditStreamEvent) => void, onDone?: () => void): () => void {
-  const source = new EventSource(`/bff/api/v1/audits/${auditId}/stream`, { withCredentials: true });
-  const handler = (e: MessageEvent) => {
-    try {
-      onEvent(JSON.parse(e.data));
-    } catch {
-      /* ignore keep-alive comments */
-    }
-  };
-  for (const type of [
-    "message",
-    "audit.started",
-    "audit.setup",
-    "audit.tests_generated",
-    "audit.probe",
-    "audit.stage",
-    "audit.inference_progress",
-    "audit.eval_progress",
-    "audit.finding_signal",
-    "audit.evidence",
-    "audit.policy_mapping",
-    "audit.finding_created",
-    "audit.completed",
-    "audit.failed",
-    "audit.warning",
-  ]) {
-    source.addEventListener(type, handler as EventListener);
-  }
-  source.addEventListener("done", () => {
-    source.close();
-    onDone?.();
-  });
-  source.onerror = () => {
-    source.close();
-    onDone?.();
-  };
-  return () => source.close();
+export function errorMessage(e: unknown, fallback = "Something went wrong."): string {
+  if (e instanceof ApiError) return e.message;
+  if (e instanceof Error && e.message) return e.message;
+  return fallback;
 }
-
-export type AuditStreamEvent = {
-  seq: number;
-  type: string;
-  stage?: string | null;
-  level: "info" | "success" | "warning" | "error";
-  message: string;
-  progress: number;
-  data: Record<string, unknown>;
-};

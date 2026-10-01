@@ -2,13 +2,20 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { Toaster } from "sonner";
+import { ApiError } from "@/lib/api";
+
+/** Retry transient failures once; never retry client errors (401/403/404/422/429 are answers, not glitches). */
+function retry(failureCount: number, error: unknown) {
+  if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+  return failureCount < 1;
+}
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { staleTime: 15_000, retry: 1, refetchOnWindowFocus: false },
+          queries: { staleTime: 15_000, retry, refetchOnWindowFocus: false },
         },
       }),
   );

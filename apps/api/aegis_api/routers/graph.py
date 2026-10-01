@@ -165,7 +165,7 @@ def assurance_graph(
                 "evidence",
                 f"{count} artifacts",
                 count=int(count),
-                href=f"/dashboard/evidence?audit_id={audit_id}",
+                href=f"/dashboard/audits/{audit_id}?tab=evidence",
             )
             g.edge(eid, f"audit:{audit_id}", "proves")
         assessments = db.execute(
@@ -252,9 +252,17 @@ def assurance_graph(
     type_counts: dict[str, int] = {}
     for node in g.nodes.values():
         type_counts[node["type"]] = type_counts.get(node["type"], 0) + 1
+    # Only return edges whose endpoints are both in the (bounded) node set, de-duplicated.
+    seen: set[tuple[str, str, str]] = set()
+    edges = []
+    for e in g.edges:
+        key = (e["source"], e["target"], e["relation"])
+        if e["source"] in g.nodes and e["target"] in g.nodes and key not in seen:
+            seen.add(key)
+            edges.append(e)
     return {
         "nodes": list(g.nodes.values()),
-        "edges": g.edges,
+        "edges": edges,
         "counts": type_counts,
         "filters": {
             "system_id": str(system_id) if system_id else None,

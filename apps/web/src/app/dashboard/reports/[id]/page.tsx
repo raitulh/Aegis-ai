@@ -1,18 +1,28 @@
 "use client";
 import { use } from "react";
+import { toast } from "sonner";
 import { Download, FileJson } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { QueryBoundary } from "@/components/dashboard/query-boundary";
 import { Button, Card, CardBody, CardHeader, CardTitle, RiskBadge, SeverityBadge } from "@/components/ui/primitives";
 import { Logo } from "@/components/logo";
+import { download, errorMessage, path } from "@/lib/api";
 import { useAuditReport } from "@/lib/queries";
+
+async function exportReport(reportId: string, format: "pdf" | "json") {
+  try {
+    await download(path`/reports/${reportId}/export`, { method: "GET", params: { format } });
+  } catch (e) {
+    toast.error(errorMessage(e, "Export failed"));
+  }
+}
 
 export default function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const query = useAuditReport(id);
   return (
     <div>
-      <PageHeader title="AI Assurance Report" breadcrumbs={[{ label: "Reports", href: "/dashboard/reports" }, { label: id.slice(0, 8) }]} actions={query.data ? <div className="flex gap-2"><a href={`/bff/api/v1/reports/${query.data.id}/export?format=pdf`}><Button variant="secondary" size="sm" icon={Download}>PDF</Button></a><a href={`/bff/api/v1/reports/${query.data.id}/export?format=json`}><Button variant="ghost" size="sm" icon={FileJson}>JSON</Button></a></div> : null} />
+      <PageHeader title="AI Assurance Report" breadcrumbs={[{ label: "Reports", href: "/dashboard/reports" }, { label: id.slice(0, 8) }]} actions={query.data ? <div className="flex gap-2"><Button variant="secondary" size="sm" icon={Download} onClick={() => exportReport(query.data.id, "pdf")}>PDF</Button><Button variant="ghost" size="sm" icon={FileJson} onClick={() => exportReport(query.data.id, "json")}>JSON</Button></div> : null} />
       <QueryBoundary query={query} skeleton={<div className="h-96 skeleton rounded-[var(--radius-lg)]" />}>
         {(report) => {
           const c = report.content;
@@ -24,7 +34,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
                     <Logo />
                     <div className="text-right text-xs text-[var(--color-text-subtle)]">
                       <p>{c.system_description?.name}</p>
-                      <p>{c.audit_metadata?.audit_id?.slice(0, 12)}</p>
+                      <p>{String(c.audit_metadata?.audit_id ?? "").slice(0, 12)}</p>
                     </div>
                   </div>
                   <h2 className="mt-4 text-lg font-semibold">Executive Summary</h2>

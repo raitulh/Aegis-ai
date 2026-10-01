@@ -21,8 +21,11 @@ export const DIMENSIONS = ["fairness", "truthfulness", "safety", "privacy", "sec
 
 export const STATUS_META: Record<string, { label: string; tone: string }> = {
   open: { label: "Open", tone: "high" },
-  acknowledged: { label: "Acknowledged", tone: "medium" },
+  acknowledged: { label: "Triaged", tone: "medium" },
+  triaged: { label: "Triaged", tone: "medium" },
   in_remediation: { label: "In remediation", tone: "low" },
+  fixed: { label: "Fixed", tone: "low" },
+  retesting: { label: "Retesting", tone: "low" },
   resolved: { label: "Resolved", tone: "success" },
   accepted_risk: { label: "Accepted risk", tone: "info" },
   false_positive: { label: "False positive", tone: "info" },
@@ -36,4 +39,39 @@ export const STATUS_META: Record<string, { label: string; tone: string }> = {
   pass: { label: "Pass", tone: "success" },
   fail: { label: "Fail", tone: "critical" },
   partial: { label: "Partial", tone: "medium" },
+  error: { label: "Error", tone: "critical" },
+  // membership
+  active: { label: "Active", tone: "success" },
+  invited: { label: "Invited", tone: "info" },
+  suspended: { label: "Suspended", tone: "critical" },
+  // runtime decisions & approvals
+  allow: { label: "Allowed", tone: "success" },
+  flag: { label: "Flagged", tone: "medium" },
+  require_approval: { label: "Needs approval", tone: "high" },
+  block: { label: "Blocked", tone: "critical" },
+  pending: { label: "Pending", tone: "medium" },
+  approved: { label: "Approved", tone: "success" },
+  denied: { label: "Denied", tone: "critical" },
+  expired: { label: "Expired", tone: "info" },
+  // policies
+  published: { label: "Published", tone: "success" },
+  superseded: { label: "Superseded", tone: "info" },
+  disabled: { label: "Disabled", tone: "info" },
+  // integrity
+  VERIFIED: { label: "Verified", tone: "success" },
+  TAMPERED: { label: "Tampered", tone: "critical" },
+  INCOMPLETE: { label: "Incomplete", tone: "high" },
+  UNSIGNED: { label: "Unsigned", tone: "medium" },
+  EMPTY: { label: "No evidence", tone: "info" },
+  PENDING: { label: "Pending", tone: "info" },
+  // deliveries & jobs
+  succeeded: { label: "Succeeded", tone: "success" },
+  retrying: { label: "Retrying", tone: "medium" },
+  dead: { label: "Dead-lettered", tone: "critical" },
+};
+
+export const RUNTIME_MODE_META: Record<string, { label: string; description: string; tone: string }> = {
+  observe: { label: "Observe", description: "Record telemetry and decisions; never interfere.", tone: "info" },
+  audit: { label: "Audit", description: "Record, and turn policy violations into findings with evidence.", tone: "medium" },
+  enforce: { label: "Enforce", description: "Block or hold actions for approval before they happen.", tone: "high" },
 };

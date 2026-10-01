@@ -73,6 +73,9 @@ class ControlOut(ORMModel):
     confidence: float
     needs_human_review: bool
     source: str
+    requirement_id: str | None = None
+    # Source provenance of the requirement this control was compiled from (None for manual controls).
+    provenance: dict[str, Any] | None = None
 
 
 class ManualControlCreate(BaseModel):

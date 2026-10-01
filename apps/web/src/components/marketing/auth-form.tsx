@@ -1,5 +1,5 @@
 "use client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -7,8 +7,17 @@ import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/primitives";
 import { api, ApiError } from "@/lib/api";
 
+/** Only same-site paths are honoured as a post-login destination (no open redirect). */
+export function safeNext(value: string | null | undefined): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return "/dashboard";
+  return value;
+}
+
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
+  const params = useSearchParams();
+  const next = safeNext(params.get("next"));
+  const expired = params.get("expired") === "1";
   const [loading, setLoading] = useState(false);
   const [guest, setGuest] = useState(false);
 
@@ -23,7 +32,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           ? { email: form.get("email"), password: form.get("password"), full_name: form.get("name"), organization_name: form.get("org") }
           : { email: form.get("email"), password: form.get("password") };
       await api.post(path, body);
-      router.push("/dashboard");
+      router.push(next);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Something went wrong");
     } finally {
@@ -53,6 +62,11 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-7 shadow-[var(--shadow-lg)]">
           <h1 className="text-xl font-semibold tracking-tight">{mode === "signup" ? "Create your workspace" : "Welcome back"}</h1>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">{mode === "signup" ? "Start auditing your AI systems in minutes." : "Sign in to your Aegis workspace."}</p>
+          {expired ? (
+            <p role="status" className="mt-3 rounded-[var(--radius)] border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+              Your session ended. Sign in again to continue where you left off.
+            </p>
+          ) : null}
           <form onSubmit={submit} className="mt-6 space-y-3">
             {mode === "signup" && (
               <>
@@ -76,14 +90,14 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             {mode === "signup" ? (
               <>
                 Already have an account?{" "}
-                <Link href="/login" className="text-[var(--color-accent-bright)] hover:underline">
+                <Link href={next !== "/dashboard" ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="text-[var(--color-accent-bright)] hover:underline">
                   Sign in
                 </Link>
               </>
             ) : (
               <>
                 New to Aegis?{" "}
-                <Link href="/signup" className="text-[var(--color-accent-bright)] hover:underline">
+                <Link href={next !== "/dashboard" ? `/signup?next=${encodeURIComponent(next)}` : "/signup"} className="text-[var(--color-accent-bright)] hover:underline">
                   Create a workspace
                 </Link>
               </>

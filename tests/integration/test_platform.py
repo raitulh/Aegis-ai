@@ -578,3 +578,29 @@ def test_new_tables_are_tenant_isolated(demo_provider_and_system, client):
     finally:
         s.rollback()
         s.close()
+
+
+def test_system_exposes_runtime_mode_and_baseline(demo_provider_and_system):
+    ws, _pid, sid = demo_provider_and_system
+    system = ws.get(f"/api/v1/systems/{sid}").json()
+    assert system["runtime_mode"] == "observe"
+    assert system["baseline_audit_id"] is None
+    audit = _audit(ws, sid)
+    assert ws.put(f"/api/v1/systems/{sid}/baseline", json={"audit_id": audit["id"]}).status_code == 200
+    assert ws.put(f"/api/v1/systems/{sid}/runtime-mode", json={"mode": "audit"}).status_code == 200
+    system = ws.get(f"/api/v1/systems/{sid}").json()
+    assert system["baseline_audit_id"] == audit["id"]
+    assert system["runtime_mode"] == "audit"
+
+
+def test_audit_log_filters_by_action_prefix_and_resource(demo_provider_and_system):
+    ws, _pid, sid = demo_provider_and_system
+    ws.put(f"/api/v1/systems/{sid}/runtime-mode", json={"mode": "audit"})
+    everything = ws.get("/api/v1/audit-log", params={"page_size": 200}).json()["items"]
+    assert len({e["action"].split(".")[0] for e in everything}) > 1
+    runtime_only = ws.get("/api/v1/audit-log", params={"action": "runtime.", "page_size": 200}).json()["items"]
+    assert runtime_only and all(e["action"].startswith("runtime.") for e in runtime_only)
+    # LIKE wildcards in the filter are literal, not patterns.
+    assert ws.get("/api/v1/audit-log", params={"action": "%"}).json()["items"] == []
+    by_resource = ws.get("/api/v1/audit-log", params={"resource_type": "ai_system", "page_size": 200}).json()["items"]
+    assert all(e["resource_type"] == "ai_system" for e in by_resource)
