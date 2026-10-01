@@ -1,7 +1,7 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { BookMarked } from "lucide-react";
+import { BookMarked, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -35,13 +35,15 @@ function ReposList() {
 
   return (
     <Container className="pb-16">
-      <nav aria-label="Breadcrumb" className="pt-6 text-sm text-subtle">
-        <Link href="/open-source" className="hover:text-fg">Open source</Link>
-        <span aria-hidden> / </span>
-        <span className="text-muted">Repositories</span>
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1 pt-6 text-sm text-subtle">
+        <Link href="/open-source" className="rounded-sm transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]">Open source</Link>
+        <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+        <span className="text-muted" aria-current="page">Repositories</span>
       </nav>
       <PageHeader
         className="pt-4"
+        eyebrow="Contribute"
+        icon={<BookMarked />}
         title="Repositories"
         description="Public GitHub repositories registered with the hub. Stats refresh on webhooks and periodic syncs; the registrant, project maintainers and moderators can request a sync."
         actions={signedIn ? <RegisterRepoDialog /> : <LinkButton href="/login?next=%2Fopen-source%2Frepos" variant="secondary">Sign in to register</LinkButton>}
@@ -58,7 +60,7 @@ function ReposList() {
       </FilterBar>
 
       {list.isPending ? (
-        <SkeletonCards count={6} />
+        <SkeletonCards count={6} media={false} />
       ) : list.isError ? (
         <ErrorState error={list.error} onRetry={() => list.refetch()} />
       ) : list.data.items.length === 0 ? (
@@ -73,8 +75,8 @@ function ReposList() {
           />
         )
       ) : (
-        <div aria-busy={list.isFetching || undefined}>
-          <ResultSummary total={list.data.total} noun="repository" active={active} onClear={reset} />
+        <div aria-busy={list.isFetching || undefined} className={list.isPlaceholderData ? "opacity-70 transition-opacity" : "transition-opacity"}>
+          <ResultSummary total={list.data.total} noun="repo" active={active} onClear={reset} />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {list.data.items.map((r) => <RepoCardView key={r.id} repo={r} canSync={signedIn} />)}
           </div>
@@ -87,7 +89,7 @@ function ReposList() {
 
 export default function OpenSourceReposPage() {
   return (
-    <Suspense fallback={<Container className="py-8"><SkeletonCards count={6} /></Container>}>
+    <Suspense fallback={<Container className="py-16"><SkeletonCards count={6} media={false} /></Container>}>
       <ReposList />
     </Suspense>
   );

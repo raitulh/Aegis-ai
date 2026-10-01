@@ -1,18 +1,17 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { CircleDot, Sparkles, X } from "lucide-react";
+import { ChevronRight, CircleDot, FolderGit2, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
 import { FilterBar, FilterSelect, ResultSummary, SearchBox, ToggleChip } from "@/components/catalog/filters";
-import { IssueItem, osKeys } from "@/components/catalog/repo";
+import { CatalogRowsSkeleton, IssueItem, osKeys } from "@/components/catalog/repo";
 import type { IssueRow } from "@/components/catalog/types";
 import { LinkButton } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Container, PageHeader } from "@/components/ui/page";
 import { Pagination } from "@/components/ui/pagination";
-import { EmptyState, ErrorState, NoResults, SkeletonRows } from "@/components/ui/states";
+import { EmptyState, ErrorState, NoResults } from "@/components/ui/states";
 import { get } from "@/lib/api";
 import { hasRole, useMe } from "@/lib/hooks";
 import type { Page } from "@/lib/types";
@@ -46,13 +45,15 @@ function IssuesFeed() {
 
   return (
     <Container className="pb-16">
-      <nav aria-label="Breadcrumb" className="pt-6 text-sm text-subtle">
-        <Link href="/open-source" className="hover:text-fg">Open source</Link>
-        <span aria-hidden> / </span>
-        <span className="text-muted">Issues</span>
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1 pt-6 text-sm text-subtle">
+        <Link href="/open-source" className="rounded-sm transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]">Open source</Link>
+        <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+        <span className="text-muted" aria-current="page">Issues</span>
       </nav>
       <PageHeader
         className="pt-4"
+        eyebrow="Contribute"
+        icon={<CircleDot />}
         title="Open issues"
         description="Open issues from registered repositories, refreshed by webhooks and periodic syncs. Promoted issues are picked by project maintainers."
         actions={<LinkButton href="/open-source/repos" variant="secondary">Browse repositories</LinkButton>}
@@ -72,11 +73,17 @@ function IssuesFeed() {
       </FilterBar>
 
       {f.repo_id ? (
-        <div className="-mt-3 mb-4 flex items-center gap-2 text-sm">
-          <span className="text-muted">Repository:</span>
-          <span className="inline-flex items-center gap-1 rounded-md bg-surface-3 px-2 py-0.5 font-mono text-xs text-fg">
-            {repoName ?? "selected repository"}
-            <button type="button" onClick={() => setF({ repo_id: "" })} className="text-subtle hover:text-fg" aria-label="Clear repository filter">
+        <div className="-mt-2 mb-5 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-eyebrow text-subtle">Repository</span>
+          <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[color-mix(in_oklab,var(--accent)_40%,transparent)] bg-accent-soft pl-3 pr-1 font-mono text-xs text-accent-strong">
+            <FolderGit2 className="h-3.5 w-3.5" aria-hidden />
+            <span className="max-w-[16rem] truncate">{repoName ?? "selected repository"}</span>
+            <button
+              type="button"
+              onClick={() => setF({ repo_id: "" })}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-accent-strong/80 transition-colors hover:bg-surface-3 hover:text-fg focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
+              aria-label="Clear repository filter"
+            >
               <X className="h-3 w-3" />
             </button>
           </span>
@@ -84,7 +91,9 @@ function IssuesFeed() {
       ) : null}
 
       {list.isPending ? (
-        <SkeletonRows rows={8} />
+        <div className="overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface shadow-card">
+          <CatalogRowsSkeleton rows={6} label="Loading issues" />
+        </div>
       ) : list.isError ? (
         <ErrorState error={list.error} onRetry={() => list.refetch()} />
       ) : list.data.items.length === 0 ? (
@@ -99,13 +108,13 @@ function IssuesFeed() {
           />
         )
       ) : (
-        <div aria-busy={list.isFetching || undefined}>
+        <div aria-busy={list.isFetching || undefined} className={list.isPlaceholderData ? "opacity-70 transition-opacity" : "transition-opacity"}>
           <ResultSummary total={list.data.total} noun="issue" active={active} onClear={reset} />
-          <Card>
-            <ul className="divide-y divide-border">
+          <div className="overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface shadow-card">
+            <ul className="divide-y divide-border" aria-label="Issues">
               {list.data.items.map((i) => <IssueItem key={i.id} issue={i} canPromote={isMod} />)}
             </ul>
-          </Card>
+          </div>
           {anyDemo ? <p className="mt-2 text-xs text-subtle">Issues marked “Demo data” come from synthetic seed repositories and have no GitHub page.</p> : null}
           <Pagination page={page} pageSize={PAGE_SIZE} total={list.data.total} onPage={(p) => setF({ page: String(p) }, { resetPage: false })} />
         </div>
@@ -116,7 +125,15 @@ function IssuesFeed() {
 
 export default function OpenSourceIssuesPage() {
   return (
-    <Suspense fallback={<Container className="py-8"><SkeletonRows rows={8} /></Container>}>
+    <Suspense
+      fallback={
+        <Container className="py-16">
+          <div className="overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface shadow-card">
+            <CatalogRowsSkeleton rows={6} label="Loading issues" />
+          </div>
+        </Container>
+      }
+    >
       <IssuesFeed />
     </Suspense>
   );

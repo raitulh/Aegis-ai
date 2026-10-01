@@ -1,22 +1,52 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, ChevronRight } from "lucide-react";
+import { AtSign, ChevronRight, Lightbulb, PenLine } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useSyncExternalStore } from "react";
 
-import { useCategories } from "@/components/discussions/thread-list";
+import { GuidelinesNote } from "@/components/discussions/guidelines-note";
+import { CategoryIcon, useCategories } from "@/components/discussions/thread-list";
 import type { ThreadPage } from "@/components/discussions/types";
 import { friendlyError } from "@/components/discussions/use-action";
 import { Button, LinkButton } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
 import { Checkbox, Field, FormError, Input, Select } from "@/components/ui/form";
 import { MarkdownEditor } from "@/components/ui/markdown";
 import { Container, PageHeader } from "@/components/ui/page";
-import { ErrorState, InlineNotice, Spinner } from "@/components/ui/states";
+import { ErrorState, InlineNotice, Skeleton } from "@/components/ui/states";
 import { ApiError, get, post } from "@/lib/api";
 import { hasRole, useDraft, useRequireAuth, useUnsavedChangesWarning } from "@/lib/hooks";
+
+const noopSubscribe = () => () => {};
+/** False on the server and during hydration, true afterwards — keeps the first client render identical to the server's. */
+function useHydrated(): boolean {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
+
+function NewDiscussionSkeleton() {
+  return (
+    <Container size="lg" className="pb-20">
+      <div role="status" aria-label="Loading">
+        <Skeleton className="mt-6 h-4 w-48" />
+        <Skeleton className="mt-10 h-3 w-24" />
+        <Skeleton className="mt-4 h-8 w-72 max-w-full" />
+        <Skeleton className="mt-3 h-4 w-96 max-w-full" />
+        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]">
+          <div className="space-y-6 rounded-[var(--radius-xl)] border border-border bg-surface p-5 sm:p-7">
+            {["h-10", "h-10", "h-64"].map((h, i) => (
+              <div key={i}>
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className={`mt-2.5 w-full ${h}`} />
+              </div>
+            ))}
+          </div>
+          <Skeleton className="hidden h-48 w-full rounded-[var(--radius-lg)] lg:block" />
+        </div>
+      </div>
+    </Container>
+  );
+}
 
 function NewDiscussionForm() {
   const me = useRequireAuth();
@@ -43,8 +73,11 @@ function NewDiscussionForm() {
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   useUnsavedChangesWarning(!submitted && Boolean(draft.title.trim() || draft.body.trim()));
+  const hydrated = useHydrated();
 
-  if (me.isPending || !me.data) return <Spinner />;
+  // The server always renders the skeleton (the account is not known there); `hydrated` makes the client's first
+  // render match it even when the account query has already resolved by the time this boundary hydrates.
+  if (!hydrated || me.isPending || !me.data) return <NewDiscussionSkeleton />;
 
   const isStaff = hasRole(me.data, "moderator");
   const ctx = context.data?.context;
@@ -95,15 +128,15 @@ function NewDiscussionForm() {
 
   if (scoped && context.isError) {
     return (
-      <Container size="md" className="py-12">
+      <Container size="lg" className="py-16">
         <ErrorState error={context.error} onRetry={() => context.refetch()} />
       </Container>
     );
   }
 
   return (
-    <Container size="md" className="pb-16">
-      <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 pt-6 text-sm text-muted">
+    <Container size="lg" className="pb-20">
+      <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 pt-6 text-sm text-subtle">
         {competition ? (
           <>
             <Link href="/competitions" className="hover:text-fg">Competitions</Link>
@@ -124,6 +157,8 @@ function NewDiscussionForm() {
       </nav>
       <PageHeader
         className="pt-4"
+        eyebrow={scoped ? (competition ? "Competition forum" : "Project forum") : "Community"}
+        icon={<PenLine />}
         title="Start a discussion"
         description={
           scoped
@@ -140,15 +175,27 @@ function NewDiscussionForm() {
         </div>
       ) : null}
 
-      <Card>
-        <CardBody>
-          <form onSubmit={submit} className="space-y-5" noValidate>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]">
+        <div className="min-w-0 overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface surface-sheen shadow-card animate-rise [animation-delay:80ms]">
+          <form onSubmit={submit} className="space-y-6 p-5 sm:p-7" noValidate>
             <Field label="Title" required error={fields.title} hint="Be specific, e.g. “Why does my validation score drop after target encoding?”">
               {(p) => <Input {...p} value={draft.title} maxLength={160} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />}
             </Field>
 
             {!scoped ? (
-              <Field label="Category" required error={fields.category} hint={selectedCategory?.description ?? undefined}>
+              <Field
+                label="Category"
+                required
+                error={fields.category}
+                hint={
+                  selectedCategory?.description ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <CategoryIcon slug={selectedCategory.slug} className="h-3 w-3 shrink-0 text-accent-strong" />
+                      {selectedCategory.description}
+                    </span>
+                  ) : undefined
+                }
+              >
                 {(p) => (
                   <Select {...p} value={category} onChange={(e) => setCategory(e.target.value)} disabled={categories.isPending}>
                     <option value="">{categories.isPending ? "Loading categories…" : "Choose a category…"}</option>
@@ -198,15 +245,31 @@ function NewDiscussionForm() {
 
             <FormError message={generalError} />
 
-            <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+            <div className="-mx-5 -mb-5 flex flex-col-reverse gap-2 border-t border-border bg-bg-elevated/50 px-5 py-4 sm:-mx-7 sm:-mb-7 sm:flex-row sm:items-center sm:justify-end sm:px-7">
               <LinkButton href={backHref} variant="secondary">Cancel</LinkButton>
-              <Button type="submit" loading={busy} disabled={unverified || (scoped && context.isPending)}>
+              <Button type="submit" loading={busy} disabled={unverified || (scoped && context.isPending)} icon={<PenLine className="h-4 w-4" aria-hidden />}>
                 Post discussion
               </Button>
             </div>
           </form>
-        </CardBody>
-      </Card>
+        </div>
+        <aside aria-label="Posting tips" className="min-w-0 space-y-5 lg:sticky lg:top-24 lg:self-start">
+          <div className="rounded-[var(--radius-lg)] border border-border bg-surface/60 p-4">
+            <p className="flex items-center gap-1.5 text-eyebrow text-subtle">
+              <Lightbulb className="h-3.5 w-3.5 text-accent-strong" aria-hidden /> Get a good answer
+            </p>
+            <ol className="mt-3 space-y-2.5 text-xs leading-relaxed text-muted">
+              {["Say what you're trying to do.", "Show what you've tried — code, settings, error messages.", "Format code in ``` fences and keep it short."].map((tip, i) => (
+                <li key={tip} className="flex gap-2.5">
+                  <span className="tabular flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 font-mono text-[10px] text-subtle">{i + 1}</span>
+                  <span className="pt-0.5">{tip}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <GuidelinesNote />
+        </aside>
+      </div>
     </Container>
   );
 }
