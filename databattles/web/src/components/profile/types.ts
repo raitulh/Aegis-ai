@@ -34,6 +34,7 @@ export interface DashboardData {
     ranked_teams: number | null;
     metric: string | null;
     cover_style: string;
+    is_demo?: boolean;
   }[];
   deadlines: { title: string; at: string; url: string; kind: string }[];
   recent_submissions: {
@@ -47,7 +48,7 @@ export interface DashboardData {
   invitations: { id: string; team_name: string; competition: { slug: string; title: string }; expires_at: string | null }[];
   contribution_notifications: { id: string; title: string; link: string | null; created_at: string }[];
   recent_badges: { name: string; icon: string; color: string; awarded_at: string }[];
-  recent_certificates: { public_id: string; event_title: string; result_label: string; issued_at: string }[];
+  recent_certificates: { public_id: string; event_title: string; result_label: string; issued_at: string; is_demo?: boolean }[];
   recommended: {
     slug: string;
     title: string;
@@ -56,6 +57,7 @@ export interface DashboardData {
     matched: string[];
     cover_style: string;
     task_type: string;
+    is_demo?: boolean;
   }[];
   recommendation_basis: "declared_interests" | "upcoming_public";
   recently_viewed: { type: string; title: string; url: string; viewed_at: string }[];
@@ -73,6 +75,7 @@ export interface ProfileResult {
   label: string | null;
   score: number | null;
   hidden: boolean;
+  is_demo?: boolean;
 }
 
 export interface ProfileBadge {
@@ -142,7 +145,7 @@ export interface PublicProfile {
     merged_prs: number;
   };
   results: ProfileResult[];
-  competitions: { slug: string; title: string; status: string; joined_at: string }[];
+  competitions: { slug: string; title: string; status: string; joined_at: string; is_demo?: boolean }[];
   certificates: ProfileCertificate[];
   badges: ProfileBadge[];
   projects: {
@@ -154,6 +157,7 @@ export interface PublicProfile {
     repo_url: string | null;
     demo_url: string | null;
     cover_style: string;
+    is_demo?: boolean;
   }[];
   courses: { slug: string; title: string; completed_at: string }[];
   contributions: { github_login: string | null; merged_count: number; repositories: number; items: ContributionItem[] } | null;

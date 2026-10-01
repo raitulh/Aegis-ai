@@ -1,69 +1,26 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowDown,
-  ArrowUp,
-  Award,
-  BookOpen,
-  CalendarClock,
-  CheckCircle2,
-  Circle,
-  Database,
-  Eye,
-  GitMerge,
-  Mail,
-  Settings2,
-  Sparkles,
-  Trophy,
-  UploadCloud,
-  Users,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, BadgeCheck, Bell, LayoutDashboard, Settings2, UserRound } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { ActivityHeatmap } from "@/components/charts/charts";
-import { BadgeIcon } from "@/components/profile/badge-icon";
 import { MiniSwitch } from "@/components/profile/mini-switch";
-import { DASHBOARD_WIDGETS, type DashboardData, type DashboardWidget } from "@/components/profile/types";
-import { Badge, StatusBadge } from "@/components/ui/badge";
+import { DASHBOARD_WIDGETS, type DashboardData, type DashboardWidget, type PublicProfile } from "@/components/profile/types";
 import { Button, LinkButton } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
-import { Countdown, Cover, ProgressBar, ProgressRing } from "@/components/ui/misc";
 import { Container, PageHeader } from "@/components/ui/page";
-import { EmptyState, ErrorState, InlineNotice, Skeleton, Spinner } from "@/components/ui/states";
+import { EmptyState, ErrorState, InlineNotice, Skeleton } from "@/components/ui/states";
 import { errorMessage, get, post, put } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { formatDateTime, formatScore, relativeTime, titleCase } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { useApiMutation, useRequireAuth } from "@/lib/hooks";
 import { qk } from "@/lib/query";
 import type { Me } from "@/lib/types";
-
-const WIDGET_META: Record<DashboardWidget, { label: string; description: string; wide?: boolean }> = {
-  competitions: { label: "Active competitions", description: "Your rank, best public score and time left.", wide: true },
-  deadlines: { label: "Upcoming deadlines", description: "Next 30 days, shown in your local time." },
-  submissions: { label: "Recent submissions", description: "Latest scoring results and errors." },
-  invitations: { label: "Team invitations", description: "Pending invitations to join a team." },
-  contributions: { label: "Open-source updates", description: "Unread merged-PR and GitHub sync notices." },
-  credentials: { label: "Badges & certificates", description: "Your most recent credentials." },
-  recommended: { label: "Recommended competitions", description: "Open competitions you have not joined.", wide: true },
-  recent: { label: "Recently viewed", description: "Competitions and datasets you opened lately." },
-  learning: { label: "Continue learning", description: "Courses you are enrolled in." },
-  activity: { label: "Activity", description: "Submissions, discussion posts, lessons and merged PRs.", wide: true },
-  completion: { label: "Profile completion", description: "A complete profile helps teammates find you." },
-};
-
-const COMPLETION_ITEMS: { key: string; label: string; href: string }[] = [
-  { key: "avatar", label: "Add a profile photo", href: "/settings/profile" },
-  { key: "headline", label: "Write a headline", href: "/settings/profile" },
-  { key: "bio", label: "Add a short bio", href: "/settings/profile" },
-  { key: "skills", label: "List your skills", href: "/settings/profile" },
-  { key: "university", label: "Choose your university", href: "/settings/profile" },
-  { key: "github", label: "Connect GitHub", href: "/settings/integrations" },
-  { key: "verified_university", label: "Verify your university membership", href: "/orgs" },
-];
+import { MetricsStrip, UpNext, useGreeting } from "./_components/overview";
+import { CompactContext, isWidgetEmpty, RENDER, WIDGET_META, widgetAction, type WidgetContext } from "./_components/widgets";
 
 const isWidget = (k: string): k is DashboardWidget => (DASHBOARD_WIDGETS as readonly string[]).includes(k);
 
@@ -74,407 +31,143 @@ function resolveLayout(prefs: DashboardData["prefs"] | undefined) {
   return { order, hidden };
 }
 
-// ----------------------------------------------------------------------------- widgets
+/**
+ * The rail layout only exists at Tailwind's `lg` breakpoint (64rem). Below it every visible widget is laid out in one
+ * flow in exactly the saved order, so moving e.g. "Upcoming deadlines" to the top still puts it at the top on phones.
+ * The server snapshot is the single-flow layout; the dashboard body only renders on the client after auth resolves.
+ */
+const LG_QUERY = "(min-width: 64rem)";
+function subscribeLg(onChange: () => void) {
+  const mq = window.matchMedia(LG_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+function useIsLg(): boolean {
+  return useSyncExternalStore(subscribeLg, () => window.matchMedia(LG_QUERY).matches, () => false);
+}
 
-function Widget({ id, action, children }: { id: DashboardWidget; action?: ReactNode; children: ReactNode }) {
+/** A widget on its own, or a run of two or more consecutive empty widgets collapsed into one compact panel. */
+type Block = { kind: "widget"; id: DashboardWidget } | { kind: "empty"; ids: DashboardWidget[] };
+
+const blockKey = (b: Block) => (b.kind === "widget" ? b.id : `empty:${b.ids.join(",")}`);
+const blockIsWide = (b: Block) => b.kind === "empty" || Boolean(WIDGET_META[b.id].wide);
+
+function toBlocks(ids: DashboardWidget[], d: DashboardData): Block[] {
+  const out: Block[] = [];
+  let run: DashboardWidget[] = [];
+  const flush = () => {
+    if (run.length >= 2) out.push({ kind: "empty", ids: run });
+    else for (const id of run) out.push({ kind: "widget", id });
+    run = [];
+  };
+  for (const id of ids) {
+    if (isWidgetEmpty(id, d)) {
+      run.push(id);
+    } else {
+      flush();
+      out.push({ kind: "widget", id });
+    }
+  }
+  flush();
+  return out;
+}
+
+/**
+ * Which blocks take the full width of their column: wide blocks always do, and a narrow widget that has no narrow
+ * neighbour to pair with stretches too — so the saved order is kept and the grid never leaves a hole.
+ */
+function fullWidth(blocks: Block[]): Set<string> {
+  const full = new Set<string>();
+  let i = 0;
+  while (i < blocks.length) {
+    const b = blocks[i];
+    const next = blocks[i + 1];
+    if (blockIsWide(b)) {
+      full.add(blockKey(b));
+      i += 1;
+    } else if (next && !blockIsWide(next)) {
+      i += 2;
+    } else {
+      full.add(blockKey(b));
+      i += 1;
+    }
+  }
+  return full;
+}
+
+// ----------------------------------------------------------------------------- widget shells
+
+function Widget({ id, full, empty, action, children }: { id: DashboardWidget; full: boolean; empty?: boolean; action?: ReactNode; children: ReactNode }) {
   const meta = WIDGET_META[id];
+  const Icon = meta.icon;
   return (
-    <Card className={cn("flex flex-col", meta.wide && "lg:col-span-2")}>
-      <CardHeader title={meta.label} description={meta.description} action={action} />
-      <CardBody className="flex-1">{children}</CardBody>
+    <Card className={cn("flex min-w-0 flex-col", full && "md:col-span-2")}>
+      <CardHeader icon={<Icon />} title={meta.label} description={meta.description} action={action} />
+      {/* A lone empty widget paired with a taller neighbour keeps its empty state centred rather than top-heavy. */}
+      <CardBody className={cn("flex-1", empty && "flex flex-col justify-center")}>{children}</CardBody>
     </Card>
   );
 }
 
-function MiniEmpty({ icon, title, description, action }: { icon?: ReactNode; title: string; description?: ReactNode; action?: ReactNode }) {
-  return <EmptyState icon={icon} title={title} description={description} action={action} className="border-0 px-2 py-6" />;
-}
-
-function CompetitionsWidget({ d }: { d: DashboardData }) {
-  if (!d.active_competitions.length) {
-    return (
-      <MiniEmpty
-        icon={<Trophy className="h-5 w-5" />}
-        title="You haven't joined a competition yet"
-        description="Pick a challenge that matches your level — many are beginner friendly and allow solo entries."
-        action={<LinkButton href="/competitions">Browse competitions</LinkButton>}
-      />
-    );
-  }
+/** A compact, hairline-separated widget section (side rail and collapsed empty panels) instead of another card. */
+function CompactSection({ id, action, children }: { id: DashboardWidget; action?: ReactNode; children: ReactNode }) {
+  const meta = WIDGET_META[id];
+  const Icon = meta.icon;
   return (
-    <ul className="-my-3 divide-y divide-border">
-      {d.active_competitions.map((c) => (
-        <li key={c.slug} className="flex flex-col gap-3 py-3 md:flex-row md:items-center">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <Cover style={c.cover_style} className="h-11 w-11 shrink-0 rounded-lg" />
-            <div className="min-w-0">
-              <Link href={`/competitions/${c.slug}`} className="block truncate font-medium text-fg hover:text-accent-strong">
-                {c.title}
-              </Link>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
-                <StatusBadge status={c.status} />
-                <span className="inline-flex items-center gap-1">
-                  <Users className="h-3 w-3" aria-hidden />
-                  {c.team_name ? (c.is_solo ? "Solo entry" : c.team_name) : "No team yet"}
-                </span>
-              </div>
-            </div>
-          </div>
-          <dl className="grid grid-cols-3 gap-4 text-sm md:w-[380px] md:shrink-0">
-            <div>
-              <dt className="text-xs text-subtle">Rank</dt>
-              <dd className="mt-0.5 tabular-nums text-fg">
-                {c.rank ? (
-                  <>
-                    #{c.rank}
-                    <span className="text-muted"> of {c.ranked_teams ?? "—"}</span>
-                  </>
-                ) : (
-                  <span className="text-muted" title={c.best_score === null ? "Make a scored submission to get a rank" : "Ranking is not automatic for this event"}>
-                    Unranked
-                  </span>
-                )}
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="truncate text-xs text-subtle">
-                Best{c.metric ? <span className="font-mono"> · {c.metric}</span> : null}
-              </dt>
-              <dd className="mt-0.5 font-mono tabular-nums text-fg">{formatScore(c.best_score)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-subtle">Time left</dt>
-              <dd className="mt-0.5 text-fg" title={c.ends_at ? `Ends ${formatDateTime(c.ends_at)}` : undefined}>
-                {c.ends_at ? <Countdown to={c.ends_at} /> : <span className="text-muted">No end date</span>}
-              </dd>
-            </div>
-          </dl>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function DeadlinesWidget({ d }: { d: DashboardData }) {
-  if (!d.deadlines.length) {
-    return (
-      <MiniEmpty
-        icon={<CalendarClock className="h-5 w-5" />}
-        title="No deadlines in the next 30 days"
-        description={d.active_competitions.length ? "You're all caught up." : "Deadlines from competitions you join will appear here."}
-      />
-    );
-  }
-  return (
-    <ol className="space-y-3">
-      {d.deadlines.map((x, i) => (
-        <li key={`${x.url}-${x.at}-${i}`} className="flex items-start gap-3">
-          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-subtle" aria-hidden />
+    <section aria-labelledby={`w-${id}`} className="px-5 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-surface-2 text-accent-strong" aria-hidden>
+            <Icon className="h-3.5 w-3.5" />
+          </span>
           <div className="min-w-0">
-            <Link href={x.url} className="text-sm font-medium text-fg hover:text-accent-strong">{x.title}</Link>
-            <p className="mt-0.5 text-xs text-muted">
-              <time dateTime={x.at}>{formatDateTime(x.at)}</time> · <span className="font-medium text-fg">{relativeTime(x.at)}</span>
-              {x.kind !== "deadline" ? <Badge tone="outline" className="ml-2">{titleCase(x.kind)}</Badge> : null}
-            </p>
+            <h2 id={`w-${id}`} className="text-sm font-semibold tracking-[-0.01em] text-fg">{meta.label}</h2>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted">{meta.description}</p>
           </div>
-        </li>
-      ))}
-    </ol>
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      <div className="mt-4">{children}</div>
+    </section>
   );
 }
 
-function SubmissionsWidget({ d }: { d: DashboardData }) {
-  if (!d.recent_submissions.length) {
-    return (
-      <MiniEmpty
-        icon={<UploadCloud className="h-5 w-5" />}
-        title="No submissions yet"
-        description="Download a competition's data, train a model and upload your predictions to see a score."
-        action={d.active_competitions[0] ? <LinkButton variant="secondary" href={`/competitions/${d.active_competitions[0].slug}`}>Open {d.active_competitions[0].title}</LinkButton> : undefined}
-      />
-    );
-  }
+/** Consecutive empty widgets share one panel of compact cells, in saved order. */
+function EmptyPanel({ ids, d, ctx }: { ids: DashboardWidget[]; d: DashboardData; ctx: WidgetContext }) {
   return (
-    <ul className="-my-2 divide-y divide-border">
-      {d.recent_submissions.map((s) => (
-        <li key={s.id} className="py-2.5">
-          <div className="flex items-center justify-between gap-3">
-            <Link href={`/competitions/${s.competition.slug}/submissions`} className="min-w-0 truncate text-sm font-medium text-fg hover:text-accent-strong">
-              {s.competition.title}
-            </Link>
-            <StatusBadge status={s.status} />
-          </div>
-          <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted">
-            <span title={formatDateTime(s.submitted_at)}>{relativeTime(s.submitted_at)}</span>
-            {s.public_score !== null ? <span className="font-mono tabular-nums text-fg">Public {formatScore(s.public_score)}</span> : null}
-          </div>
-          {s.error_message ? <p className="mt-1 line-clamp-2 text-xs text-danger">{s.error_message}</p> : null}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function InvitationsWidget({ d }: { d: DashboardData }) {
-  if (!d.invitations.length) {
-    return <MiniEmpty icon={<Mail className="h-5 w-5" />} title="No pending invitations" description="When someone invites you to their team, it shows up here." />;
-  }
-  return (
-    <div className="space-y-3">
-      <ul className="space-y-2.5">
-        {d.invitations.map((inv) => (
-          <li key={inv.id} className="rounded-[var(--radius-md)] border border-border bg-surface-2 px-3 py-2.5 text-sm">
-            <p className="font-medium text-fg">{inv.team_name}</p>
-            <p className="text-xs text-muted">
-              {inv.competition.title}
-              {inv.expires_at ? <> · expires {relativeTime(inv.expires_at)}</> : null}
-            </p>
-          </li>
-        ))}
-      </ul>
-      <LinkButton href="/invites" size="sm" className="w-full">Review invitations</LinkButton>
-    </div>
-  );
-}
-
-function ContributionsWidget({ d }: { d: DashboardData }) {
-  if (!d.contribution_notifications.length) {
-    return d.profile_completion.checks.github ? (
-      <MiniEmpty icon={<GitMerge className="h-5 w-5" />} title="No new contribution updates" action={<LinkButton href="/open-source" variant="secondary">Find an issue to work on</LinkButton>} />
-    ) : (
-      <MiniEmpty
-        icon={<GitMerge className="h-5 w-5" />}
-        title="Connect GitHub to track contributions"
-        description="Merged pull requests to registered repositories count toward badges once your account is linked."
-        action={<LinkButton href="/settings/integrations" variant="secondary">Connect GitHub</LinkButton>}
-      />
-    );
-  }
-  return (
-    <ul className="space-y-3">
-      {d.contribution_notifications.map((n) => {
-        const inner = (
-          <>
-            <span className="block text-sm text-fg">{n.title}</span>
-            <span className="text-xs text-muted" title={formatDateTime(n.created_at)}>{relativeTime(n.created_at)}</span>
-          </>
-        );
-        return (
-          <li key={n.id} className="flex items-start gap-3">
-            <GitMerge className="mt-0.5 h-4 w-4 shrink-0 text-accent-strong" aria-hidden />
-            {n.link?.startsWith("/") ? (
-              <Link href={n.link} className="min-w-0 hover:text-accent-strong">{inner}</Link>
-            ) : n.link ? (
-              <a href={n.link} target="_blank" rel="noopener noreferrer" className="min-w-0 hover:text-accent-strong">{inner}</a>
-            ) : (
-              <div className="min-w-0">{inner}</div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function CredentialsWidget({ d }: { d: DashboardData }) {
-  if (!d.recent_badges.length && !d.recent_certificates.length) {
-    return (
-      <MiniEmpty
-        icon={<Award className="h-5 w-5" />}
-        title="No credentials yet"
-        description="Finish a course or place in a competition to earn verifiable certificates and badges."
-        action={<LinkButton href="/learn" variant="secondary">Take a course</LinkButton>}
-      />
-    );
-  }
-  return (
-    <div className="space-y-4">
-      {d.recent_badges.length ? (
-        <ul className="space-y-2.5" aria-label="Recent badges">
-          {d.recent_badges.map((b, i) => (
-            <li key={`${b.name}-${i}`} className="flex items-center gap-3">
-              <BadgeIcon icon={b.icon} color={b.color} size={32} />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-fg">{b.name}</p>
-                <p className="text-xs text-muted">Badge · {relativeTime(b.awarded_at)}</p>
-              </div>
-            </li>
+    <Card className="min-w-0 overflow-hidden md:col-span-2">
+      <CompactContext.Provider value>
+        <div className="grid grid-cols-1 gap-px bg-border md:grid-cols-2">
+          {ids.map((id, i) => (
+            <div key={id} className={cn("min-w-0 bg-surface", ids.length % 2 === 1 && i === ids.length - 1 && "md:col-span-2")}>
+              <CompactSection id={id} action={widgetAction(id, d)}>
+                {RENDER[id](d, ctx)}
+              </CompactSection>
+            </div>
           ))}
-        </ul>
-      ) : null}
-      {d.recent_certificates.length ? (
-        <ul className="space-y-2.5" aria-label="Recent certificates">
-          {d.recent_certificates.map((c) => (
-            <li key={c.public_id}>
-              <Link href={`/verify/${c.public_id}`} className="flex items-center gap-3 hover:text-accent-strong">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
-                  <Award className="h-4 w-4" aria-hidden />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{c.result_label} · {c.event_title}</span>
-                  <span className="text-xs text-muted">Certificate · {relativeTime(c.issued_at)}</span>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <LinkButton href="/settings/achievements" variant="ghost" size="sm">Manage achievements</LinkButton>
-    </div>
+        </div>
+      </CompactContext.Provider>
+    </Card>
   );
 }
 
-function RecommendedWidget({ d }: { d: DashboardData }) {
-  const byInterests = d.recommendation_basis === "declared_interests";
+function WidgetGrid({ ids, d, ctx }: { ids: DashboardWidget[]; d: DashboardData; ctx: WidgetContext }) {
+  const blocks = toBlocks(ids, d);
+  const full = fullWidth(blocks);
   return (
-    <div>
-      <p className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-muted">
-        <Sparkles className="h-3.5 w-3.5" aria-hidden />
-        {byInterests ? "Based on your declared interests" : "Upcoming public competitions"}
-        <span className="text-subtle">·</span>
-        <Link href="/settings/profile" className="font-medium text-accent-strong hover:underline">
-          {byInterests ? "Edit interests" : "Add interests to tailor these"}
-        </Link>
-      </p>
-      {!d.recommended.length ? (
-        <MiniEmpty
-          icon={<Trophy className="h-5 w-5" />}
-          title={byInterests ? "Nothing matches your interests right now" : "No open competitions right now"}
-          description={byInterests ? "Try broadening your interests, or browse everything that's open." : "Check back soon — new events are added regularly."}
-          action={<LinkButton href="/competitions" variant="secondary">Browse all competitions</LinkButton>}
-        />
-      ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {d.recommended.map((c) => (
-            <li key={c.slug}>
-              <Link href={`/competitions/${c.slug}`} className="group flex h-full gap-3 rounded-[var(--radius-md)] border border-border p-3 transition-colors hover:border-border-strong hover:bg-surface-2">
-                <Cover style={c.cover_style} className="h-14 w-14 shrink-0 rounded-md" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-fg group-hover:text-accent-strong">{c.title}</p>
-                  <p className="line-clamp-2 text-xs text-muted">{c.summary}</p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-subtle">
-                    <span>{titleCase(c.task_type)}</span>
-                    {c.ends_at ? <span title={formatDateTime(c.ends_at)}>· ends {relativeTime(c.ends_at)}</span> : null}
-                    {byInterests && c.matched.length ? <Badge tone="accent">Matches: {c.matched.join(", ")}</Badge> : null}
-                  </div>
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
+    <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
+      {blocks.map((b) =>
+        b.kind === "widget" ? (
+          <Widget key={b.id} id={b.id} full={full.has(b.id)} empty={isWidgetEmpty(b.id, d)} action={widgetAction(b.id, d)}>
+            {/* An empty widget spanning the whole row has no neighbour to balance, so it uses the compact empty state. */}
+            <CompactContext.Provider value={full.has(b.id) && isWidgetEmpty(b.id, d)}>{RENDER[b.id](d, ctx)}</CompactContext.Provider>
+          </Widget>
+        ) : (
+          <EmptyPanel key={blockKey(b)} ids={b.ids} d={d} ctx={ctx} />
+        ),
       )}
     </div>
   );
-}
-
-function RecentWidget({ d }: { d: DashboardData }) {
-  if (!d.recently_viewed.length) {
-    return <MiniEmpty icon={<Eye className="h-5 w-5" />} title="Nothing viewed yet" description="Competitions and datasets you open will be listed here for quick access." />;
-  }
-  return (
-    <ul className="space-y-2.5">
-      {d.recently_viewed.map((v, i) => (
-        <li key={`${v.url}-${i}`} className="flex items-center gap-3">
-          {v.type === "dataset" ? <Database className="h-4 w-4 shrink-0 text-subtle" aria-label="Dataset" /> : <Trophy className="h-4 w-4 shrink-0 text-subtle" aria-label="Competition" />}
-          <Link href={v.url} className="min-w-0 flex-1 truncate text-sm text-fg hover:text-accent-strong">{v.title}</Link>
-          <span className="shrink-0 text-xs text-subtle" title={formatDateTime(v.viewed_at)}>{relativeTime(v.viewed_at)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function LearningWidget({ d }: { d: DashboardData }) {
-  if (!d.learning.length) {
-    return (
-      <MiniEmpty
-        icon={<BookOpen className="h-5 w-5" />}
-        title="No courses in progress"
-        description="Short, hands-on courses prepare you for competitions and award certificates."
-        action={<LinkButton href="/learn">Take a course</LinkButton>}
-      />
-    );
-  }
-  return (
-    <ul className="space-y-4">
-      {d.learning.map((c) => (
-        <li key={c.slug}>
-          <div className="mb-1.5 flex items-center justify-between gap-3">
-            <Link href={`/learn/${c.slug}`} className="min-w-0 truncate text-sm font-medium text-fg hover:text-accent-strong">{c.title}</Link>
-            <LinkButton href={c.resume_url} size="sm" variant="secondary">Resume</LinkButton>
-          </div>
-          <div className="flex items-center gap-3">
-            <ProgressBar value={c.progress_pct} label={`${c.title} progress`} />
-            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted">{Math.round(c.progress_pct)}%</span>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ActivityWidget({ d }: { d: DashboardData }) {
-  return (
-    <div>
-      <ActivityHeatmap counts={d.activity} days={182} label="Your activity" />
-      <p className="mt-3 text-xs text-subtle">
-        Counts submissions to public competitions, discussion threads and replies, completed lessons and merged pull requests. Days are UTC.
-      </p>
-    </div>
-  );
-}
-
-function CompletionWidget({ d }: { d: DashboardData }) {
-  const { percent, checks } = d.profile_completion;
-  return (
-    <div>
-      <div className="mb-4 flex items-center gap-4">
-        <ProgressRing value={percent} size={56} stroke={5} />
-        <p className="text-sm text-muted">
-          {percent >= 100 ? "Your profile is complete — nice work." : "Complete these steps so organizers and teammates can recognize your work."}
-        </p>
-      </div>
-      <ul className="space-y-2">
-        {COMPLETION_ITEMS.map((item) => {
-          const done = Boolean(checks[item.key]);
-          return (
-            <li key={item.key} className="flex items-center gap-2.5 text-sm">
-              {done ? <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden /> : <Circle className="h-4 w-4 shrink-0 text-subtle" aria-hidden />}
-              {done ? (
-                <span className="text-muted line-through decoration-subtle">
-                  {item.label}
-                  <span className="sr-only"> (done)</span>
-                </span>
-              ) : (
-                <Link href={item.href} className="text-fg hover:text-accent-strong hover:underline">{item.label}</Link>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-const RENDER: Record<DashboardWidget, (d: DashboardData) => ReactNode> = {
-  competitions: (d) => <CompetitionsWidget d={d} />,
-  deadlines: (d) => <DeadlinesWidget d={d} />,
-  submissions: (d) => <SubmissionsWidget d={d} />,
-  invitations: (d) => <InvitationsWidget d={d} />,
-  contributions: (d) => <ContributionsWidget d={d} />,
-  credentials: (d) => <CredentialsWidget d={d} />,
-  recommended: (d) => <RecommendedWidget d={d} />,
-  recent: (d) => <RecentWidget d={d} />,
-  learning: (d) => <LearningWidget d={d} />,
-  activity: (d) => <ActivityWidget d={d} />,
-  completion: (d) => <CompletionWidget d={d} />,
-};
-
-function widgetAction(id: DashboardWidget, d: DashboardData): ReactNode {
-  if (id === "competitions" && d.active_competitions.length) return <LinkButton href="/competitions" variant="ghost" size="sm">Browse</LinkButton>;
-  if (id === "invitations" && d.invitations.length) return <Badge tone="accent">{d.invitations.length} pending</Badge>;
-  if (id === "learning" && d.learning.length) return <LinkButton href="/learn" variant="ghost" size="sm">All courses</LinkButton>;
-  return null;
 }
 
 // ----------------------------------------------------------------------------- customize
@@ -530,7 +223,11 @@ function CustomizeDialog({ prefs }: { prefs: DashboardData["prefs"] }) {
         </>
       }
     >
-      <ol className="divide-y divide-border rounded-[var(--radius-md)] border border-border" aria-label="Dashboard widgets">
+      <p className="mb-3 text-xs leading-relaxed text-muted">
+        On phones and tablets, widgets appear in exactly this order. On wide screens, widgets tagged{" "}
+        <span className="font-medium text-fg">Side rail</span> stack beside the main column, keeping the same relative order.
+      </p>
+      <ol className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-bg-elevated/40" aria-label="Dashboard widgets">
         {order.map((id, i) => {
           const meta = WIDGET_META[id];
           const visible = !hidden.has(id);
@@ -547,7 +244,12 @@ function CustomizeDialog({ prefs }: { prefs: DashboardData["prefs"] }) {
                 }}
               />
               <div className="min-w-0 flex-1">
-                <p className={cn("truncate text-sm font-medium", visible ? "text-fg" : "text-subtle")}>{meta.label}</p>
+                <p className={cn("flex items-center gap-2 text-sm font-medium", visible ? "text-fg" : "text-subtle")}>
+                  <span className="truncate">{meta.label}</span>
+                  <span className="shrink-0 rounded border border-border px-1 font-mono text-[9.5px] uppercase tracking-[0.12em] text-subtle">
+                    {meta.zone === "side" ? "Side rail" : "Main"}
+                  </span>
+                </p>
                 <p className="truncate text-xs text-subtle">{meta.description}</p>
               </div>
               <div className="flex shrink-0 gap-1">
@@ -571,8 +273,9 @@ function CustomizeDialog({ prefs }: { prefs: DashboardData["prefs"] }) {
 function Nudges({ me }: { me: Me }) {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  if (me.onboarding_completed && me.email_verified) return null;
   return (
-    <div className="space-y-3">
+    <div className="mb-6 space-y-3">
       {!me.onboarding_completed ? (
         <InlineNotice
           tone="info"
@@ -618,14 +321,47 @@ function Nudges({ me }: { me: Me }) {
 
 function DashboardSkeleton() {
   return (
-    <div className="grid gap-6 lg:grid-cols-2" role="status" aria-label="Loading dashboard">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className={cn("rounded-[var(--radius-lg)] border border-border bg-surface p-5", i === 0 && "lg:col-span-2")}>
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="mt-2 h-3 w-64" />
-          <Skeleton className="mt-6 h-16 w-full" />
+    <div role="status" aria-label="Loading dashboard">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-xl)] border border-border bg-border sm:grid-cols-3 xl:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="bg-surface px-5 py-4">
+            <Skeleton className="h-2.5 w-20" />
+            <Skeleton className="mt-4 h-7 w-12" />
+            <Skeleton className="mt-3 h-2.5 w-28" />
+          </div>
+        ))}
+      </div>
+      <div className="mt-6 grid gap-6 lg:grid-cols-12">
+        <div className="grid gap-6 md:grid-cols-2 lg:col-span-8">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className={cn("rounded-[var(--radius-lg)] border border-border bg-surface p-5", (i === 0 || i === 3) && "md:col-span-2")}>
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="mt-2 h-3 w-64 max-w-full" />
+              <Skeleton className={cn("mt-6 w-full", i === 0 ? "h-28" : "h-16")} />
+            </div>
+          ))}
         </div>
-      ))}
+        <div className="hidden rounded-[var(--radius-lg)] border border-border bg-surface p-5 lg:col-span-4 lg:block">
+          <Skeleton className="h-3 w-20" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="mt-4 flex items-center gap-3">
+              <Skeleton className="h-8 w-8 shrink-0 rounded-[var(--radius-md)]" />
+              <Skeleton className="h-3 flex-1" />
+            </div>
+          ))}
+          <Skeleton className="mt-8 h-24 w-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeaderSkeleton() {
+  return (
+    <div className="pb-8 pt-10 sm:pt-12" aria-hidden>
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="mt-4 h-9 w-72 max-w-full" />
+      <Skeleton className="mt-4 h-4 w-96 max-w-full" />
     </div>
   );
 }
@@ -637,18 +373,69 @@ export default function DashboardPage() {
     queryFn: () => get<DashboardData>("/me/dashboard"),
     enabled: Boolean(me.data),
   });
+  // The viewer's own public profile (same key and endpoint as /u/[handle]) — used for real achievement counts and
+  // recent milestones. It never blocks the dashboard: tiles show a dash until it resolves.
+  const handle = me.data?.handle.toLowerCase() ?? "";
+  const profile = useQuery({
+    queryKey: qk.profile(handle),
+    queryFn: () => get<PublicProfile>(`/users/${encodeURIComponent(handle)}`),
+    enabled: Boolean(handle),
+  });
   const layout = useMemo(() => resolveLayout(dash.data?.prefs), [dash.data?.prefs]);
+  const greeting = useGreeting();
+  const isLg = useIsLg();
 
-  if (me.isPending || !me.data) return <Spinner label="Loading your dashboard" />;
+  if (me.isPending || !me.data) {
+    return (
+      <Container className="pb-16">
+        <HeaderSkeleton />
+        <DashboardSkeleton />
+      </Container>
+    );
+  }
   const d = dash.data;
   const visible = layout.order.filter((id) => !layout.hidden.includes(id));
+  const visibleMain = visible.filter((id) => WIDGET_META[id].zone === "main");
+  const visibleSide = visible.filter((id) => WIDGET_META[id].zone === "side");
+  // If every main-column widget is hidden, the side widgets move into the main column instead of leaving it empty.
+  const mainIds = visibleMain.length ? visibleMain : visibleSide;
+  const sideIds = visibleMain.length ? visibleSide : [];
+  const ctx: WidgetContext = { profile: profile.data, profileLoading: profile.isPending };
+  const firstName = d ? d.greeting_name : me.data.display_name.split(" ")[0];
+  const verifiedUni = profile.data?.verified.university;
+  const unread = me.data.unread_notifications;
 
   return (
-    <Container>
+    <Container className="pb-16">
       <PageHeader
         eyebrow="Dashboard"
-        title={d ? `Welcome back, ${d.greeting_name}` : `Welcome back, ${me.data.display_name.split(" ")[0]}`}
+        icon={<LayoutDashboard />}
+        title={
+          <>
+            {greeting}, <span className="text-gradient">{firstName}</span>
+          </>
+        }
         description="Your competitions, deadlines, learning and credentials in one place."
+        meta={
+          <>
+            <Link href={`/u/${me.data.handle}`} className="inline-flex items-center gap-1.5 font-mono text-muted transition-colors hover:text-accent-strong">
+              <UserRound className="h-3.5 w-3.5" aria-hidden />@{me.data.handle}
+            </Link>
+            {verifiedUni ? (
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
+                <span className="truncate">{verifiedUni.name}</span>
+                <span className="sr-only">(verified member)</span>
+              </span>
+            ) : null}
+            {unread > 0 ? (
+              <Link href="/notifications" className="inline-flex items-center gap-1.5 transition-colors hover:text-accent-strong">
+                <Bell className="h-3.5 w-3.5" aria-hidden />
+                <span className="tabular">{formatNumber(unread)}</span> unread
+              </Link>
+            ) : null}
+          </>
+        }
         actions={
           <>
             <LinkButton href={`/u/${me.data.handle}`} variant="ghost">View profile</LinkButton>
@@ -657,28 +444,57 @@ export default function DashboardPage() {
         }
       />
       <Nudges me={me.data} />
-      <div className="mt-6 pb-12">
-        {dash.isPending ? (
-          <DashboardSkeleton />
-        ) : dash.isError ? (
-          <ErrorState error={dash.error} onRetry={() => dash.refetch()} />
-        ) : !visible.length ? (
-          <EmptyState
-            icon={<Settings2 className="h-5 w-5" />}
-            title="All widgets are hidden"
-            description="Use Customize to bring back the widgets you want to see."
-            action={d ? <CustomizeDialog prefs={d.prefs} /> : undefined}
-          />
-        ) : d ? (
-          <div className="grid grid-flow-dense gap-6 lg:grid-cols-2">
-            {visible.map((id) => (
-              <Widget key={id} id={id} action={widgetAction(id, d)}>
-                {RENDER[id](d)}
-              </Widget>
-            ))}
-          </div>
-        ) : null}
-      </div>
+      {dash.isPending ? (
+        <DashboardSkeleton />
+      ) : dash.isError ? (
+        <ErrorState error={dash.error} onRetry={() => dash.refetch()} />
+      ) : d ? (
+        <>
+          <MetricsStrip d={d} profile={profile.data} />
+          {!visible.length ? (
+            <div className="mt-6">
+              <EmptyState
+                icon={<Settings2 className="h-5 w-5" />}
+                title="All widgets are hidden"
+                description="Use Customize to bring back the widgets you want to see."
+                action={<CustomizeDialog prefs={d.prefs} />}
+              />
+            </div>
+          ) : isLg ? (
+            <div className="mt-6 grid grid-cols-12 items-start gap-6">
+              <div className="col-span-8 min-w-0">
+                <WidgetGrid ids={mainIds} d={d} ctx={ctx} />
+              </div>
+              <aside aria-label="Up next and deadlines" className="sticky top-24 col-span-4 min-w-0">
+                <div className="max-h-[calc(100dvh-7.5rem)] overflow-x-hidden overflow-y-auto rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen shadow-card [scrollbar-width:thin]">
+                  <div className={cn("relative overflow-hidden px-5 py-5", sideIds.length && "border-b border-border")}>
+                    <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full opacity-70 blur-2xl" style={{ background: "radial-gradient(closest-side, var(--ambient-a), transparent)" }} />
+                    <UpNext d={d} className="relative" />
+                  </div>
+                  <CompactContext.Provider value>
+                    <div className="divide-y divide-border">
+                      {sideIds.map((id) => (
+                        <CompactSection key={id} id={id} action={widgetAction(id, d)}>
+                          {RENDER[id](d, ctx)}
+                        </CompactSection>
+                      ))}
+                    </div>
+                  </CompactContext.Provider>
+                </div>
+              </aside>
+            </div>
+          ) : (
+            <>
+              <Card variant="glass" className="mt-6 p-5">
+                <UpNext d={d} />
+              </Card>
+              <div className="mt-6">
+                <WidgetGrid ids={visible} d={d} ctx={ctx} />
+              </div>
+            </>
+          )}
+        </>
+      ) : null}
     </Container>
   );
 }
