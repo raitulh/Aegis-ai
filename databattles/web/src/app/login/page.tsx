@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 import { AuthCard, DevMailboxHint, OAuthButtons } from "@/components/auth/auth-card";
+import { PasswordInput } from "@/components/auth/password-input";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Input } from "@/components/ui/form";
 import { InlineNotice } from "@/components/ui/states";
@@ -53,16 +54,25 @@ function LoginForm() {
   }
 
   return (
-    <AuthCard title="Welcome back" subtitle="Sign in to continue to DataBattles." footer={<>New here? <Link href={next !== "/dashboard" ? `/signup?next=${encodeURIComponent(next)}` : "/signup"} className="font-medium text-accent-strong hover:underline">Create an account</Link></>}>
-      {oauthError ? <div className="mb-4"><InlineNotice tone="danger">{OAUTH_ERRORS[oauthError] ?? "Sign-in failed. Please try again."}</InlineNotice></div> : null}
+    <AuthCard
+      eyebrow="Sign in"
+      title="Welcome back"
+      subtitle="Sign in to continue to DataBattles."
+      footer={<>New here? <Link href={next !== "/dashboard" ? `/signup?next=${encodeURIComponent(next)}` : "/signup"} className="font-medium text-accent-strong hover:underline">Create an account</Link></>}
+    >
+      {oauthError ? <div className="mb-5"><InlineNotice tone="danger">{OAUTH_ERRORS[oauthError] ?? "Sign-in failed. Please try again."}</InlineNotice></div> : null}
       <OAuthButtons next={next} />
-      <form onSubmit={submit} className="space-y-4" noValidate>
+      <form onSubmit={submit} className="space-y-5" noValidate>
         <Field label="Email" error={error?.fields.email}>
           {(p) => <Input {...p} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />}
         </Field>
-        <Field label={<span className="flex w-full justify-between">Password <Link href="/forgot-password" className="text-xs font-normal text-accent-strong hover:underline">Forgot?</Link></span>} error={error?.fields.password}>
-          {(p) => <Input {...p} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />}
-        </Field>
+        {/* The reset link sits beside (not inside) the label so the field's accessible name is exactly "Password". */}
+        <div className="relative">
+          <Field label="Password" error={error?.fields.password}>
+            {(p) => <PasswordInput {...p} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />}
+          </Field>
+          <Link href="/forgot-password" className="absolute -top-2.5 right-0 rounded-sm py-2.5 text-xs font-medium text-accent-strong hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]">Forgot password?</Link>
+        </div>
         {error && !Object.keys(error.fields).length ? (
           error.code === "email_not_verified" ? (
             <InlineNotice tone="warning" title="Verify your email first" action={
@@ -73,7 +83,7 @@ function LoginForm() {
             </InlineNotice>
           ) : <FormError message={error.message} />
         ) : null}
-        <Button type="submit" className="w-full" loading={busy}>Sign in</Button>
+        <Button type="submit" size="lg" className="w-full" loading={busy}>Sign in</Button>
       </form>
       <DevMailboxHint />
     </AuthCard>

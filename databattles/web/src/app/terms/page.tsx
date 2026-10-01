@@ -142,6 +142,7 @@ const sections: LegalSection[] = [
 export default function TermsPage() {
   return (
     <LegalDoc
+      current="terms"
       eyebrow="Legal"
       title="Terms of Service"
       description="The rules for using this platform: accounts, competitions, your content, credentials and organizations."

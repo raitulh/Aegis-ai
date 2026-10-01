@@ -107,6 +107,7 @@ const sections: LegalSection[] = [
 export default function GuidelinesPage() {
   return (
     <LegalDoc
+      current="guidelines"
       eyebrow="Community"
       title="Community Guidelines"
       description="How we compete, learn and collaborate here — and what happens when something is reported."

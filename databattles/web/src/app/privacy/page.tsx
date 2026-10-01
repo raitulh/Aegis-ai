@@ -134,6 +134,7 @@ export default function PrivacyPage() {
   return (
     <LegalDoc
       eyebrow="Legal"
+      current="privacy"
       title="Privacy Policy"
       description="What we collect, why, who can see it, how long it is kept, and your choices."
       sections={sections}

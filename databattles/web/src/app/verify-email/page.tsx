@@ -1,13 +1,13 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { Mail, MailX } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { Spinner } from "@/components/ui/states";
+import { AuthStatus } from "@/components/auth/auth-status";
 import { errorMessage, post } from "@/lib/api";
 import { qk } from "@/lib/query";
 import type { Me } from "@/lib/types";
@@ -48,15 +48,18 @@ function Verify() {
   }, [token, router, qc]);
 
   return (
-    <AuthCard title="Email verification">
-      {state === "working" ? <Spinner label="Verifying" /> : state === "ok" ? (
-        <div className="flex flex-col items-center text-center"><CheckCircle2 className="h-10 w-10 text-success" /><p className="mt-3 text-sm text-muted">Email verified — signing you in…</p></div>
+    <AuthCard eyebrow="Verification" title="Email verification">
+      {state === "working" ? (
+        <AuthStatus key="working" tone="accent" busy icon={<Mail />} title="Verifying your email…">
+          This only takes a moment.
+        </AuthStatus>
+      ) : state === "ok" ? (
+        <AuthStatus key="ok" tone="success" celebrate title="Email verified — signing you in…" />
       ) : (
-        <div className="flex flex-col items-center text-center">
-          <XCircle className="h-10 w-10 text-danger" />
-          <p className="mt-3 text-sm text-muted">{message}</p>
-          <p className="mt-4 text-sm">Links expire after 24 hours and work once. <Link href="/login" className="text-accent-strong underline">Sign in</Link> to request a new one.</p>
-        </div>
+        <AuthStatus key="error" tone="danger" icon={<MailX />} title="This link didn't work">
+          <p>{message}</p>
+          <p className="mt-3 text-fg/80">Links expire after 24 hours and work once. <Link href="/login" className="whitespace-nowrap font-medium text-accent-strong underline">Sign in</Link> to request a new one.</p>
+        </AuthStatus>
       )}
     </AuthCard>
   );
