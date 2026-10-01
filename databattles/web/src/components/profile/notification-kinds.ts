@@ -1,0 +1,20 @@
+/** Friendly labels for backend `NotificationKind` values (backend/app/models/enums.py). */
+export const NOTIFICATION_KINDS: Record<string, { label: string; description: string; group: string }> = {
+  team_invite: { label: "Team invitations", description: "Someone invites you to join their team.", group: "Competitions" },
+  team_update: { label: "Team updates", description: "Members join or leave, merges and captain changes.", group: "Competitions" },
+  submission_scored: { label: "Submission scored", description: "A submission finished scoring.", group: "Competitions" },
+  submission_rejected: { label: "Submission failed", description: "A submission failed validation or scoring.", group: "Competitions" },
+  deadline_reminder: { label: "Deadline reminders", description: "Upcoming deadlines for competitions you joined.", group: "Competitions" },
+  results_published: { label: "Results published", description: "Final results of a competition you took part in.", group: "Competitions" },
+  judging: { label: "Judging", description: "Judge assignments and review updates.", group: "Competitions" },
+  certificate_issued: { label: "Certificates", description: "A new certificate was issued to you.", group: "Achievements" },
+  badge_awarded: { label: "Badges", description: "You earned a new badge.", group: "Achievements" },
+  course_completed: { label: "Course completed", description: "You completed a course.", group: "Achievements" },
+  mention: { label: "Mentions", description: "Someone @mentions you in a discussion.", group: "Community" },
+  reply: { label: "Replies", description: "Replies to your threads and comments.", group: "Community" },
+  announcement: { label: "Announcements", description: "Announcements from competitions and organizations you follow.", group: "Community" },
+  contribution_merged: { label: "Merged contributions", description: "A pull request you authored was merged.", group: "Open source" },
+  github_sync: { label: "GitHub sync", description: "Repository sync results for repositories you registered.", group: "Open source" },
+  org_membership: { label: "Organization membership", description: "Membership requests, approvals and verification.", group: "Account" },
+  moderation: { label: "Moderation", description: "Decisions about reports or content you posted.", group: "Account" },
+};

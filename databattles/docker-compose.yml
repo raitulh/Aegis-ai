@@ -1,0 +1,100 @@
+# Single-node deployment / local stack. Fits comfortably in ~8 GB RAM, no GPU.
+#   cp .env.example .env   # then edit secrets
+#   docker compose up -d --build
+#   docker compose run --rm api python -m app.seed      # optional demo data
+name: databattles
+
+x-api-env: &api-env
+  ENV: ${ENV:-production}
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-databattles}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-databattles}
+  SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+  WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+  API_BASE_URL: ${API_BASE_URL:-http://localhost:3000}
+  CORS_ORIGINS: ${WEB_BASE_URL:-http://localhost:3000}
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+  STORAGE_LOCAL_ROOT: /data/storage
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+  S3_REGION: ${S3_REGION:-}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+  EMAIL_BACKEND: ${EMAIL_BACKEND:-console}
+  EMAIL_FROM: ${EMAIL_FROM:-DataBattles <no-reply@example.com>}
+  EMAIL_STORE_BODIES: ${EMAIL_STORE_BODIES:-false}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+  GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+  GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+  GITHUB_API_TOKEN: ${GITHUB_API_TOKEN:-}
+  EVALUATOR_SANDBOX: ${EVALUATOR_SANDBOX:-subprocess}
+  DEMO_MODE: ${DEMO_MODE:-false}
+  LOG_JSON: "true"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-databattles}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-databattles}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-databattles}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 1g
+
+  migrate:
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment: *api-env
+    depends_on: { db: { condition: service_healthy } }
+    restart: "no"
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment: *api-env
+    volumes: [storage:/data/storage]
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    expose: ["8000"]
+    mem_limit: 768m
+
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    environment: *api-env
+    volumes: [storage:/data/storage]
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    # Scoring runs in a resource-limited subprocess sandbox inside this container (EVALUATOR_SANDBOX=subprocess).
+    # For stronger isolation use EVALUATOR_SANDBOX=docker on a host worker — see docs/DEPLOYMENT.md.
+    mem_limit: 2g
+
+  web:
+    build:
+      context: ./web
+      args:
+        API_INTERNAL_URL: http://api:8000
+        NEXT_PUBLIC_SITE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+    restart: unless-stopped
+    depends_on: [api]
+    ports: ["${WEB_PORT:-3000}:3000"]
+    mem_limit: 512m
+
+volumes:
+  pgdata:
+  storage:

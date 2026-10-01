@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+backend/var/
+# Node
+node_modules/
+web/.next/
+web/e2e/.results/
+web/tsconfig.tsbuildinfo
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

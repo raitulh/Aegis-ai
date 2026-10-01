@@ -1,0 +1,60 @@
+[project]
+name = "databattles-api"
+version = "0.1.0"
+description = "DataBattles — university AI competition, learning, open-source and reputation platform (API + worker)"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "sqlalchemy>=2.0.36",
+  "psycopg[binary]>=3.2",
+  "alembic>=1.14",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "argon2-cffi>=23.1",
+  "httpx>=0.27",
+  "python-multipart>=0.0.12",
+  "markdown-it-py>=3.0",
+  "nh3>=0.2.18",
+  "segno>=1.6",
+  "cryptography>=43",
+  "pillow>=11",
+  "email-validator>=2.2",
+]
+
+[project.optional-dependencies]
+s3 = ["boto3>=1.35"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM"]
+ignore = [
+  "E501",   # line length handled by formatter
+  "B008",   # FastAPI Depends() in defaults is idiomatic
+  "S101",   # asserts are fine in tests
+  "S311",   # non-crypto random only used for seed data
+  "B904",
+  "UP042",  # (str, Enum) kept for SQLAlchemy/Pydantic compatibility
+  "SIM102", "SIM103", "SIM105",  # readability preference
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106", "S108"]
+"app/seed.py" = ["S105", "S106"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = false
+check_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]

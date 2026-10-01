@@ -1,0 +1,11 @@
+# Minimal, dependency-free evaluator image for EVALUATOR_SANDBOX=docker.
+# It contains only the pure-stdlib evaluation package — no settings, database drivers or network clients.
+# The worker runs it with: --network none --read-only --cap-drop ALL --user 65534 --memory/--cpus/--pids limits.
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONHASHSEED=0
+WORKDIR /opt/evaluator
+COPY app/__init__.py ./app/__init__.py
+COPY app/evaluation ./app/evaluation
+USER 65534:65534
+ENTRYPOINT ["python", "-I", "-B", "/opt/evaluator/app/evaluation/runner_entry.py"]

@@ -1,0 +1,142 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+
+import { LegalDoc, type LegalSection } from "../terms/legal-doc";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description: "What this DataBattles deployment collects, why, who can see it, how long it is kept, and your choices.",
+};
+
+const sections: LegalSection[] = [
+  {
+    id: "who",
+    title: "Who is responsible",
+    body: (
+      <p>
+        The organization operating this deployment is the data controller. Its name and contact address should be published here by the
+        operator. <em>Operator: add your legal entity, contact email and, where required, your data protection officer.</em>
+      </p>
+    ),
+  },
+  {
+    id: "collect",
+    title: "What we collect",
+    body: (
+      <ul>
+        <li><strong>Account:</strong> email address, handle, display name, password hash (never the password), and linked sign-in providers.</li>
+        <li><strong>Profile (optional):</strong> headline, bio, avatar, skills, interests, university/department, graduation year, website and GitHub login.</li>
+        <li><strong>Activity:</strong> competition participation, submissions and scores, team membership, course progress, discussion posts, projects and datasets you publish.</li>
+        <li><strong>Organization membership:</strong> role, status and how it was verified. When you verify with an institutional email we store a one-way hash of that address to prevent reuse — not the address itself on your profile.</li>
+        <li><strong>Security:</strong> session records and sign-in events. IP addresses are stored as one-way hashes for abuse and rate-limit protection.</li>
+        <li><strong>Email delivery:</strong> a record of transactional emails sent to you (template, status, time).</li>
+      </ul>
+    ),
+  },
+  {
+    id: "use",
+    title: "How we use it",
+    body: (
+      <ul>
+        <li>To run the service: sign-in, scoring submissions, leaderboards, certificates, badges, notifications and emails you asked for.</li>
+        <li>To keep it safe: rate limiting, abuse detection, moderation and an audit log of privileged actions.</li>
+        <li>To suggest competitions from the interests you chose — clearly labelled as suggestions. We don’t sell personal data or use it for third-party advertising.</li>
+      </ul>
+    ),
+  },
+  {
+    id: "visibility",
+    title: "Who can see what",
+    body: (
+      <>
+        <ul>
+          <li><strong>Public:</strong> your handle, display name and the profile sections you leave visible. Profiles are not indexed by search engines unless you opt in.</li>
+          <li><strong>Organization admins:</strong> handles, names, roles, department and competition participation of their members — never your email.</li>
+          <li>
+            <strong>Sponsors:</strong> only participants of events they sponsor who turned on “Open to opportunities”, and only public profile
+            information. Emails are never shared; contact happens through your public profile links.
+          </li>
+          <li><strong>Moderators and platform admins:</strong> what they need to handle reports, support and security. Their actions are audited.</li>
+        </ul>
+        <p>You control profile visibility, leaderboard affiliation and search indexing in your <Link href="/settings">settings</Link>.</p>
+      </>
+    ),
+  },
+  {
+    id: "cookies",
+    title: "Cookies",
+    body: (
+      <p>
+        We use a strictly necessary, HttpOnly session cookie to keep you signed in and a CSRF-protection cookie. Your theme preference is stored
+        in your browser. There are no advertising or cross-site tracking cookies.
+      </p>
+    ),
+  },
+  {
+    id: "retention",
+    title: "Retention and account deletion",
+    body: (
+      <>
+        <p>You can delete your account from your settings at any time. When you do:</p>
+        <ul>
+          <li>Your account is anonymized immediately: email, handle, display name, password, profile text, avatar, skills and linked accounts are removed or replaced, and all sessions are signed out.</li>
+          <li>
+            Competition results and issued certificates are kept as historical records so leaderboards and verification pages stay accurate.
+            They are attributed to <strong>“Deleted user”</strong> and are no longer linked to anything that identifies you.
+          </li>
+          <li>Audit-log entries about security-relevant actions are retained for accountability.</li>
+        </ul>
+        <p>
+          You can download a copy of your personal data (JSON) from your settings before deleting your account.{" "}
+          <em>Operator: state backup retention periods and any legal retention obligations here.</em>
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "demo",
+    title: "Demo data",
+    body: (
+      <p>
+        Content labelled “Demo data” was generated by a seed script. It is synthetic: demo users, organizations, competitions and results do not
+        describe real people or institutions, and they can be purged by platform admins at any time.
+      </p>
+    ),
+  },
+  {
+    id: "processors",
+    title: "Service providers and transfers",
+    body: (
+      <p>
+        The operator may use hosting, storage and email-delivery providers to run the service. <em>Operator: list your processors, where data is
+        stored, and the safeguards used for international transfers.</em>
+      </p>
+    ),
+  },
+  {
+    id: "rights",
+    title: "Your rights",
+    body: (
+      <p>
+        Depending on where you live you may have rights to access, correct, export, delete or restrict the use of your data, and to complain to a
+        supervisory authority. Most of these are self-service in your settings; for anything else, contact the operator.
+      </p>
+    ),
+  },
+  {
+    id: "changes",
+    title: "Changes",
+    body: <p>We’ll announce material changes to this policy in the app before they take effect.</p>,
+  },
+];
+
+export default function PrivacyPage() {
+  return (
+    <LegalDoc
+      eyebrow="Legal"
+      title="Privacy Policy"
+      description="What we collect, why, who can see it, how long it is kept, and your choices."
+      sections={sections}
+    />
+  );
+}
