@@ -76,8 +76,14 @@ class AISystem(IdMixin, TimestampMixin, OrgMixin, Base):
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(16), default="active")
     deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # Runtime Guard mode: observe (record) | audit (record + findings) | enforce (block / require approval).
+    runtime_mode: Mapped[str] = mapped_column(String(12), default="observe", server_default="observe")
+    # Known-good audit used as the regression baseline for continuous assurance.
+    baseline_audit_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("audits.id", ondelete="SET NULL", use_alter=True), nullable=True
+    )
 
-    provider: Mapped[Provider | None] = relationship(lazy="joined")
+    provider: Mapped[Provider | None] = relationship(lazy="joined", foreign_keys=[provider_id])
 
 
 class SystemVersion(IdMixin, CreatedMixin, OrgMixin, Base):

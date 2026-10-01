@@ -64,6 +64,9 @@ def create_audit(
 def enqueue(session: Session, audit: Audit, principal: Principal | None = None) -> None:
     if audit.status in TERMINAL_AUDIT_STATUSES:
         raise Conflict("Audit has already completed")
+    from aegis_api.services import entitlements
+
+    entitlements.check_quota(session, audit.organization_id, "audit_run")
     audit.status = AuditStatus.QUEUED
     audit.progress = 0
     session.flush()

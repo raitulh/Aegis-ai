@@ -292,7 +292,7 @@ def seed_workspace(session: Session, org: Organization, *, minimal: bool = False
             start=False,
         )
         session.flush()
-        orchestrator.run_audit(session, audit.id)
+        orchestrator.run_audit_inline(session, audit.id)
         session.flush()
         created.append({"system": spec["name"], "audit_id": str(audit.id)})
 

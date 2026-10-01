@@ -253,6 +253,9 @@ def invite(
         raise ValidationFailed("That role cannot be assigned to a person")
     if not can_assign_role(principal.role, body.role):
         raise Forbidden("You cannot assign that role")
+    from aegis_api.services import entitlements
+
+    entitlements.check_quota(db, principal.organization_id, "seats")
     from aegis_api.config import get_settings
     from aegis_api.models import Invitation
     from aegis_api.security.tokens import keyed_hash, random_token
@@ -549,5 +552,45 @@ def audit_log_list(
             "actor": e.actor_label,
             "created_at": e.created_at.isoformat(),
             "request_id": e.request_id,
+        },
+    )
+
+
+@router.get("/roles")
+def roles(principal: Principal = Depends(require("team:read"))) -> list[dict]:
+    """Role catalogue with the capabilities each role grants (server-enforced)."""
+    from aegis_api.security.rbac import role_catalog
+
+    return role_catalog()
+
+
+@router.get("/jobs")
+def jobs(
+    params: PageParams = Depends(),
+    status: str | None = Query(None, max_length=16),
+    principal: Principal = Depends(require("jobs:read")),
+    db: Session = Depends(get_db),
+) -> Page:
+    """Background-job ledger for this workspace (attempts, classified failures, dead letters)."""
+    from aegis_api.models import JobRun
+
+    stmt = select(JobRun).where(JobRun.organization_id == principal.organization_id)
+    if status:
+        stmt = stmt.where(JobRun.status == status)
+    return paginate(
+        db,
+        stmt.order_by(JobRun.created_at.desc()),
+        params,
+        lambda j: {
+            "id": str(j.id),
+            "job": j.job.rsplit(":", 1)[-1],
+            "status": j.status,
+            "attempts": j.attempts,
+            "max_attempts": j.max_attempts,
+            "error_class": j.error_class,
+            "error": j.error,
+            "duration_ms": j.duration_ms,
+            "created_at": j.created_at.isoformat(),
+            "finished_at": j.finished_at.isoformat() if j.finished_at else None,
         },
     )

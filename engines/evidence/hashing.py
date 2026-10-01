@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass
 from typing import Any
 
+# Single source of truth for the hashing scheme: the standalone package verifier ships to customers, so the
+# hashes it recomputes must be byte-for-byte the ones written here.
+from engines.evidence.package import chain_hash, content_hash
 
-def content_hash(payload: Any) -> str:
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=False)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def chain_hash(prev_hash: str | None, this_content_hash: str) -> str:
-    return hashlib.sha256(f"{prev_hash or 'GENESIS'}:{this_content_hash}".encode()).hexdigest()
+__all__ = ["ChainState", "chain_hash", "content_hash", "verify_chain"]
 
 
 @dataclass

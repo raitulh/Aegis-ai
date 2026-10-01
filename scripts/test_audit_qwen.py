@@ -61,7 +61,7 @@ def main():
         exec_session.commit()
         print("\n=== AUDIT COMPLETED ===")
         print(f"Status: {completed_audit.status}")
-        print(f"Score: {completed_audit.score}")
+        print(f"Posture: {(completed_audit.summary or {}).get('posture')}")
         print(f"Findings Count: {completed_audit.findings_count}")
         print(f"Summary: {completed_audit.summary}")
     except Exception as e:

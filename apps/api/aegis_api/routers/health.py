@@ -20,7 +20,7 @@ from aegis_api.db.session import get_engine
 
 router = APIRouter(tags=["Health"])
 
-REQUIRED_REVISION = "0003"
+REQUIRED_REVISION = "0004"
 _draining = False
 
 

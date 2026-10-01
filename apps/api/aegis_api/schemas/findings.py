@@ -43,6 +43,12 @@ class FindingOut(ORMModel):
     evidence_unavailable_reason: str | None
     assignee_id: str | None
     due_date: date | None
+    source: str = "audit"
+    tags: list[str] = []
+    priority: str | None = None
+    sla_due_at: datetime | None = None
+    risk_acceptance: dict[str, Any] | None = None
+    risk_accepted_until: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -64,6 +70,11 @@ class FindingSummary(ORMModel):
     sample_size: int
     audit_id: str | None = None
     last_seen_at: datetime | None = None
+    source: str = "audit"
+    tags: list[str] = []
+    priority: str | None = None
+    assignee_id: str | None = None
+    sla_due_at: datetime | None = None
     created_at: datetime
 
 
@@ -77,11 +88,20 @@ class AuditFindingOut(FindingSummary):
     first_detected_here: bool
 
 
+class RiskAcceptanceUpdate(BaseModel):
+    reason: str = Field(min_length=10, max_length=2000)
+    expires_at: datetime
+    owner_id: str | None = None
+
+
 class FindingUpdate(BaseModel):
     status: FindingStatus | None = None
     assignee_id: str | None = None
     due_date: date | None = None
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=2000)
+    tags: list[str] | None = Field(default=None, max_length=20)
+    priority: str | None = Field(default=None, pattern="^p[1-4]$")
+    risk_acceptance: RiskAcceptanceUpdate | None = None
 
 
 class FindingEventOut(ORMModel):

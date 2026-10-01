@@ -18,15 +18,22 @@ from aegis_api.middleware import (
     SecureHeadersMiddleware,
 )
 from aegis_api.routers import (
+    assurance,
     audits,
     auth,
+    billing,
     demo,
     evidence,
     findings,
+    graph,
     health,
     operations,
     policies,
+    public,
+    runtime,
+    runtime_policies,
     systems,
+    webhooks,
     workspace,
 )
 
@@ -51,6 +58,19 @@ TAGS_METADATA = [
     {"name": "Evidence", "description": "Immutable, hash-chained audit evidence and reports."},
     {"name": "Operations", "description": "Agent traces, red team, monitoring and alerts."},
     {"name": "Workspace", "description": "Overview, search, team, API keys, integrations and notifications."},
+    {"name": "Runtime", "description": "Runtime Agent Guard: telemetry ingestion, decisions, approvals."},
+    {
+        "name": "Policy Studio",
+        "description": "Versioned runtime policies: validate, test, simulate, publish, roll back.",
+    },
+    {"name": "Continuous Assurance", "description": "Schedules, CI/CD change triggers, baselines and regressions."},
+    {"name": "Billing & Usage", "description": "Plans, entitlements, usage ledger and billing provider webhooks."},
+    {"name": "Webhooks", "description": "Signed outbound event delivery."},
+    {
+        "name": "Assurance Graph",
+        "description": "Relationships between systems, policies, controls, tests, findings and evidence.",
+    },
+    {"name": "Public", "description": "Website contact requests and Trust Center facts."},
     {"name": "Demo", "description": "Public demo endpoints (no authentication)."},
     {"name": "Health", "description": "Liveness and readiness."},
 ]
@@ -154,6 +174,13 @@ def create_app() -> FastAPI:
     app.include_router(evidence.router)
     app.include_router(operations.router)
     app.include_router(workspace.router)
+    app.include_router(runtime.router)
+    app.include_router(runtime_policies.router)
+    app.include_router(assurance.router)
+    app.include_router(billing.router)
+    app.include_router(webhooks.router)
+    app.include_router(graph.router)
+    app.include_router(public.router)
     app.include_router(demo.router)
 
     @app.get("/", include_in_schema=False)

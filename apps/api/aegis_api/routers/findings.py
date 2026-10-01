@@ -31,6 +31,7 @@ from aegis_api.schemas.findings import (
     RemediationOut,
     RemediationRecommendationOut,
 )
+from aegis_api.schemas.platform import BulkFindingUpdate, CommentCreate, CommentOut
 from aegis_api.security.context import Principal
 from aegis_api.services import finding_service, regression_service, report_service
 
@@ -44,46 +45,154 @@ def _get_finding(db: Session, finding_id: uuid.UUID, org_id: uuid.UUID) -> Findi
     return finding
 
 
+SORTS = {
+    "risk": (Finding.risk_score.desc(), Finding.created_at.desc()),
+    "newest": (Finding.created_at.desc(),),
+    "oldest": (Finding.created_at.asc(),),
+    "sla": (Finding.sla_due_at.asc().nulls_last(), Finding.risk_score.desc()),
+    "number": (Finding.number.desc(),),
+}
+
+
+def _filtered(
+    principal: Principal,
+    *,
+    severity: str | None = None,
+    status: str | None = None,
+    category: str | None = None,
+    system_id: uuid.UUID | None = None,
+    risk_level: str | None = None,
+    audit_id: uuid.UUID | None = None,
+    source: str | None = None,
+    tag: str | None = None,
+    assignee_id: uuid.UUID | None = None,
+    q: str | None = None,
+    open_only: bool = False,
+):
+    from aegis_api.models import FindingOccurrence
+    from aegis_api.models.enums import OPEN_FINDING_STATUSES
+
+    stmt = select(Finding).where(Finding.organization_id == principal.organization_id)
+    for column, value in (
+        (Finding.severity, severity),
+        (Finding.category, category),
+        (Finding.risk_level, risk_level),
+        (Finding.source, source),
+    ):
+        if value:
+            stmt = stmt.where(column == value)
+    if status:
+        stmt = stmt.where(Finding.status.in_([s.strip() for s in status.split(",") if s.strip()]))
+    if open_only:
+        stmt = stmt.where(Finding.status.in_([str(s) for s in OPEN_FINDING_STATUSES]))
+    if system_id:
+        stmt = stmt.where(Finding.system_id == system_id)
+    if assignee_id:
+        stmt = stmt.where(Finding.assignee_id == assignee_id)
+    if tag:
+        stmt = stmt.where(Finding.tags.contains([tag.lower()]))
+    if q:
+        like = f"%{q[:100]}%"
+        stmt = stmt.where(Finding.title.ilike(like) | Finding.description.ilike(like))
+    if audit_id:
+        stmt = stmt.where(
+            Finding.id.in_(select(FindingOccurrence.finding_id).where(FindingOccurrence.audit_id == audit_id))
+        )
+    return stmt
+
+
 @router.get("/findings", response_model=Page[FindingSummary])
 def list_findings(
     params: PageParams = Depends(),
     severity: str | None = Query(None),
-    status: str | None = Query(None),
+    status: str | None = Query(None, description="Comma-separated statuses"),
     category: str | None = Query(None),
     system_id: uuid.UUID | None = Query(None),
     risk_level: str | None = Query(None),
+    audit_id: uuid.UUID | None = Query(None, description="Findings observed by this audit"),
+    source: str | None = Query(None, pattern="^(audit|redteam|runtime|regression|manual)$"),
+    tag: str | None = Query(None, max_length=40),
+    assignee_id: uuid.UUID | None = Query(None),
+    q: str | None = Query(None, max_length=100),
+    open_only: bool = Query(False),
+    sort: str = Query("risk", pattern="^(risk|newest|oldest|sla|number)$"),
     principal: Principal = Depends(require("findings:read")),
     db: Session = Depends(get_db),
 ) -> Page[FindingSummary]:
-    stmt = select(Finding).where(Finding.organization_id == principal.organization_id)
-    for column, value in (
-        (Finding.severity, severity),
-        (Finding.status, status),
-        (Finding.category, category),
-        (Finding.risk_level, risk_level),
-    ):
-        if value:
-            stmt = stmt.where(column == value)
-    if system_id:
-        stmt = stmt.where(Finding.system_id == system_id)
-    from engines.common.types import SEVERITY_RANK  # noqa: F401
-
-    return paginate(
-        db, stmt.order_by(Finding.risk_score.desc(), Finding.created_at.desc()), params, FindingSummary.model_validate
+    stmt = _filtered(
+        principal,
+        severity=severity,
+        status=status,
+        category=category,
+        system_id=system_id,
+        risk_level=risk_level,
+        audit_id=audit_id,
+        source=source,
+        tag=tag,
+        assignee_id=assignee_id,
+        q=q,
+        open_only=open_only,
     )
+    return paginate(db, stmt.order_by(*SORTS[sort]), params, FindingSummary.model_validate)
 
 
 @router.get("/findings/export")
 def export_findings(
-    principal: Principal = Depends(require("export:data")), db: Session = Depends(get_db)
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    status: str | None = Query(None),
+    system_id: uuid.UUID | None = Query(None),
+    audit_id: uuid.UUID | None = Query(None),
+    principal: Principal = Depends(require("export:data")),
+    db: Session = Depends(get_db),
 ) -> PlainTextResponse:
-    findings = db.scalars(
-        select(Finding).where(Finding.organization_id == principal.organization_id).order_by(Finding.risk_score.desc())
-    ).all()
-    csv = report_service.findings_to_csv([report_service._finding_dict(f) for f in findings])
+    """Export findings (CSV or JSON). Data portability: customers can always take their data with them."""
+    import json
+
+    stmt = _filtered(principal, status=status, system_id=system_id, audit_id=audit_id)
+    findings = db.scalars(stmt.order_by(Finding.risk_score.desc()).limit(50_000)).all()
+    rows = [report_service._finding_dict(f) for f in findings]
+    from aegis_api.services import audit_log
+
+    audit_log.record(
+        db,
+        organization_id=principal.organization_id,
+        action="finding.exported",
+        resource_type="finding",
+        principal=principal,
+        after={"format": format, "count": len(rows)},
+    )
+    if format == "json":
+        return PlainTextResponse(
+            json.dumps(rows, indent=2, default=str),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=findings.json"},
+        )
+    csv = report_service.findings_to_csv(rows)
     return PlainTextResponse(
         csv, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=findings.csv"}
     )
+
+
+@router.post("/findings/bulk")
+def bulk_update(
+    body: BulkFindingUpdate, principal: Principal = Depends(require("findings:write")), db: Session = Depends(get_db)
+) -> dict:
+    changes: dict = {}
+    if body.status:
+        changes["status"] = body.status
+    if body.assignee_id:
+        changes["assignee_id"] = uuid.UUID(body.assignee_id)
+    if body.priority:
+        changes["priority"] = body.priority
+    if body.tags is not None:
+        changes["tags"] = body.tags
+    if body.note:
+        changes["note"] = body.note
+    if body.status == "accepted_risk":
+        from aegis_api.errors import ValidationFailed
+
+        raise ValidationFailed("Risk acceptance requires an individual justification and expiry per finding")
+    return finding_service.bulk_update(db, principal, [uuid.UUID(i) for i in body.ids], changes)
 
 
 @router.get("/findings/{finding_id}", response_model=FindingOut)
@@ -113,8 +222,89 @@ def update_finding(
         assignee_id=assignee,
         due_date=body.due_date,
         request_id=principal.request_id,
+        tags=body.tags,
+        priority=body.priority,
+        risk_acceptance=body.risk_acceptance.model_dump() if body.risk_acceptance else None,
     )
     return FindingOut.model_validate(finding)
+
+
+@router.get("/findings/{finding_id}/transitions")
+def finding_transitions(
+    finding_id: uuid.UUID, principal: Principal = Depends(require("findings:read")), db: Session = Depends(get_db)
+) -> dict:
+    finding = _get_finding(db, finding_id, principal.organization_id)
+    allowed = finding_service.allowed_transitions(finding.status)
+    if not principal.has("findings:accept_risk"):
+        allowed = [s for s in allowed if s != "accepted_risk"]
+    if not principal.has("findings:write"):
+        allowed = []
+    return {"status": finding.status, "allowed": allowed}
+
+
+@router.get("/findings/{finding_id}/comments", response_model=list[CommentOut])
+def list_comments(
+    finding_id: uuid.UUID, principal: Principal = Depends(require("findings:read")), db: Session = Depends(get_db)
+) -> list[CommentOut]:
+    from aegis_api.models import FindingComment
+
+    _get_finding(db, finding_id, principal.organization_id)
+    rows = db.scalars(
+        select(FindingComment).where(FindingComment.finding_id == finding_id).order_by(FindingComment.created_at)
+    ).all()
+    return [CommentOut.model_validate(c) for c in rows]
+
+
+@router.post("/findings/{finding_id}/comments", response_model=CommentOut, status_code=201)
+def add_comment(
+    finding_id: uuid.UUID,
+    body: CommentCreate,
+    principal: Principal = Depends(require("findings:comment")),
+    db: Session = Depends(get_db),
+) -> CommentOut:
+    finding = _get_finding(db, finding_id, principal.organization_id)
+    return CommentOut.model_validate(finding_service.add_comment(db, principal, finding, body.body))
+
+
+@router.get("/findings/{finding_id}/explanation")
+def explanation(
+    finding_id: uuid.UUID, principal: Principal = Depends(require("findings:read")), db: Session = Depends(get_db)
+) -> dict:
+    """Structured explanation assembled deterministically from the finding, its evidence and the remediation
+    library. It is a reading aid: the underlying finding and evidence remain the source of truth."""
+    from aegis_api.services import explanation_service
+
+    finding = _get_finding(db, finding_id, principal.organization_id)
+    return explanation_service.explain(db, finding)
+
+
+@router.get("/findings/{finding_id}/occurrences")
+def occurrences(
+    finding_id: uuid.UUID, principal: Principal = Depends(require("findings:read")), db: Session = Depends(get_db)
+) -> list[dict]:
+    from aegis_api.models import FindingOccurrence
+
+    _get_finding(db, finding_id, principal.organization_id)
+    rows = db.scalars(
+        select(FindingOccurrence)
+        .where(FindingOccurrence.finding_id == finding_id)
+        .order_by(FindingOccurrence.observed_at.desc())
+        .limit(200)
+    ).all()
+    return [
+        {
+            "source_type": o.source_type,
+            "source_id": str(o.source_id),
+            "audit_id": str(o.audit_id) if o.audit_id else None,
+            "severity": o.severity,
+            "risk_level": o.risk_level,
+            "occurrences": o.occurrences,
+            "sample_size": o.sample_size,
+            "system_version": o.system_version,
+            "observed_at": o.observed_at.isoformat(),
+        }
+        for o in rows
+    ]
 
 
 @router.get("/findings/{finding_id}/events", response_model=list[FindingEventOut])
@@ -213,6 +403,11 @@ def retest(
 
     if not db.scalar(select(RegressionTest.id).where(RegressionTest.finding_id == finding.id)):
         regression_service.create_regression_test(db, principal, finding)
+    # Lifecycle: a fix under test moves through fixed → retesting; the retest result resolves or reopens it.
+    if finding.status == "in_remediation":
+        finding_service.transition(db, finding, status="fixed", principal=principal, note="Retest requested")
+    if finding.status == "fixed":
+        finding_service.transition(db, finding, status="retesting", principal=principal, note="Retest started")
     run = regression_service.run_regression(db, principal, system, finding)
     return RegressionRunOut.model_validate(run)
 

@@ -18,7 +18,7 @@ from aegis_api.observability.tracing import new_span_id, new_trace_id, parse_tra
 
 log = structlog.get_logger("aegis.http")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9\-_.]{8,64}$")
-UPLOAD_PATH_RE = re.compile(r"^/api/v1/policies(/upload|/[0-9a-f-]{36}/version)$")
+UPLOAD_PATH_RE = re.compile(r"^/api/v1/(policies(/upload|/[0-9a-f-]{36}/(upload|version))|evidence/verify-package)$")
 
 
 class RequestContextMiddleware:

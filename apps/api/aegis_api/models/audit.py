@@ -73,7 +73,7 @@ class Audit(IdMixin, TimestampMixin, OrgMixin, Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
-    system: Mapped[AISystem] = relationship(lazy="joined")
+    system: Mapped[AISystem] = relationship(lazy="joined", foreign_keys=[system_id])
 
 
 class AuditRun(IdMixin, CreatedMixin, OrgMixin, Base):

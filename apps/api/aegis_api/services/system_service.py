@@ -31,6 +31,9 @@ def _unique_slug(session: Session, org_id: uuid.UUID, name: str) -> str:
 
 
 def create_system(session: Session, principal: Principal, data: Any) -> AISystem:
+    from aegis_api.services import entitlements
+
+    entitlements.check_quota(session, principal.organization_id, "systems")
     provider_id = uuid.UUID(data.provider_id) if data.provider_id else None
     if provider_id:
         provider = session.get(Provider, provider_id)
@@ -118,6 +121,10 @@ def update_system(
             )
         )
     system.updated_at = utcnow()
+    if changed:
+        from aegis_api.services import assurance_service
+
+        assurance_service.maybe_trigger_on_change(session, principal, system, changed)
     audit_log.record(
         session,
         organization_id=system.organization_id,

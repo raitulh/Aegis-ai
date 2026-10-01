@@ -24,6 +24,11 @@ def create_run(session: Session, principal: Principal, data: Any) -> RedTeamRun:
     from aegis_api.services.system_service import get_system
 
     system = get_system(session, uuid.UUID(data.system_id), principal.organization_id)
+    from aegis_api.services import entitlements
+
+    entitlements.check_quota(session, principal.organization_id, "redteam_run")
+    if data.max_depth > 0:
+        entitlements.require_feature(session, principal.organization_id, "advanced_redteam")
     try:
         corpus = ProbeCorpus.from_records(data.corpus, name=data.corpus_name) if data.corpus else ProbeCorpus()
     except CorpusError as exc:
@@ -130,6 +135,9 @@ def execute_run(session: Session, run_id: uuid.UUID) -> RedTeamRun:
         _create_findings(session, run, system, org, report)
         run.summary = report.summary()
         run.status = RunStatus.COMPLETED
+        from aegis_api.services import usage_service
+
+        usage_service.record(session, run.organization_id, "redteam_run", source_type="redteam_run", source_id=run.id)
     except Exception as exc:
         run.status = RunStatus.FAILED
         run.error = f"{type(exc).__name__}: {exc}"
@@ -213,6 +221,8 @@ def _create_findings(session: Session, run: RedTeamRun, system: Any, org: Organi
                 fingerprint=fingerprint,
                 details=details,
                 last_seen_at=utcnow(),
+                source="redteam",
+                sla_due_at=finding_service.sla_due(worst.severity),
                 is_demo=system.is_demo,
             )
             session.add(finding)

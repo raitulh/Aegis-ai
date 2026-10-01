@@ -10,30 +10,44 @@ Example
     audit = client.audits.wait(audit["id"])
     for finding in client.findings.list(system_id=system["id"]).items:
         print(finding["number"], finding["title"], finding["risk_level"])
+
+    # Runtime guard: ask before acting.
+    decision = client.runtime.check(system_id=system["id"], event_type="tool.call", tool="send_email",
+                                    payload={"to": "customer@example.com"})
+    if decision.allowed:
+        ...
 """
 
-from aegis_ai.client import Aegis, AsyncAegis
+from aegis_ai.client import Aegis, AsyncAegis, RuntimeDecision, RuntimeTrace
 from aegis_ai.errors import (
     AegisAPIError,
     AegisConnectionError,
+    AegisError,
     AuthenticationError,
     ConflictError,
     NotFoundError,
+    PermissionDeniedError,
+    PlanLimitError,
     RateLimitError,
     ValidationError,
 )
 from aegis_ai.models import Page
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __all__ = [
     "Aegis",
     "AegisAPIError",
     "AegisConnectionError",
+    "AegisError",
     "AsyncAegis",
     "AuthenticationError",
     "ConflictError",
     "NotFoundError",
     "Page",
+    "PermissionDeniedError",
+    "PlanLimitError",
     "RateLimitError",
+    "RuntimeDecision",
+    "RuntimeTrace",
     "ValidationError",
 ]

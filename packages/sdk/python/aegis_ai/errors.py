@@ -28,7 +28,15 @@ class AegisAPIError(AegisError):
 
 
 class AuthenticationError(AegisAPIError):
-    """401/403 — invalid credentials or insufficient permissions."""
+    """401 — missing, invalid, expired or revoked credentials."""
+
+
+class PermissionDeniedError(AuthenticationError):
+    """403 — authenticated, but the key's role/scopes do not grant this capability."""
+
+
+class PlanLimitError(PermissionDeniedError):
+    """403 plan_limit_exceeded / feature_not_in_plan — ``details`` names the metric, usage and limit."""
 
 
 class NotFoundError(AegisAPIError):
@@ -57,9 +65,11 @@ def raise_for_response(status_code: int, body: dict[str, Any], retry_after: int 
     message = error.get("message", "Request failed")
     request_id = error.get("request_id")
     details = error.get("details")
+    if status_code == 403 and code in ("plan_limit_exceeded", "feature_not_in_plan", "feature_unavailable"):
+        raise PlanLimitError(status_code, code, message, request_id, details)
     cls = {
         401: AuthenticationError,
-        403: AuthenticationError,
+        403: PermissionDeniedError,
         404: NotFoundError,
         409: ConflictError,
         422: ValidationError,

@@ -68,6 +68,13 @@ class Finding(IdMixin, TimestampMixin, OrgMixin, Base):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(nullable=True)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Workflow: where the finding came from, triage metadata, SLA and risk acceptance.
+    source: Mapped[str] = mapped_column(String(16), default="audit", server_default="audit")
+    tags: Mapped[list[str]] = mapped_column(default=list, server_default="[]")
+    priority: Mapped[str | None] = mapped_column(String(4))  # p1 | p2 | p3 | p4
+    sla_due_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    risk_acceptance: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
+    risk_accepted_until: Mapped[datetime | None] = mapped_column(nullable=True, index=True)
 
     system: Mapped[AISystem] = relationship(lazy="joined", foreign_keys=[system_id])
 

@@ -1,5 +1,12 @@
 """SQLAlchemy ORM models. Importing this package registers every table on ``Base.metadata``."""
 
+from aegis_api.models.assurance import (
+    AssuranceSchedule,
+    AssuranceTrigger,
+    ContactRequest,
+    EvidenceExport,
+    FindingComment,
+)
 from aegis_api.models.audit import (
     Audit,
     AuditEvent,
@@ -52,6 +59,13 @@ from aegis_api.models.policy import (
     PolicyRequirement,
     PolicyVersion,
 )
+from aegis_api.models.runtime import (
+    RuntimeApproval,
+    RuntimeEvent,
+    RuntimePolicy,
+    RuntimePolicyAssignment,
+    RuntimePolicyVersion,
+)
 from aegis_api.models.systems import (
     AIModel,
     AISystem,
@@ -82,6 +96,8 @@ __all__ = [
     "AgentTrace",
     "Alert",
     "ApiKey",
+    "AssuranceSchedule",
+    "AssuranceTrigger",
     "Audit",
     "AuditEvent",
     "AuditLog",
@@ -90,6 +106,7 @@ __all__ = [
     "AuthToken",
     "BillingEvent",
     "Claim",
+    "ContactRequest",
     "Control",
     "ControlAssessment",
     "ControlMapping",
@@ -97,9 +114,11 @@ __all__ = [
     "Evaluation",
     "EvaluatorRecord",
     "Evidence",
+    "EvidenceExport",
     "EvidenceLink",
     "FeatureFlag",
     "Finding",
+    "FindingComment",
     "FindingEvent",
     "FindingOccurrence",
     "Framework",
@@ -129,6 +148,11 @@ __all__ = [
     "Remediation",
     "Report",
     "RiskSnapshot",
+    "RuntimeApproval",
+    "RuntimeEvent",
+    "RuntimePolicy",
+    "RuntimePolicyAssignment",
+    "RuntimePolicyVersion",
     "SavedFilter",
     "Secret",
     "Subscription",

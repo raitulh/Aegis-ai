@@ -159,12 +159,53 @@ def prune_idempotency_keys() -> int:
         return int(getattr(result, "rowcount", 0) or 0)
 
 
+def apply_retention() -> dict[str, int]:
+    from aegis_api.services import retention_service
+
+    return retention_service.apply_all()
+
+
+def expire_risk_acceptances() -> int:
+    from aegis_api.services import finding_service
+
+    return finding_service.expire_risk_acceptances()
+
+
+def expire_runtime_approvals() -> int:
+    from aegis_api.models import RuntimeApproval
+
+    with admin_session_scope() as s:
+        result = s.execute(
+            update(RuntimeApproval)
+            .where(RuntimeApproval.status == "pending", RuntimeApproval.expires_at < utcnow())
+            .values(status="expired", updated_at=utcnow())
+        )
+        return int(getattr(result, "rowcount", 0) or 0)
+
+
+def run_assurance_schedules() -> int:
+    from aegis_api.services import assurance_service
+
+    return assurance_service.run_due_schedules()
+
+
+def usage_alerts() -> int:
+    from aegis_api.services import usage_alert_service
+
+    return usage_alert_service.send_threshold_alerts()
+
+
 TASKS: dict[str, Callable[[], Any]] = {
     "deliver_webhooks": deliver_webhooks,
     "reap_stale_runs": reap_stale_runs,
     "retry_due_jobs": retry_due_jobs,
     "purge_expired_sandboxes": purge_expired_sandboxes,
     "prune_idempotency_keys": prune_idempotency_keys,
+    "apply_retention": apply_retention,
+    "expire_risk_acceptances": expire_risk_acceptances,
+    "expire_runtime_approvals": expire_runtime_approvals,
+    "run_assurance_schedules": run_assurance_schedules,
+    "usage_alerts": usage_alerts,
 }
 
 

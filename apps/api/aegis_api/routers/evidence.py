@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -36,6 +36,78 @@ def list_evidence(
     if audit_id:
         stmt = stmt.where(Evidence.audit_id == audit_id)
     return paginate(db, stmt.order_by(Evidence.created_at.desc()), params, EvidenceOut.model_validate)
+
+
+# --- integrity, verification and export ------------------------------------------------------------
+@router.get("/evidence/signing-key")
+def signing_key(principal: Principal = Depends(require("evidence:read"))) -> dict:
+    """Public key used to sign evidence packages. Compare ``key_id`` with the one inside a package."""
+    from aegis_api.security import signing
+
+    return {
+        "algorithm": "Ed25519",
+        "key_id": signing.key_id(),
+        "public_key": signing.public_key_b64(),
+        "development_key": signing.is_development_key(),
+    }
+
+
+@router.get("/evidence/integrity")
+def evidence_integrity(principal: Principal = Depends(require("evidence:read")), db: Session = Depends(get_db)) -> dict:
+    """Recompute the hash chains of the most recent completed audits and report the workspace status."""
+    from aegis_api.services import evidence_service
+
+    return evidence_service.integrity_summary(db, principal.organization_id)
+
+
+@router.get("/evidence/exports")
+def list_exports(
+    params: PageParams = Depends(),
+    principal: Principal = Depends(require("evidence:read")),
+    db: Session = Depends(get_db),
+) -> Page:
+    from aegis_api.models import EvidenceExport
+
+    stmt = (
+        select(EvidenceExport)
+        .where(EvidenceExport.organization_id == principal.organization_id)
+        .order_by(EvidenceExport.created_at.desc())
+    )
+    return paginate(
+        db,
+        stmt,
+        params,
+        lambda e: {
+            "id": str(e.id),
+            "audit_id": str(e.audit_id) if e.audit_id else None,
+            "scope": e.scope,
+            "root_hash": e.root_hash,
+            "artifact_count": e.artifact_count,
+            "integrity_status": e.integrity_status,
+            "key_id": e.key_id,
+            "created_at": e.created_at.isoformat(),
+            "counts": (e.manifest or {}).get("counts", {}),
+        },
+    )
+
+
+@router.post("/evidence/verify-package")
+async def verify_package(
+    file: UploadFile = File(...),
+    public_key: str | None = Query(None, max_length=200),
+    principal: Principal = Depends(require("evidence:read")),
+) -> dict:
+    """Verify an uploaded evidence package with the same code that ships inside it as ``verify.py``."""
+    import asyncio
+
+    from aegis_api.config import get_settings
+    from aegis_api.errors import PayloadTooLarge
+    from engines.evidence.package import verify_package as run_verifier
+
+    data = await file.read(get_settings().max_upload_bytes + 1)
+    if len(data) > get_settings().max_upload_bytes:
+        raise PayloadTooLarge("Evidence package exceeds the upload limit")
+    return await asyncio.to_thread(run_verifier, data, public_key)
 
 
 @router.get("/evidence/{evidence_id}", response_model=EvidenceOut)
@@ -118,4 +190,40 @@ def export_report(
         iter([pdf]),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=report-{report_id}.pdf"},
+    )
+
+
+@router.get("/audits/{audit_id}/evidence/verify")
+def verify_audit_evidence(
+    audit_id: uuid.UUID, principal: Principal = Depends(require("evidence:read")), db: Session = Depends(get_db)
+) -> dict:
+    from aegis_api.services import audit_service, evidence_service
+
+    audit = audit_service.get_audit(db, audit_id, principal.organization_id)
+    return evidence_service.verify_audit(db, audit)
+
+
+@router.post("/audits/{audit_id}/evidence/export")
+def export_audit_evidence(
+    audit_id: uuid.UUID, principal: Principal = Depends(require("evidence:export")), db: Session = Depends(get_db)
+) -> StreamingResponse:
+    """Download a signed, self-verifying evidence package (zip) for one audit."""
+    from aegis_api.services import audit_service, entitlements, evidence_service
+
+    audit = audit_service.get_audit(db, audit_id, principal.organization_id)
+    if audit.status not in ("completed", "partially_completed"):
+        from aegis_api.errors import Conflict
+
+        raise Conflict("Evidence can be exported once the audit has completed")
+    entitlements.require_feature(db, principal.organization_id, "evidence_export")
+    data, manifest, export = evidence_service.build_package(db, audit, principal)
+    filename = evidence_service.package_filename(audit)
+    return StreamingResponse(
+        iter([data]),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Aegis-Root-Hash": manifest["root_hash"],
+            "X-Aegis-Export-Id": str(export.id),
+        },
     )

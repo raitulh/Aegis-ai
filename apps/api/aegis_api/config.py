@@ -154,6 +154,8 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_use_tls: bool = True
     email_from: str = "Aegis AI <no-reply@aegis.local>"
+    # Where website contact / sales requests are emailed (requests are always stored).
+    sales_inbox: str | None = None
 
     # --- demo --------------------------------------------------------------------------------
     demo_enabled: bool = True

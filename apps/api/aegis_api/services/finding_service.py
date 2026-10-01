@@ -237,6 +237,7 @@ def create_from_group(
         details=details,
         evidence_unavailable_reason=None if evidence_ids else "No evidence artifact was produced for this result type.",
         is_demo=audit.is_demo,
+        sla_due_at=sla_due(severity),
     )
     session.add(finding)
     session.flush()
@@ -321,6 +322,35 @@ class ConfidenceMap:
         return round(sum(vals) / len(vals), 3) if vals else 0.7
 
 
+# --- lifecycle ---------------------------------------------------------------------------------------
+# open → triaged → in_remediation → fixed → retesting → resolved, with accepted_risk / false_positive as
+# explicit, audited exits. Every change is validated here; arbitrary status mutation is impossible.
+TRANSITIONS: dict[str, set[str]] = {
+    "open": {"triaged", "acknowledged", "in_remediation", "resolved", "accepted_risk", "false_positive"},
+    "acknowledged": {"triaged", "in_remediation", "resolved", "accepted_risk", "false_positive", "open"},
+    "triaged": {"in_remediation", "resolved", "accepted_risk", "false_positive", "open"},
+    "in_remediation": {"fixed", "triaged", "resolved", "accepted_risk", "open"},
+    "fixed": {"retesting", "resolved", "in_remediation", "open"},
+    "retesting": {"resolved", "in_remediation", "open"},
+    "resolved": {"open"},
+    "accepted_risk": {"open"},
+    "false_positive": {"open"},
+}
+SLA_DAYS = {"critical": 7, "high": 30, "medium": 90, "low": 180, "info": 365}
+MAX_RISK_ACCEPTANCE_DAYS = 365
+PRIORITIES = {"p1", "p2", "p3", "p4"}
+
+
+def sla_due(severity: str, created: Any = None) -> Any:
+    from datetime import timedelta
+
+    return (created or utcnow()) + timedelta(days=SLA_DAYS.get(severity, 90))
+
+
+def allowed_transitions(status: str) -> list[str]:
+    return sorted(TRANSITIONS.get(status, set()))
+
+
 def transition(
     session: Session,
     finding: Finding,
@@ -331,28 +361,103 @@ def transition(
     assignee_id: uuid.UUID | None = None,
     due_date: Any = None,
     request_id: str | None = None,
+    tags: list[str] | None = None,
+    priority: str | None = None,
+    risk_acceptance: dict[str, Any] | None = None,
 ) -> Finding:
-    before = {"status": finding.status, "assignee_id": str(finding.assignee_id) if finding.assignee_id else None}
+    from datetime import UTC, datetime, timedelta
+
+    from aegis_api.errors import Conflict, ValidationFailed
+
+    before = {
+        "status": finding.status,
+        "assignee_id": str(finding.assignee_id) if finding.assignee_id else None,
+        "priority": finding.priority,
+        "tags": list(finding.tags or []),
+    }
     if status and status != finding.status:
+        if status not in TRANSITIONS.get(finding.status, set()):
+            raise Conflict(
+                f"Cannot move a finding from '{finding.status}' to '{status}'",
+                code="invalid_transition",
+                details={"from": finding.status, "allowed": allowed_transitions(finding.status)},
+            )
+        if status == FindingStatus.ACCEPTED_RISK:
+            principal.require("findings:accept_risk")
+            ra = risk_acceptance or {}
+            reason = (ra.get("reason") or note or "").strip()
+            expires = ra.get("expires_at")
+            if len(reason) < 10:
+                raise ValidationFailed("Risk acceptance requires a justification of at least 10 characters")
+            if expires is None:
+                raise ValidationFailed("Risk acceptance requires an expiry date")
+            if isinstance(expires, str):
+                expires = datetime.fromisoformat(expires)
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=UTC)
+            if expires <= utcnow() or expires > utcnow() + timedelta(days=MAX_RISK_ACCEPTANCE_DAYS):
+                raise ValidationFailed(f"Risk acceptance must expire within {MAX_RISK_ACCEPTANCE_DAYS} days")
+            finding.risk_acceptance = {
+                "reason": reason,
+                "owner_id": str(ra.get("owner_id") or principal.user_id),
+                "approved_by": principal.actor_label,
+                "approved_at": utcnow().isoformat(),
+                "expires_at": expires.isoformat(),
+            }
+            finding.risk_accepted_until = expires
+        elif finding.status == FindingStatus.ACCEPTED_RISK:
+            finding.risk_accepted_until = None
         session.add(
             FindingEvent(
                 organization_id=finding.organization_id,
                 finding_id=finding.id,
                 type="status_changed",
-                actor_id=principal.user_id,
+                actor_id=principal.user_id if principal.auth_method != "api_key" else None,
                 actor_label=principal.actor_label,
                 from_status=finding.status,
                 to_status=status,
                 note=note,
+                data={"risk_acceptance": finding.risk_acceptance} if status == FindingStatus.ACCEPTED_RISK else {},
             )
         )
         finding.status = status
         if status == FindingStatus.RESOLVED:
             finding.resolved_at = utcnow()
+        elif status == "open":
+            finding.resolved_at = None
     if assignee_id is not None:
+        from aegis_api.models import Membership
+
+        member = session.scalar(
+            select(Membership.id).where(
+                Membership.organization_id == finding.organization_id,
+                Membership.user_id == assignee_id,
+                Membership.status == "active",
+            )
+        )
+        if member is None:
+            raise ValidationFailed("Assignee must be an active member of this workspace")
+        if finding.assignee_id != assignee_id:
+            session.add(
+                FindingEvent(
+                    organization_id=finding.organization_id,
+                    finding_id=finding.id,
+                    type="assigned",
+                    actor_label=principal.actor_label,
+                    note=note,
+                    data={"assignee_id": str(assignee_id)},
+                )
+            )
         finding.assignee_id = assignee_id
     if due_date is not None:
         finding.due_date = due_date
+    if tags is not None:
+        clean = sorted({t.strip().lower()[:40] for t in tags if t and t.strip()})[:20]
+        finding.tags = clean
+    if priority is not None:
+        if priority not in PRIORITIES:
+            raise ValidationFailed("priority must be one of p1, p2, p3, p4")
+        finding.priority = priority
     finding.updated_at = utcnow()
     audit_log.record(
         session,
@@ -363,9 +468,99 @@ def transition(
         principal=principal,
         request_id=request_id,
         before=before,
-        after={"status": finding.status},
+        after={"status": finding.status, "priority": finding.priority, "tags": list(finding.tags or [])},
     )
+    if status == FindingStatus.RESOLVED:
+        from aegis_api.services import webhook_service
+
+        webhook_service.enqueue_event(
+            session,
+            finding.organization_id,
+            "finding.resolved",
+            {"finding_id": str(finding.id), "number": finding.number},
+        )
     return finding
+
+
+def add_comment(session: Session, principal: Principal, finding: Finding, body: str) -> Any:
+    from aegis_api.errors import ValidationFailed
+    from aegis_api.models import FindingComment
+
+    text_body = (body or "").strip()
+    if not text_body or len(text_body) > 10_000:
+        raise ValidationFailed("Comment must be between 1 and 10,000 characters")
+    comment = FindingComment(
+        organization_id=finding.organization_id,
+        finding_id=finding.id,
+        author_id=principal.user_id if principal.auth_method != "api_key" else None,
+        author_label=principal.actor_label,
+        body=text_body,
+    )
+    session.add(comment)
+    session.add(
+        FindingEvent(
+            organization_id=finding.organization_id,
+            finding_id=finding.id,
+            type="commented",
+            actor_label=principal.actor_label,
+            note=text_body[:200],
+        )
+    )
+    session.flush()
+    return comment
+
+
+def bulk_update(
+    session: Session, principal: Principal, ids: list[uuid.UUID], changes: dict[str, Any]
+) -> dict[str, Any]:
+    """Apply the same change to many findings. Each item is validated independently; failures are reported
+    per item and never partially applied to that item."""
+    from aegis_api.errors import AppError
+
+    updated: list[str] = []
+    failed: list[dict[str, str]] = []
+    for finding_id in ids[:500]:
+        finding = session.get(Finding, finding_id)
+        if finding is None or finding.organization_id != principal.organization_id:
+            failed.append({"id": str(finding_id), "error": "not_found"})
+            continue
+        try:
+            with session.begin_nested():
+                transition(session, finding, principal=principal, request_id=principal.request_id, **changes)
+            updated.append(str(finding_id))
+        except AppError as exc:
+            failed.append({"id": str(finding_id), "error": exc.code, "message": exc.message})
+    return {"updated": updated, "failed": failed}
+
+
+def expire_risk_acceptances() -> int:
+    """Maintenance: re-open findings whose risk acceptance has expired (history is preserved)."""
+    from aegis_api.db.session import admin_session_scope
+
+    count = 0
+    with admin_session_scope() as s:
+        expired = s.scalars(
+            select(Finding)
+            .where(Finding.status == FindingStatus.ACCEPTED_RISK, Finding.risk_accepted_until < utcnow())
+            .limit(500)
+        ).all()
+        for finding in expired:
+            s.add(
+                FindingEvent(
+                    organization_id=finding.organization_id,
+                    finding_id=finding.id,
+                    type="risk_acceptance_expired",
+                    from_status=finding.status,
+                    to_status="open",
+                    note="Risk acceptance expired; finding re-opened",
+                    data={"risk_acceptance": finding.risk_acceptance},
+                )
+            )
+            finding.status = FindingStatus.OPEN
+            finding.risk_accepted_until = None
+            finding.updated_at = utcnow()
+            count += 1
+    return count
 
 
 def notify_audit_complete(

@@ -262,6 +262,85 @@ class ProgressChannel:
             )
 
 
+class InlineChannel(ProgressChannel):
+    """Progress written through the caller's own session, for synchronous runs inside a larger transaction
+    (demo seeding, CLI). Used only where no concurrent worker or SSE reader needs the intermediate state."""
+
+    def __init__(self, session: Session, audit: Audit, lease_owner: str) -> None:
+        self.org_id = audit.organization_id
+        self.audit_id = audit.id
+        self.lease_owner = lease_owner
+        self.progress = 0
+        self._own = session
+        self._audit = audit
+        self.seq = int(
+            session.scalar(select(func.coalesce(func.max(AuditEvent.seq), 0)).where(AuditEvent.audit_id == audit.id))
+            or 0
+        )
+
+    @contextmanager
+    def _session(self) -> Iterator[Session]:
+        yield self._own
+        self._own.flush()
+
+    def emit(
+        self,
+        type_: str,
+        message: str,
+        *,
+        stage: str | None = None,
+        level: str = "info",
+        data: dict[str, Any] | None = None,
+        progress: int | None = None,
+        fields: dict[str, Any] | None = None,
+    ) -> None:
+        if progress is not None:
+            self.progress = max(self.progress, min(progress, 100))
+        self.seq += 1
+        self._own.add(
+            AuditEvent(
+                organization_id=self.org_id,
+                audit_id=self.audit_id,
+                seq=self.seq,
+                type=type_,
+                stage=stage,
+                level=level,
+                message=message,
+                progress=self.progress,
+                data=data or {},
+            )
+        )
+        self._audit.progress = self.progress
+        if stage:
+            self._audit.stage = stage
+        for key, value in (fields or {}).items():
+            setattr(self._audit, key, value)
+        self._own.flush()
+
+    def append_terminal(self, type_: str, message: str, *, level: str, data: dict[str, Any] | None = None) -> None:
+        self.emit(type_, message, level=level, data=data)
+
+    def cancel_requested(self) -> bool:
+        return False
+
+    def fail(self, run_id: uuid.UUID | None, code: str, message: str) -> None:
+        self._audit.status = AuditStatus.FAILED
+        self._audit.error_code = code
+        self._audit.error_message = message[:2000]
+        self._audit.completed_at = utcnow()
+        self.finish_run(run_id, RunStatus.FAILED, message[:2000])
+        self.emit("audit.failed", f"Audit failed: {message}", level="error", data={"code": code})
+
+    def finish_run(self, run_id: uuid.UUID | None, status: str, error: str | None = None) -> None:
+        if run_id is None:
+            return
+        run = self._own.get(AuditRun, run_id)
+        if run is not None:
+            run.status = status
+            run.finished_at = utcnow()
+            run.error = error
+
+
 def _publish(organization_id: uuid.UUID, audit_id: uuid.UUID, seq: int) -> None:
     try:
         from aegis_api.realtime import publish_audit_event
@@ -318,8 +397,9 @@ def claim_audit(organization_id: uuid.UUID, audit_id: uuid.UUID, worker: str) ->
 
 
 class AuditRunner:
-    def __init__(self, session: Session, audit: Audit, *, worker: str | None = None) -> None:
+    def __init__(self, session: Session, audit: Audit, *, worker: str | None = None, inline: bool = False) -> None:
         self.session = session
+        self.inline = inline
         self.audit = audit
         self.audit_id = audit.id
         self.org_id = audit.organization_id
@@ -370,15 +450,40 @@ class AuditRunner:
             )
 
     # -- main -----------------------------------------------------------------------------------
-    def run(self) -> Audit:
-        claim = claim_audit(self.org_id, self.audit_id, self.worker)
-        if claim is None:
-            log.info("audit_claim_skipped", audit_id=str(self.audit_id), status=self.audit.status)
-            return self.audit
-        attempt, self.run_id = claim
-        self.session.refresh(self.audit)
+    def _claim_inline(self) -> tuple[int, uuid.UUID]:
         audit = self.audit
-        self.channel = ProgressChannel(self.org_id, self.audit_id, self.worker)
+        now = utcnow()
+        audit.status = AuditStatus.RUNNING
+        audit.started_at = audit.started_at or now
+        audit.lease_owner = self.worker
+        audit.heartbeat_at = now
+        audit.attempts = (audit.attempts or 0) + 1
+        audit.stage = AuditStage.SETUP
+        run = AuditRun(
+            organization_id=self.org_id,
+            audit_id=audit.id,
+            attempt=audit.attempts,
+            worker=self.worker,
+            status=RunStatus.RUNNING,
+            started_at=now,
+        )
+        self.session.add(run)
+        self.session.flush()
+        return audit.attempts, run.id
+
+    def run(self) -> Audit:
+        if self.inline:
+            attempt, self.run_id = self._claim_inline()
+            self.channel = InlineChannel(self.session, self.audit, self.worker)
+        else:
+            claim = claim_audit(self.org_id, self.audit_id, self.worker)
+            if claim is None:
+                log.info("audit_claim_skipped", audit_id=str(self.audit_id), status=self.audit.status)
+                return self.audit
+            attempt, self.run_id = claim
+            self.session.refresh(self.audit)
+            self.channel = ProgressChannel(self.org_id, self.audit_id, self.worker)
+        audit = self.audit
         self.emit(
             "audit.started",
             f"Audit '{audit.name}' started" + (f" (attempt {attempt})" if attempt > 1 else ""),
@@ -443,6 +548,11 @@ class AuditRunner:
         self.session.expire_all()
         refreshed = self.session.get(Audit, self.audit_id)
         return refreshed or audit
+
+    def _discard(self) -> None:
+        """Throw away this attempt's results. Inline runs share the caller's transaction, which must survive."""
+        if not self.inline:
+            self.session.rollback()
 
     # -- stages ---------------------------------------------------------------------------------
     def _generate(
@@ -939,8 +1049,23 @@ class AuditRunner:
             policy_version_ids=self.audit.policy_version_ids,
             config=self.audit.config,
             started_at=self.audit.started_at,
+            created_at=self.audit.created_at,
             **values,
         )
+        if (self.audit.config or {}).get("assurance"):
+            from aegis_api.services import assurance_service
+
+            regression = assurance_service.regression_report(self.session, view)  # type: ignore[arg-type]
+            summary["regression"] = regression
+            if regression["regression"]:
+                from aegis_api.services import webhook_service
+
+                webhook_service.enqueue_event(
+                    self.session,
+                    self.org_id,
+                    "regression.detected",
+                    {"audit_id": str(self.audit_id), "system_id": str(self.audit.system_id), **regression},
+                )
         risk_service.write_snapshot(self.session, view, scores, findings)  # type: ignore[arg-type]
         report_service.generate_report(self.session, view, rows, findings, matrix, scores)  # type: ignore[arg-type]
         finding_service.notify_audit_complete(self.session, view, findings, new_findings=new_findings)
@@ -976,7 +1101,11 @@ class AuditRunner:
                 .where(AuditRun.id == self.run_id)
                 .values(status=RunStatus.COMPLETED, finished_at=completed_at)
             )
-        self.session.commit()
+        if self.inline:
+            self.session.flush()
+            self.session.refresh(self.audit)
+        else:
+            self.session.commit()
         level = "warning" if final_status == AuditStatus.PARTIALLY_COMPLETED else "success"
         self.channel.append_terminal(
             "audit.completed",
@@ -1043,9 +1172,20 @@ def _dimension_counts(findings: list[Finding]) -> dict[str, int]:
 
 
 def run_audit(session: Session, audit_id: uuid.UUID) -> Audit:
+    """Worker entrypoint: claim and execute a queued audit (no-op for duplicates or finished audits)."""
     audit = session.get(Audit, audit_id)
     if audit is None:
         raise ValueError(f"Audit {audit_id} not found")
     if audit.status in TERMINAL_AUDIT_STATUSES:
         return audit
     return AuditRunner(session, audit).run()
+
+
+def run_audit_inline(session: Session, audit_id: uuid.UUID) -> Audit:
+    """Execute an audit synchronously inside the caller's transaction (demo seeding, CLI tools)."""
+    audit = session.get(Audit, audit_id)
+    if audit is None:
+        raise ValueError(f"Audit {audit_id} not found")
+    if audit.status in TERMINAL_AUDIT_STATUSES:
+        return audit
+    return AuditRunner(session, audit, inline=True).run()

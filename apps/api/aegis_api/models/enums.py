@@ -170,14 +170,24 @@ class Severity(StrEnum):
 
 class FindingStatus(StrEnum):
     OPEN = "open"
-    ACKNOWLEDGED = "acknowledged"
+    ACKNOWLEDGED = "acknowledged"  # legacy synonym of "triaged" (kept for backward compatibility)
+    TRIAGED = "triaged"
     IN_REMEDIATION = "in_remediation"
+    FIXED = "fixed"
+    RETESTING = "retesting"
     RESOLVED = "resolved"
     ACCEPTED_RISK = "accepted_risk"
     FALSE_POSITIVE = "false_positive"
 
 
-OPEN_FINDING_STATUSES = {FindingStatus.OPEN, FindingStatus.ACKNOWLEDGED, FindingStatus.IN_REMEDIATION}
+OPEN_FINDING_STATUSES = {
+    FindingStatus.OPEN,
+    FindingStatus.ACKNOWLEDGED,
+    FindingStatus.TRIAGED,
+    FindingStatus.IN_REMEDIATION,
+    FindingStatus.FIXED,
+    FindingStatus.RETESTING,
+}
 
 
 class EvidenceKind(StrEnum):
