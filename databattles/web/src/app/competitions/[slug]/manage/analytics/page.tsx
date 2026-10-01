@@ -1,14 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Eye, ShieldCheck, Upload, Users, UsersRound } from "lucide-react";
+import { BarChart3, Eye, Filter, GraduationCap, ListChecks, ShieldCheck, Sigma, TriangleAlert, Upload, UserPlus, Users, UsersRound } from "lucide-react";
 import { useParams } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { BarChart, HBarList, Histogram, LineChart } from "@/components/charts/charts";
 import { ManageHeading } from "@/components/organizer/shared";
-import { Card, CardBody, CardHeader, Stat } from "@/components/ui/card";
-import { EmptyState, QueryState, SkeletonCards } from "@/components/ui/states";
+import { InlineEmpty, Panel, Tile, TileGrid } from "@/components/organizer/ui";
+import { EmptyState, QueryState, SkeletonCards, SkeletonStats } from "@/components/ui/states";
 import { get } from "@/lib/api";
 import { formatDate, formatNumber, titleCase } from "@/lib/format";
 
@@ -42,12 +42,15 @@ function fillDays(rows: { day: string; count: number }[]): { day: string; count:
 const dayLabel = (d: string | number) => formatDate(`${d}T00:00:00Z`, { month: "short", day: "numeric", timeZone: "UTC" });
 const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : "—");
 
-function ChartCard({ title, description, children, empty }: { title: string; description?: string; children: ReactNode; empty?: boolean }) {
+function ChartCard({ title, description, children, empty, emptyHint, icon }: { title: string; description?: string; children: ReactNode; empty?: boolean; emptyHint?: string; icon?: ReactNode }) {
   return (
-    <Card>
-      <CardHeader title={title} description={description} />
-      <CardBody>{empty ? <p className="py-8 text-center text-sm text-subtle">No data yet.</p> : children}</CardBody>
-    </Card>
+    <Panel title={title} description={description} icon={icon} className="min-w-0">
+      {empty ? (
+        <InlineEmpty icon={<BarChart3 />} title="No data yet" description={emptyHint ?? "This chart fills in as people take part."} />
+      ) : (
+        children
+      )}
+    </Panel>
   );
 }
 
@@ -61,8 +64,21 @@ export default function ManageAnalyticsPage() {
 
   return (
     <div>
-      <ManageHeading title="Analytics" description="Aggregate engagement and submission health. Individual participants are never identifiable here." />
-      <QueryState query={query} loading={<SkeletonCards count={6} />}>
+      <ManageHeading
+        eyebrow="Outcomes"
+        icon={<BarChart3 />}
+        title="Analytics"
+        description="Aggregate engagement and submission health. Individual participants are never identifiable here."
+      />
+      <QueryState
+        query={query}
+        loading={
+          <div className="space-y-6" role="status" aria-label="Loading analytics">
+            <SkeletonStats count={5} className="lg:grid-cols-5" />
+            <SkeletonCards count={4} media={false} className="lg:grid-cols-2" />
+          </div>
+        }
+      >
         {(a) => {
           const f = a.funnel;
           const joins = fillDays(a.joins_by_day);
@@ -72,48 +88,46 @@ export default function ManageAnalyticsPage() {
           if (f.views === 0 && f.participants === 0 && totalSubs === 0) {
             return (
               <EmptyState
-                icon={<BarChart3 className="h-5 w-5" />}
+                icon={<BarChart3 />}
                 title="No activity yet"
                 description="Views, joins and submissions will show up here once the competition is published and people start taking part."
               />
             );
           }
+          const funnel = [
+            { label: "Viewed the page", value: f.views },
+            { label: "Joined", value: f.participants },
+            { label: "Submitted (members)", value: f.members_who_submitted },
+            { label: "Teams with a scored entry", value: f.teams_with_scored_submission },
+          ];
           return (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-                <Stat label="Page views" value={formatNumber(f.views)} icon={<Eye className="h-4 w-4" />} />
-                <Stat label="Participants" value={formatNumber(f.participants)} hint={`${pct(f.participants, f.views)} of views`} icon={<Users className="h-4 w-4" />} />
-                <Stat label="Members who submitted" value={formatNumber(f.members_who_submitted)} hint={`${pct(f.members_who_submitted, f.participants)} of participants`} icon={<Upload className="h-4 w-4" />} />
-                <Stat label="Teams" value={formatNumber(f.teams)} icon={<UsersRound className="h-4 w-4" />} />
-                <Stat label="Teams with a scored entry" value={formatNumber(f.teams_with_scored_submission)} hint={`${pct(f.teams_with_scored_submission, f.teams)} of teams`} icon={<ShieldCheck className="h-4 w-4" />} />
-              </div>
+              <TileGrid cols={5} className="animate-rise [animation-delay:40ms]">
+                <Tile label="Page views" value={formatNumber(f.views)} icon={<Eye />} accent="info" />
+                <Tile label="Participants" value={formatNumber(f.participants)} hint={`${pct(f.participants, f.views)} of views`} icon={<Users />} accent="cyan" />
+                <Tile label="Members who submitted" value={formatNumber(f.members_who_submitted)} hint={`${pct(f.members_who_submitted, f.participants)} of participants`} icon={<Upload />} />
+                <Tile label="Teams" value={formatNumber(f.teams)} icon={<UsersRound />} accent="info" />
+                <Tile label="Teams with a scored entry" value={formatNumber(f.teams_with_scored_submission)} hint={`${pct(f.teams_with_scored_submission, f.teams)} of teams`} icon={<ShieldCheck />} accent="success" />
+              </TileGrid>
 
-              <ChartCard title="Participation funnel" description="From page view to a scored submission.">
-                <HBarList
-                  label="Participation funnel"
-                  data={[
-                    { label: "Viewed the page", value: f.views },
-                    { label: "Joined", value: f.participants },
-                    { label: "Submitted (members)", value: f.members_who_submitted },
-                    { label: "Teams with a scored entry", value: f.teams_with_scored_submission },
-                  ]}
-                />
+              <ChartCard title="Participation funnel" description="From page view to a scored submission." icon={<Filter />}>
+                <HBarList label="Participation funnel" data={funnel} />
               </ChartCard>
 
               <div className="grid gap-6 lg:grid-cols-2">
-                <ChartCard title="Joins per day" description="Dates in UTC." empty={joins.length === 0}>
+                <ChartCard title="Joins per day" description="Dates in UTC." empty={joins.length === 0} icon={<UserPlus />} emptyHint="New participants appear here day by day.">
                   <LineChart label="New participants per day" data={joins.map((d) => ({ x: d.day, y: d.count }))} xFormat={dayLabel} yFormat={(v) => formatNumber(v)} />
                 </ChartCard>
-                <ChartCard title="Submissions per day" description="Dates in UTC." empty={subs.length === 0}>
+                <ChartCard title="Submissions per day" description="Dates in UTC." empty={subs.length === 0} icon={<Upload />} emptyHint="Daily submission volume appears once teams upload.">
                   <BarChart label="Submissions per day" data={subs.map((d) => ({ label: dayLabel(d.day), value: d.count }))} />
                 </ChartCard>
               </div>
 
               <div className="grid gap-6 lg:grid-cols-2">
-                <ChartCard title="Submission outcomes" description={`${formatNumber(totalSubs)} submissions in total.`} empty={statuses.length === 0}>
+                <ChartCard title="Submission outcomes" description={`${formatNumber(totalSubs)} submissions in total.`} empty={statuses.length === 0} icon={<ListChecks />} emptyHint="Scored, failed and rejected counts appear after the first upload.">
                   <HBarList label="Submissions by status" data={statuses.map(([k, v]) => ({ label: titleCase(k), value: v }))} valueFormat={(v) => `${formatNumber(v)} (${pct(v, totalSubs)})`} />
                 </ChartCard>
-                <ChartCard title="Most common errors" description="Validation and scoring failures by error code." empty={a.top_errors.length === 0}>
+                <ChartCard title="Most common errors" description="Validation and scoring failures by error code." empty={a.top_errors.length === 0} icon={<TriangleAlert />} emptyHint="No validation or scoring failures so far.">
                   <HBarList label="Top submission errors" data={a.top_errors.map((e) => ({ label: e.code, value: e.count }))} />
                 </ChartCard>
               </div>
@@ -123,20 +137,22 @@ export default function ManageAnalyticsPage() {
                   title="Best public score per team"
                   description={`${a.competition.metric ?? "Score"} — ${a.competition.direction === "maximize" ? "higher is better" : "lower is better"}. Public split only; private scores are never included.`}
                   empty={a.score_histogram.length === 0}
+                  icon={<Sigma />}
+                  emptyHint="The distribution appears once teams have scored submissions."
                 >
                   <Histogram label="Distribution of each team's best public score" bins={a.score_histogram} />
                 </ChartCard>
-                <ChartCard title="Team sizes" empty={a.team_sizes.length === 0}>
+                <ChartCard title="Team sizes" empty={a.team_sizes.length === 0} icon={<UsersRound />} emptyHint="Team sizes appear once teams form.">
                   <BarChart label="Teams by number of members" data={a.team_sizes.map((t) => ({ label: `${t.size} member${t.size === 1 ? "" : "s"}`, value: t.teams }))} />
                 </ChartCard>
               </div>
 
-              <ChartCard title="Universities" description="Participants by self-reported or verified university." empty={a.universities.length === 0}>
+              <ChartCard title="Universities" description="Participants by self-reported or verified university." empty={a.universities.length === 0} icon={<GraduationCap />} emptyHint="Universities appear when participants add one to their profile.">
                 <HBarList label="Participants by university" data={a.universities.map((u) => ({ label: u.name, value: u.participants }))} />
               </ChartCard>
 
-              <p className="flex items-center gap-2 text-xs text-subtle">
-                <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> {a.privacy_note}
+              <p className="flex items-start gap-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated/50 px-3 py-2.5 text-xs text-subtle">
+                <ShieldCheck className="mt-px h-3.5 w-3.5 shrink-0 text-success" aria-hidden /> {a.privacy_note}
               </p>
             </div>
           );

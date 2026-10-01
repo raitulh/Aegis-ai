@@ -1,7 +1,27 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, CalendarPlus, ExternalLink, Gavel, Lock, Plus, Save, ShieldAlert, Trash2, UserPlus } from "lucide-react";
+import {
+  Activity,
+  ArrowDown,
+  ArrowUp,
+  CalendarPlus,
+  CheckCheck,
+  ExternalLink,
+  EyeOff,
+  FolderGit2,
+  Gavel,
+  ListOrdered,
+  Lock,
+  Plus,
+  Presentation,
+  Save,
+  ShieldAlert,
+  Trash2,
+  Trophy,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -18,19 +38,20 @@ import {
   type RubricOut,
 } from "@/components/organizer/judging";
 import { DownloadLink, ManageHeading, TeamPicker, ZonedDateTimeField, fieldError, manageKey, useCompetitionDetail, useManage, useTeams } from "@/components/organizer/shared";
+import { InlineEmpty, ListSurface, Panel, SectionHeader, SubHeading, Tile, TileGrid } from "@/components/organizer/ui";
 import { UserLink } from "@/components/domain/cards";
 import { Badge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input, Select, Switch, Textarea } from "@/components/ui/form";
 import { Prose } from "@/components/ui/markdown";
+import { RankBadge } from "@/components/ui/extras";
 import { ProgressBar } from "@/components/ui/misc";
 import { EmptyState, ErrorState, InlineNotice, QueryState, SkeletonRows } from "@/components/ui/states";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { ApiError, del, get, post, put } from "@/lib/api";
-import { formatDateTime, formatScore, relativeTime } from "@/lib/format";
+import { formatDateTime, formatNumber, formatScore, relativeTime } from "@/lib/format";
 import { useApiMutation, useUnsavedChangesWarning } from "@/lib/hooks";
 import type { Message } from "@/lib/types";
 
@@ -140,29 +161,35 @@ function RubricEditor({ slug, rubric }: { slug: string; rubric: RubricOut }) {
       ) : rubric.locked ? (
         <InlineNotice tone="warning" title="Criteria locked">Judges have submitted scores, so criteria can't change. You can still adjust visibility settings.</InlineNotice>
       ) : null}
-      <Card>
-        <CardHeader
-          title="Criteria"
-          description={`Version ${rubric.version}. Each criterion is normalized to its range and weighted; totals are on a 0–100 scale.`}
-          action={
-            !criteriaLocked ? (
-              <Button size="sm" variant="secondary" icon={<Plus className="h-4 w-4" />} disabled={rows.length >= 12} onClick={() => setRows((rs) => [...rs, { key: "", label: "", description: "", min: "0", max: "10", weight: "1", allow_decimal: false }])}>
-                Add criterion
-              </Button>
-            ) : null
-          }
-        />
-        <CardBody className="space-y-3">
+      <Panel
+        icon={<ListOrdered />}
+        title="Criteria"
+        description={`Version ${rubric.version}. Each criterion is normalized to its range and weighted; totals are on a 0–100 scale.`}
+        action={
+          !criteriaLocked ? (
+            <Button size="sm" variant="secondary" icon={<Plus className="h-4 w-4" />} disabled={rows.length >= 12} onClick={() => setRows((rs) => [...rs, { key: "", label: "", description: "", min: "0", max: "10", weight: "1", allow_decimal: false }])}>
+              Add criterion
+            </Button>
+          ) : null
+        }
+      >
+        <div className="space-y-3">
           {errors.criteria && !criteriaLocked ? <FormError message={errors.criteria} /> : null}
           <ol className="space-y-3">
             {rows.map((r, i) => (
-              <li key={i} className="rounded-[var(--radius-md)] border border-border p-3">
+              <li key={i} className="rounded-[var(--radius-md)] border border-border bg-bg-elevated/50 p-3.5">
                 <fieldset disabled={criteriaLocked} className="grid gap-3">
                   <legend className="sr-only">Criterion {i + 1}</legend>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-subtle">
-                      Criterion {i + 1} · {totalWeight > 0 && Number(r.weight) > 0 ? `${Math.round((Number(r.weight) / totalWeight) * 100)}% of total` : "—"}
-                    </span>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="tabular flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-surface-2 font-mono text-[11px] text-muted" aria-hidden>{i + 1}</span>
+                      <span className="text-xs font-medium text-subtle">
+                        Criterion {i + 1} · <span className="tabular">{totalWeight > 0 && Number(r.weight) > 0 ? `${Math.round((Number(r.weight) / totalWeight) * 100)}% of total` : "—"}</span>
+                      </span>
+                      <span className="hidden h-1 max-w-32 flex-1 overflow-hidden rounded-full bg-surface-3 sm:block" aria-hidden>
+                        <span className="block h-full rounded-full bg-brand" style={{ width: `${totalWeight > 0 && Number(r.weight) > 0 ? Math.round((Number(r.weight) / totalWeight) * 100) : 0}%` }} />
+                      </span>
+                    </div>
                     {!criteriaLocked ? (
                       <div className="flex gap-1">
                         <Button size="icon" variant="ghost" aria-label={`Move criterion ${i + 1} up`} disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp className="h-4 w-4" /></Button>
@@ -200,18 +227,18 @@ function RubricEditor({ slug, rubric }: { slug: string; rubric: RubricOut }) {
               </li>
             ))}
           </ol>
-        </CardBody>
-      </Card>
-      <Card>
-        <CardHeader title="Judging visibility" />
-        <CardBody className="space-y-4">
+        </div>
+      </Panel>
+      <Panel icon={<EyeOff />} title="Judging visibility">
+        <div className="space-y-4">
           <Switch checked={blind} disabled={rubric.finalized} onChange={setBlind} label="Blind judging" description="Judges see anonymous entry labels instead of team names." />
           <Switch checked={reveal} disabled={rubric.finalized} onChange={setReveal} label="Let judges see each other's totals" description="Judges can view aggregate score progress. Individual criterion scores and feedback stay organizer-only." />
-        </CardBody>
-      </Card>
+        </div>
+      </Panel>
       {serverError ? <FormError message={fieldError(serverError.fields, "criteria") ?? serverError.message} /> : null}
       {!rubric.finalized ? (
-        <div className="flex justify-end gap-2">
+        <div className="sticky bottom-0 z-20 -mx-4 flex items-center gap-2 border-t border-border bg-[var(--glass-strong)] px-4 py-3 backdrop-blur-xl sm:mx-0 sm:rounded-[var(--radius-lg)] sm:border">
+          <p className="mr-auto min-w-0 text-xs text-subtle" aria-live="polite">{dirty ? (invalid ? "Fix the highlighted fields to save." : "Unsaved rubric changes.") : "No unsaved changes."}</p>
           <Button variant="ghost" disabled={!dirty} onClick={() => { setRows(initial); setReveal(rubric.reveal_scores_to_judges); setBlind(rubric.blind_judging); }}>Discard</Button>
           <Button icon={<Save className="h-4 w-4" />} loading={save.isPending} disabled={!dirty || invalid} onClick={() => save.mutate(undefined)}>Save rubric</Button>
         </div>
@@ -275,12 +302,11 @@ function JudgesTab({ slug, overview, judges, teamName, finalized }: {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader title="Assignments" description="Assign a judge to every entry or to specific teams. Adding someone here also makes them a judge." />
-        <CardBody className="space-y-5">
+      <Panel icon={<UserPlus />} title="Assignments" description="Assign a judge to every entry or to specific teams. Adding someone here also makes them a judge.">
+        <div className="space-y-5">
           {!finalized ? (
             <form
-              className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3"
+              className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated/40 p-3.5"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (handle.trim()) assign.mutate(undefined);
@@ -304,7 +330,7 @@ function JudgesTab({ slug, overview, judges, teamName, finalized }: {
             </form>
           ) : null}
           {overview.assignments.length === 0 ? (
-            <EmptyState icon={<Gavel className="h-5 w-5" />} title="No assignments yet" description="Judges only see entries assigned to them." className="py-8" />
+            <InlineEmpty icon={<Gavel />} title="No assignments yet" description="Judges only see entries assigned to them." />
           ) : (
             <Table>
               <THead>
@@ -312,7 +338,7 @@ function JudgesTab({ slug, overview, judges, teamName, finalized }: {
                   <TH>Judge</TH>
                   <TH>Entries</TH>
                   <TH>Panel</TH>
-                  <TH><span className="sr-only">Actions</span></TH>
+                  <TH className="relative"><span className="sr-only">Actions</span></TH>
                 </tr>
               </THead>
               <TBody>
@@ -342,16 +368,15 @@ function JudgesTab({ slug, overview, judges, teamName, finalized }: {
               Judges without assignments: {unassigned.map((j) => `@${j.handle}`).join(", ")} — they won't see any entries yet.
             </p>
           ) : null}
-        </CardBody>
-      </Card>
+        </div>
+      </Panel>
 
-      <Card>
-        <CardHeader title="Conflicts of interest" description="A conflicted judge never sees that team's entry; their scores for it are discarded or excluded from results." />
-        <CardBody className="space-y-5">
+      <Panel icon={<ShieldAlert />} title="Conflicts of interest" description="A conflicted judge never sees that team's entry; their scores for it are discarded or excluded from results.">
+        <div className="space-y-5">
           {overview.conflicts.length === 0 ? (
-            <p className="text-sm text-subtle">No conflicts recorded.</p>
+            <p className="rounded-[var(--radius-md)] border border-dashed border-border-strong px-3 py-3 text-sm text-subtle">No conflicts recorded.</p>
           ) : (
-            <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+            <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-bg-elevated/50">
               {overview.conflicts.map((c, i) => (
                 <li key={`${c.judge_id}-${c.team_id}-${i}`} className="flex flex-col gap-1 px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <span className="flex items-center gap-2">
@@ -366,8 +391,8 @@ function JudgesTab({ slug, overview, judges, teamName, finalized }: {
             </ul>
           )}
           {!finalized && judges.length ? (
-            <div className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3">
-              <p className="text-sm font-medium text-fg">Record a conflict</p>
+            <div className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated/40 p-3.5">
+              <SubHeading>Record a conflict</SubHeading>
               <Field label="Judge">
                 {(p) => (
                   <Select {...p} value={cJudge} onChange={(e) => setCJudge(e.target.value)}>
@@ -392,8 +417,8 @@ function JudgesTab({ slug, overview, judges, teamName, finalized }: {
               </div>
             </div>
           ) : null}
-        </CardBody>
-      </Card>
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -428,124 +453,118 @@ function ScoresTab({ slug, overview, entriesCount, judges, finalizedResults }: {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader
-          title="Judge progress"
-          action={<DownloadLink path={`/competitions/${slug}/judging/scores.csv`}>Scores CSV</DownloadLink>}
-        />
-        <CardBody>
-          {progress.length === 0 ? (
-            <p className="text-sm text-subtle">No judges yet.</p>
-          ) : (
-            <ul className="space-y-3">
-              {progress.map((p) => (
-                <li key={p.judge.id} className="grid gap-1.5 sm:grid-cols-[16rem_1fr_8rem] sm:items-center">
-                  <UserLink user={p.judge} />
-                  <ProgressBar value={p.expected ? (p.submitted / p.expected) * 100 : 0} label={`${p.judge.display_name}: ${p.submitted} of ${p.expected} submitted`} />
-                  <span className="text-xs tabular-nums text-muted sm:text-right">
-                    {p.submitted}/{p.expected} submitted{p.drafts ? ` · ${p.drafts} draft` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
+      <Panel
+        icon={<Activity />}
+        title="Judge progress"
+        flush
+        action={<DownloadLink path={`/competitions/${slug}/judging/scores.csv`}>Scores CSV</DownloadLink>}
+      >
+        {progress.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-subtle">No judges yet.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {progress.map((p) => (
+              <li key={p.judge.id} className="grid gap-2 px-4 py-3 sm:grid-cols-[15rem_1fr_9rem] sm:items-center sm:gap-4 sm:px-5">
+                <UserLink user={p.judge} size={26} className="font-medium" />
+                <ProgressBar value={p.expected ? (p.submitted / p.expected) * 100 : 0} label={`${p.judge.display_name}: ${p.submitted} of ${p.expected} submitted`} />
+                <span className="tabular text-xs text-muted sm:text-right">
+                  <span className="font-medium text-fg">{p.submitted}</span>/{p.expected} submitted{p.drafts ? ` · ${p.drafts} draft` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
 
-      <Card>
-        <CardHeader title="Scores by entry" description="Draft scores don't count until the judge submits them." />
-        <CardBody>
-          {byTeam.length === 0 ? (
-            <EmptyState title="No scores yet" description="Scores appear as judges work through their queue." className="py-8" />
-          ) : (
-            <Table>
-              <THead>
-                <tr>
-                  <TH>Entry</TH>
-                  <TH>Judge</TH>
-                  <TH>Status</TH>
-                  <TH className="text-right">Total</TH>
-                  <TH>Criteria</TH>
-                </tr>
-              </THead>
-              <TBody>
-                {byTeam.flatMap(([teamId, rows]) =>
-                  rows.map((s, i) => (
-                    <TR key={`${teamId}-${s.judge?.id ?? i}`}>
-                      <TD className="font-medium">{i === 0 ? s.team_name : <span className="sr-only">{s.team_name}</span>}</TD>
-                      <TD><UserLink user={s.judge} size={20} /></TD>
-                      <TD>
-                        <Badge tone={s.status === "submitted" ? "success" : "neutral"}>{s.status === "submitted" ? "Submitted" : "Draft"}</Badge>
-                        {s.submitted_at ? <span className="block text-[11px] text-subtle" title={formatDateTime(s.submitted_at)}>{relativeTime(s.submitted_at)}</span> : null}
-                      </TD>
-                      <TD className="text-right font-mono text-xs tabular-nums">{formatScore(s.weighted_total, 2)}</TD>
-                      <TD className="text-xs text-muted">
-                        {s.scores ? criteria.map((c) => `${c.label}: ${s.scores?.[c.key] ?? "—"}`).join(" · ") : "—"}
-                        {s.feedback ? <p className="mt-1 line-clamp-2 italic">“{s.feedback}”</p> : null}
-                      </TD>
-                    </TR>
-                  )),
-                )}
-              </TBody>
-            </Table>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader title="Ranking preview" description="Average of submitted weighted totals per entry; ties broken by the first criterion, then submission time." />
-        <CardBody>
-          {overview.preview.length === 0 ? (
-            <p className="text-sm text-subtle">Nothing to rank yet.</p>
-          ) : (
-            <Table>
-              <THead>
-                <tr>
-                  <TH className="w-16">Rank</TH>
-                  <TH>Team</TH>
-                  <TH className="text-right">Average (0–100)</TH>
-                  <TH className="text-right">Judges</TH>
-                </tr>
-              </THead>
-              <TBody>
-                {overview.preview.map((r) => (
-                  <TR key={r.team_id}>
-                    <TD className="font-semibold tabular-nums">{r.rank}</TD>
-                    <TD>{r.team_name}</TD>
-                    <TD className="text-right font-mono text-xs tabular-nums">{formatScore(r.score, 2)}</TD>
-                    <TD className="text-right tabular-nums">{r.judge_count ?? "—"}</TD>
+      <section aria-labelledby="scores-by-entry">
+        <SectionHeader id="scores-by-entry" title="Scores by entry" description="Draft scores don't count until the judge submits them." />
+        {byTeam.length === 0 ? (
+          <InlineEmpty icon={<Gavel />} title="No scores yet" description="Scores appear as judges work through their queue." />
+        ) : (
+          <Table>
+            <THead>
+              <tr>
+                <TH>Entry</TH>
+                <TH>Judge</TH>
+                <TH>Status</TH>
+                <TH className="text-right">Total</TH>
+                <TH>Criteria</TH>
+              </tr>
+            </THead>
+            <TBody>
+              {byTeam.flatMap(([teamId, rows]) =>
+                rows.map((s, i) => (
+                  <TR key={`${teamId}-${s.judge?.id ?? i}`}>
+                    <TD className="relative font-medium">{i === 0 ? s.team_name : <span className="sr-only">{s.team_name}</span>}</TD>
+                    <TD><UserLink user={s.judge} size={20} /></TD>
+                    <TD>
+                      <Badge tone={s.status === "submitted" ? "success" : "neutral"}>{s.status === "submitted" ? "Submitted" : "Draft"}</Badge>
+                      {s.submitted_at ? <span className="block text-[11px] text-subtle" title={formatDateTime(s.submitted_at)}>{relativeTime(s.submitted_at)}</span> : null}
+                    </TD>
+                    <TD className="tabular text-right font-mono text-xs font-medium text-fg">{formatScore(s.weighted_total, 2)}</TD>
+                    <TD className="text-xs text-muted">
+                      {s.scores ? criteria.map((c) => `${c.label}: ${s.scores?.[c.key] ?? "—"}`).join(" · ") : "—"}
+                      {s.feedback ? <p className="mt-1 line-clamp-2 italic">“{s.feedback}”</p> : null}
+                    </TD>
                   </TR>
-                ))}
+                )),
+              )}
               </TBody>
             </Table>
           )}
-        </CardBody>
-      </Card>
+      </section>
 
-      <Card>
-        <CardHeader
-          title="Finalize judging"
-          description={overview.finalized ? "Judging is finalized — scores are locked." : "Locks all scores so judges can't change them. Then finalize the results to publish the ranking."}
-          action={
-            overview.finalized ? (
-              <Badge tone="success" icon={<Lock className="h-3 w-3" aria-hidden />}>Finalized</Badge>
-            ) : (
-              <ConfirmDialog
-                trigger={<Button variant="danger" icon={<Lock className="h-4 w-4" />} loading={finalize.isPending}>Finalize judging</Button>}
-                title="Finalize judging? This can't be undone."
-                description="All scores lock immediately. Unsubmitted drafts won't count. You can then finalize results on the Results page."
-                confirmLabel="Finalize judging"
-                onConfirm={() => finalize.mutateAsync(undefined).catch(() => undefined)}
-              />
-            )
-          }
-        />
+      <section aria-labelledby="judging-ranking">
+        <SectionHeader id="judging-ranking" title="Ranking preview" description="Average of submitted weighted totals per entry; ties broken by the first criterion, then submission time." />
+        {overview.preview.length === 0 ? (
+          <InlineEmpty icon={<Trophy />} title="Nothing to rank yet" description="The preview appears once judges submit scores." />
+        ) : (
+          <Table>
+            <THead>
+              <tr>
+                <TH className="w-16">Rank</TH>
+                <TH>Team</TH>
+                <TH className="text-right">Average (0–100)</TH>
+                <TH className="text-right">Judges</TH>
+              </tr>
+            </THead>
+            <TBody>
+              {overview.preview.map((r) => (
+                <TR key={r.team_id}>
+                  <TD className="py-2.5"><RankBadge rank={r.rank} size="sm" /></TD>
+                  <TD className="py-2.5 font-medium text-fg">{r.team_name}</TD>
+                  <TD className="tabular py-2.5 text-right font-mono text-xs font-medium text-fg">{formatScore(r.score, 2)}</TD>
+                  <TD className="tabular py-2.5 text-right">{r.judge_count ?? "—"}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        )}
+      </section>
+
+      <Panel
+        tone={overview.finalized ? "default" : "danger"}
+        icon={<Lock />}
+        title="Finalize judging"
+        description={overview.finalized ? "Judging is finalized — scores are locked." : "Locks all scores so judges can't change them. Then finalize the results to publish the ranking."}
+        action={
+          overview.finalized ? (
+            <Badge tone="success" icon={<Lock className="h-3 w-3" aria-hidden />}>Finalized</Badge>
+          ) : (
+            <ConfirmDialog
+              trigger={<Button variant="danger" icon={<Lock className="h-4 w-4" />} loading={finalize.isPending}>Finalize judging</Button>}
+              title="Finalize judging? This can't be undone."
+              description="All scores lock immediately. Unsubmitted drafts won't count. You can then finalize results on the Results page."
+              confirmLabel="Finalize judging"
+              onConfirm={() => finalize.mutateAsync(undefined).catch(() => undefined)}
+            />
+          )
+        }
+      >
         {overview.finalized && !finalizedResults ? (
-          <CardBody>
-            <LinkButton href={`/competitions/${slug}/manage/results`} size="sm" variant="secondary">Go to results</LinkButton>
-          </CardBody>
+          <LinkButton href={`/competitions/${slug}/manage/results`} size="sm" variant="secondary">Go to results</LinkButton>
         ) : null}
-      </Card>
+      </Panel>
     </div>
   );
 }
@@ -559,42 +578,38 @@ function EntriesTab({ slug }: { slug: string }) {
       query={q}
       loading={<SkeletonRows rows={4} />}
       isEmpty={(d) => d.length === 0}
-      empty={<EmptyState title="No project submissions yet" description="Teams submit a title, summary and links from the competition page while submissions are open." />}
+      empty={<EmptyState icon={<FolderGit2 />} title="No project submissions yet" description="Teams submit a title, summary and links from the competition page while submissions are open." />}
     >
       {(items) => (
-        <ul className="space-y-3">
+        <ListSurface>
           {items.map((s) => (
-            <li key={s.team_id}>
-              <Card>
-                <CardBody>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-xs text-subtle">{s.team_name}</p>
-                      <h3 className="font-semibold text-fg">{s.title}</h3>
-                      {s.summary ? <p className="mt-1 text-sm text-muted">{s.summary}</p> : null}
-                    </div>
-                    <span className="shrink-0 text-xs text-subtle" title={formatDateTime(s.updated_at)}>Updated {relativeTime(s.updated_at)}</span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-3 text-sm">
-                    {([["Repository", s.repo_url], ["Demo", s.demo_url], ["Video", s.video_url]] as const).map(([label, url]) =>
-                      url ? (
-                        <a key={label} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent-strong hover:underline">
-                          <ExternalLink className="h-3.5 w-3.5" aria-hidden /> {label}
-                        </a>
-                      ) : null,
-                    )}
-                  </div>
-                  {s.description_html ? (
-                    <details className="mt-3">
-                      <summary className="cursor-pointer text-sm text-muted hover:text-fg">Full description</summary>
-                      <Prose html={s.description_html} className="mt-2 text-sm" />
-                    </details>
-                  ) : null}
-                </CardBody>
-              </Card>
+            <li key={s.team_id} className="px-4 py-4 sm:px-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-eyebrow text-subtle">{s.team_name}</p>
+                  <h3 className="mt-1 font-semibold tracking-[-0.01em] text-fg">{s.title}</h3>
+                  {s.summary ? <p className="mt-1 max-w-3xl text-sm text-muted">{s.summary}</p> : null}
+                </div>
+                <span className="tabular shrink-0 text-xs text-subtle" title={formatDateTime(s.updated_at)}>Updated {relativeTime(s.updated_at)}</span>
+              </div>
+              <div className="mt-2.5 flex flex-wrap gap-2 text-[13px]">
+                {([["Repository", s.repo_url], ["Demo", s.demo_url], ["Video", s.video_url]] as const).map(([label, url]) =>
+                  url ? (
+                    <a key={label} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-1 rounded-full border border-border bg-surface-2 px-3 text-muted sm:h-7 sm:px-2.5 transition-colors hover:border-border-strong hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]">
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden /> {label}
+                    </a>
+                  ) : null,
+                )}
+              </div>
+              {s.description_html ? (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm text-muted hover:text-fg">Full description</summary>
+                  <Prose html={s.description_html} className="mt-2 text-sm" />
+                </details>
+              ) : null}
             </li>
           ))}
-        </ul>
+        </ListSurface>
       )}
     </QueryState>
   );
@@ -649,16 +664,16 @@ function PresentationsTab({ slug, timeZone, readOnly }: { slug: string; timeZone
         query={q}
         loading={<SkeletonRows rows={3} />}
         isEmpty={(d) => d.length === 0}
-        empty={<EmptyState title="No presentation slots" description="Schedule demo or pitch slots; teams see their own slot and meeting link." className="py-8" />}
+        empty={<InlineEmpty icon={<Presentation />} title="No presentation slots" description="Schedule demo or pitch slots; teams see their own slot and meeting link." />}
       >
         {(slots) => (
-          <ol className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+          <ListSurface as="ol">
             {slots.map((s) => (
               <li key={s.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 text-sm">
                   <p className="font-medium text-fg">{s.team_name ?? <span className="text-muted">Unassigned slot</span>}</p>
-                  <p className="text-muted">{formatDateTime(s.starts_at)} – {formatDateTime(s.ends_at)}</p>
-                  <p className="text-xs text-subtle">Event time: {formatDateTime(s.starts_at, timeZone)}</p>
+                  <p className="tabular text-muted">{formatDateTime(s.starts_at)} – {formatDateTime(s.ends_at)}</p>
+                  <p className="tabular text-xs text-subtle">Event time: {formatDateTime(s.starts_at, timeZone)}</p>
                   <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
                     {s.location ? <span>{s.location}</span> : null}
                     {s.meeting_url ? <a href={s.meeting_url} target="_blank" rel="noopener noreferrer" className="text-accent-strong hover:underline">Meeting link</a> : null}
@@ -675,12 +690,12 @@ function PresentationsTab({ slug, timeZone, readOnly }: { slug: string; timeZone
                 ) : null}
               </li>
             ))}
-          </ol>
+          </ListSurface>
         )}
       </QueryState>
       {!readOnly ? (
-        <form onSubmit={submit} className="grid gap-4 rounded-[var(--radius-md)] border border-border p-4" noValidate>
-          <p className="text-sm font-medium text-fg">Add a slot</p>
+        <form onSubmit={submit} className="grid gap-4 rounded-[var(--radius-lg)] border border-border bg-surface p-4 shadow-card sm:p-5" noValidate>
+          <SubHeading>Add a slot</SubHeading>
           <TeamPicker slug={slug} value={f.team_id} onChange={(team_id) => setF({ ...f, team_id })} allowNone noneLabel="Unassigned" label="Team" error={err("team_id")} />
           <div className="grid gap-4 sm:grid-cols-2">
             <ZonedDateTimeField label="Starts" required timeZone={timeZone} value={f.starts_at} onChange={(v) => setF({ ...f, starts_at: v })} error={err("starts_at")} hint={`Event time zone: ${timeZone}`} />
@@ -733,9 +748,9 @@ export default function ManageJudgingPage() {
   if (!judged) {
     return (
       <div>
-        <ManageHeading title="Judging" />
+        <ManageHeading eyebrow="Configure" icon={<Gavel />} title="Judging" />
         <EmptyState
-          icon={<Gavel className="h-5 w-5" />}
+          icon={<Gavel />}
           title="This competition isn't judged"
           description="Rubrics, judge assignments and presentation slots apply to judged events. Switch the scoring mode to “Judged” in Settings to use them."
           action={<LinkButton href={`/competitions/${slug}/manage/settings`} variant="secondary">Open settings</LinkButton>}
@@ -751,10 +766,30 @@ export default function ManageJudgingPage() {
   return (
     <div>
       <ManageHeading
+        eyebrow="Configure"
+        icon={<Gavel />}
         title="Judging"
         description="Define the rubric, assign judges, follow scoring progress and schedule presentations."
         actions={overview.data?.finalized ? <Badge tone="success" icon={<Lock className="h-3 w-3" aria-hidden />}>Judging finalized</Badge> : undefined}
       />
+      <TileGrid cols={4} className="mb-6 animate-rise [animation-delay:40ms]">
+        <Tile label="Judges" icon={<Users />} value={formatNumber(judges.length)} hint={overview.data ? `${formatNumber(overview.data.assignments.length)} assignments` : undefined} />
+        <Tile label="Entries" icon={<FolderGit2 />} accent="cyan" value={entries.data ? formatNumber(entries.data.length) : "—"} hint="Project submissions" />
+        <Tile
+          label="Scores submitted"
+          icon={<CheckCheck />}
+          accent="success"
+          value={overview.data ? formatNumber(overview.data.scores.filter((s) => s.status === "submitted").length) : "—"}
+          hint={overview.data ? `${formatNumber(overview.data.scores.filter((s) => s.status === "draft").length)} drafts` : undefined}
+        />
+        <Tile
+          label="Rubric"
+          icon={<ListOrdered />}
+          accent="info"
+          value={rubric.data ? `v${rubric.data.version}` : "—"}
+          hint={overview.data ? (overview.data.finalized ? "Judging finalized" : overview.data.locked ? "Criteria locked" : "Editable") : undefined}
+        />
+      </TileGrid>
       <Tabs
         value={tab}
         onValueChange={setTab}

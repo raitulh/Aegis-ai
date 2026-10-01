@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Building2, Check, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Building2, CalendarClock, Check, FileText, Gauge, ListChecks, Lock, RotateCcw, Sparkles, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -14,20 +14,24 @@ import {
   ScoringSection,
   emptyCompetitionForm,
   sectionForField,
+  sectionGroups,
   toCompetitionPayload,
   validateCompetitionForm,
   type CompetitionFormState,
   type HostOption,
 } from "@/components/organizer/competition-form";
-import { browserTimeZone } from "@/components/organizer/datetime";
+import { browserTimeZone, zonedInputToUtc } from "@/components/organizer/datetime";
+import { EVENT_TYPES, SCORING_MODES, TASK_TYPES, VISIBILITIES } from "@/components/organizer/shared";
 import { Button, LinkButton } from "@/components/ui/button";
 import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { FormError } from "@/components/ui/form";
 import { Container, PageHeader } from "@/components/ui/page";
-import { InlineNotice, Spinner } from "@/components/ui/states";
+import { ProgressBar } from "@/components/ui/misc";
+import { InlineNotice, Skeleton } from "@/components/ui/states";
 import { ApiError, get, post, type FieldErrors } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { formatDate } from "@/lib/format";
 import { hasRole, useConfig, useDraft, useRequireAuth } from "@/lib/hooks";
 import type { CompetitionDetail, Schemas } from "@/lib/types";
 
@@ -44,6 +48,43 @@ const STEPS = [
   { key: "scoring", label: "Scoring", description: "Mode, metric and certificates" },
   { key: "content", label: "Content", description: "Statement, rules, FAQ, links" },
 ] as const;
+
+const STEP_ICONS = { basics: FileText, schedule: CalendarClock, participation: Users, scoring: Gauge, content: BookOpen } as const;
+
+const labelOf = (list: { value: string; label: string }[], v: string) => list.find((o) => o.value === v)?.label ?? v;
+
+/** Read-only recap of what has been entered so far (the organizer's own input, nothing else). */
+function DraftSummary({ form, hosts }: { form: CompetitionFormState; hosts: HostOption[] }) {
+  const tz = form.timezone || "UTC";
+  const starts = zonedInputToUtc(form.starts_at, tz);
+  const ends = zonedInputToUtc(form.ends_at, tz);
+  const host = hosts.find((h) => h.id === form.host_org_id)?.name;
+  const rows: [string, string][] = [
+    ["Type", `${labelOf(EVENT_TYPES, form.event_type)} · ${labelOf(TASK_TYPES, form.task_type)}`],
+    ["Host", host ?? "Not chosen"],
+    ["Window", starts && ends ? `${formatDate(starts, { month: "short", day: "numeric" })} → ${formatDate(ends, { month: "short", day: "numeric", year: "numeric" })}` : "Dates not set"],
+    ["Visibility", labelOf(VISIBILITIES, form.visibility)],
+    ["Scoring", labelOf(SCORING_MODES, form.scoring_mode)],
+  ];
+  return (
+    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen shadow-card">
+      <div className="border-b border-border px-3.5 py-3">
+        <p className="text-eyebrow text-subtle">Draft summary</p>
+        <p className={cn("mt-1.5 line-clamp-2 text-sm font-semibold leading-snug tracking-[-0.01em]", form.title.trim() ? "text-fg" : "text-subtle")}>
+          {form.title.trim() || "Untitled competition"}
+        </p>
+      </div>
+      <dl className="divide-y divide-border text-xs">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between gap-3 px-3.5 py-2">
+            <dt className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-subtle">{k}</dt>
+            <dd className="min-w-0 truncate text-right text-muted" title={v}>{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
 type StepKey = (typeof STEPS)[number]["key"];
 
 const EVAL_KEYS = new Set(["evaluator", "metric", "secondary_metrics", "id_column", "target_column", "strict_schema", "positive_label", "expected_row_count"]);
@@ -104,7 +145,22 @@ export default function NewCompetitionPage() {
     if (hosts.length === 1 && !draft.form.host_org_id) setDraft((d) => ({ ...d, form: { ...d.form, host_org_id: hosts[0].id } }));
   }, [hosts, draft.form.host_org_id, setDraft]);
 
-  if (me.isPending || !me.data) return <Spinner />;
+  if (me.isPending || !me.data) {
+    return (
+      <Container size="xl">
+        <div className="grid gap-8 pb-16 pt-12 lg:grid-cols-[248px_minmax(0,1fr)]" role="status" aria-label="Loading the competition builder">
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-[var(--radius-md)]" />)}
+          </div>
+          <div className="space-y-4">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-9 w-80 max-w-full" />
+            <Skeleton className="h-[26rem] w-full rounded-[var(--radius-lg)]" />
+          </div>
+        </div>
+      </Container>
+    );
+  }
   const isAdmin = hasRole(me.data, "platform_admin");
   const errors: FieldErrors = { ...clientErrors, ...serverErrors };
 
@@ -183,12 +239,22 @@ export default function NewCompetitionPage() {
   const stepErrorCount = (key: StepKey) => Object.keys(errorsForStep(errors, key)).length;
   const unmapped = Object.entries(serverErrors).filter(([k]) => sectionForField(k) === null);
 
+  const groups = sectionGroups(stepKey, form, { showHost: true });
+  const StepIcon = STEP_ICONS[stepKey];
+
   return (
-    <Container size="lg">
+    <Container size="xl">
       <PageHeader
         eyebrow="Organizer tools"
+        icon={<Sparkles />}
         title="Create a competition"
         description="Set it up in five steps. It stays a private draft until you publish from the manage page — you can change everything later."
+        meta={
+          <>
+            <span className="inline-flex items-center gap-1.5"><ListChecks className="h-3.5 w-3.5" aria-hidden /> {STEPS.length} steps</span>
+            <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" aria-hidden /> Private draft until you publish</span>
+          </>
+        }
         actions={
           <ConfirmDialog
             trigger={<Button variant="ghost" icon={<RotateCcw className="h-4 w-4" />}>Start over</Button>}
@@ -226,48 +292,82 @@ export default function NewCompetitionPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-        <nav aria-label="Wizard steps">
-          <ol className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:gap-1 lg:overflow-visible">
-            {STEPS.map((s, i) => {
-              const current = i === step;
-              const count = stepErrorCount(s.key);
-              return (
-                <li key={s.key} className="shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => goTo(i)}
-                    aria-current={current ? "step" : undefined}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-left text-sm transition-colors",
-                      current ? "bg-surface-2 text-fg" : "text-muted hover:bg-surface-2 hover:text-fg",
-                    )}
-                  >
-                    <span
+      <div className="grid gap-6 lg:grid-cols-[248px_minmax(0,1fr)] lg:gap-8">
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:self-start lg:overflow-y-auto lg:pb-4 lg:[scrollbar-width:thin]">
+          <nav aria-label="Wizard steps">
+            <div className="mb-3 hidden lg:block">
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <p className="text-eyebrow text-subtle">Progress</p>
+                <p className="tabular font-mono text-[10.5px] text-subtle">
+                  {step + 1}/{STEPS.length}
+                </p>
+              </div>
+              <ProgressBar value={((step + 1) / STEPS.length) * 100} label={`Step ${step + 1} of ${STEPS.length}`} />
+            </div>
+            <ol className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0">
+              {STEPS.map((s, i) => {
+                const current = i === step;
+                const count = stepErrorCount(s.key);
+                return (
+                  <li key={s.key} className="shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => goTo(i)}
+                      aria-current={current ? "step" : undefined}
                       className={cn(
-                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
-                        count ? "border-danger text-danger" : i < step ? "border-accent bg-accent text-accent-fg" : current ? "border-accent text-accent-strong" : "border-border",
+                        "flex w-full items-center gap-3 rounded-[var(--radius-md)] border px-3 py-2 text-left text-sm transition-colors duration-200 lg:border-transparent",
+                        "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]",
+                        current
+                          ? "border-[color-mix(in_oklab,var(--accent)_40%,var(--border))] bg-surface-2 text-fg shadow-[inset_0_1px_0_var(--hairline-highlight)]"
+                          : "border-border text-muted hover:bg-surface-2/70 hover:text-fg",
                       )}
-                      aria-hidden
                     >
-                      {count ? "!" : i < step ? <Check className="h-3.5 w-3.5" /> : i + 1}
-                    </span>
-                    <span>
-                      <span className="block font-medium">{s.label}</span>
-                      <span className="hidden text-xs text-subtle lg:block">{s.description}</span>
-                      {count ? <span className="sr-only"> — {count} field{count === 1 ? "" : "s"} need attention</span> : null}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-          <p className="mt-3 hidden text-xs text-subtle lg:block">Your progress is saved automatically in this browser.</p>
-        </nav>
+                      <span
+                        className={cn(
+                          "tabular flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors",
+                          count ? "border-danger text-danger" : i < step ? "border-transparent bg-brand text-accent-fg" : current ? "border-accent text-accent-strong shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_18%,transparent)]" : "border-border-strong",
+                        )}
+                        aria-hidden
+                      >
+                        {count ? "!" : i < step ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
+                      </span>
+                      <span>
+                        <span className="block font-medium">{s.label}</span>
+                        <span className="hidden text-xs text-subtle lg:block">{s.description}</span>
+                        {count ? <span className="sr-only"> — {count} field{count === 1 ? "" : "s"} need attention</span> : null}
+                      </span>
+                    </button>
+                    {current && groups.length ? (
+                      <ul className="mb-2 ml-[1.45rem] mt-1 hidden space-y-0.5 border-l border-border pl-4 lg:block" aria-label={`${s.label} sections`}>
+                        {groups.map((g) => (
+                          <li key={g.id}>
+                            <a
+                              href={`#${g.id}`}
+                              className="block rounded-[var(--radius-sm)] px-2 py-1 text-xs text-muted transition-colors hover:bg-surface-2/70 hover:text-fg focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
+                            >
+                              {g.label}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
+            <p className="mt-3 hidden text-xs text-subtle lg:block">Your progress is saved automatically in this browser.</p>
+          </nav>
+          <div className="mt-5 hidden lg:block">
+            <DraftSummary form={form} hosts={hosts} />
+          </div>
+        </aside>
 
-        <Card>
-          <CardHeader title={`Step ${step + 1} of ${STEPS.length} · ${STEPS[step].label}`} description={STEPS[step].description} />
-          <CardBody className="py-6">
+        <Card className="min-w-0">
+          <div className="h-0.5 overflow-hidden rounded-t-[var(--radius-lg)] bg-surface-3" aria-hidden>
+            <div className="h-full bg-brand transition-[width] duration-500 ease-out-expo" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
+          </div>
+          <CardHeader icon={<StepIcon />} title={`Step ${step + 1} of ${STEPS.length} · ${STEPS[step].label}`} description={STEPS[step].description} className="px-5 sm:px-7" />
+          <CardBody key={stepKey} className="animate-fade-in px-5 py-7 sm:px-7">
             {stepKey === "basics" ? (
               <BasicsSection form={form} set={set} errors={errors} hosts={hosts} hostsLoading={memberships.isPending} allowNoHost={isAdmin} />
             ) : stepKey === "schedule" ? (
@@ -294,10 +394,13 @@ export default function NewCompetitionPage() {
               </div>
             ) : null}
           </CardBody>
-          <CardFooter className="justify-between">
+          <CardFooter className="sticky bottom-0 z-10 justify-between rounded-b-[var(--radius-lg)] bg-[var(--glass-strong)] px-5 backdrop-blur-xl sm:px-7">
             <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} disabled={step === 0} onClick={() => goTo(step - 1)}>
               Back
             </Button>
+            <span className="tabular hidden font-mono text-[10.5px] uppercase tracking-[0.12em] text-subtle sm:block" aria-hidden>
+              {STEPS[step].label} · {step + 1}/{STEPS.length}
+            </span>
             {step < STEPS.length - 1 ? (
               <Button onClick={next}>
                 Continue <ArrowRight className="h-4 w-4" aria-hidden />

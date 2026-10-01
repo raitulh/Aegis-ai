@@ -1,16 +1,16 @@
 "use client";
 
-import { Building2, Pencil, Trash2, UserPlus } from "lucide-react";
+import { Building2, Pencil, Trash2, UserCog, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { ManageHeading, SPONSOR_TIERS, manageKey, useManage } from "@/components/organizer/shared";
+import { InlineEmpty, Panel, SubHeading } from "@/components/organizer/ui";
 import { UserLink } from "@/components/domain/cards";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { ErrorState, SkeletonRows } from "@/components/ui/states";
@@ -50,26 +50,30 @@ function StaffCard({ slug, staff, scoringMode, archived }: {
   const judges = staff.filter((s) => s.role === "judge");
 
   const list = (rows: typeof staff, label: string) => (
-    <div>
-      <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-subtle">{label} ({rows.length})</h3>
+    <div className="min-w-0">
+      <h4 className="mb-2 flex items-center gap-2 text-eyebrow text-subtle">
+        {label} <span className="tabular rounded-full bg-surface-3 px-1.5 py-px text-[10px] text-muted">{rows.length}</span>
+      </h4>
       {rows.length === 0 ? (
-        <p className="text-sm text-subtle">None yet.</p>
+        <p className="rounded-[var(--radius-md)] border border-dashed border-border-strong px-3 py-3 text-sm text-subtle">None yet.</p>
       ) : (
-        <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+        <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-bg-elevated/50">
           {rows.map((s) => {
             const lastOrganizer = s.role === "organizer" && organizers.length <= 1;
             return (
-              <li key={`${s.user.id}-${s.role}`} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                <div className="flex min-w-0 items-center gap-2">
-                  <UserLink user={s.user} />
-                  <span className="truncate text-xs text-subtle">@{s.user.handle}</span>
-                  {s.user.id === me.data?.id ? <Badge tone="outline">You</Badge> : null}
+              <li key={`${s.user.id}-${s.role}`} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <UserLink user={s.user} size={26} className="font-medium" />
+                    {s.user.id === me.data?.id ? <Badge tone="outline">You</Badge> : null}
+                  </div>
+                  <span className="block truncate pl-[34px] font-mono text-[11px] text-subtle">@{s.user.handle}</span>
                 </div>
                 {!archived ? (
                   <ConfirmDialog
                     trigger={
                       <Button size="sm" variant="ghost" icon={<Trash2 className="h-4 w-4" />} disabled={lastOrganizer} title={lastOrganizer ? "A competition needs at least one organizer" : undefined} aria-label={`Remove ${s.user.display_name} as ${s.role}`}>
-                        Remove
+                        <span className="max-sm:sr-only">Remove</span>
                       </Button>
                     }
                     title={`Remove ${s.user.display_name} as ${s.role}?`}
@@ -87,12 +91,15 @@ function StaffCard({ slug, staff, scoringMode, archived }: {
   );
 
   return (
-    <Card>
-      <CardHeader title="Staff" description="Organizers can manage everything here; judges score entries in judged events. Staff can't also participate." />
-      <CardBody className="space-y-5">
+    <Panel icon={<UserCog />} title="Staff" description="Organizers can manage everything here; judges score entries in judged events. Staff can't also participate.">
+      <div className="space-y-5">
+        <div className="grid gap-5 lg:grid-cols-2">
+          {list(organizers, "Organizers")}
+          {list(judges, "Judges")}
+        </div>
         {!archived ? (
           <form
-            className="grid gap-3 sm:grid-cols-[1fr_10rem_auto] sm:items-start"
+            className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated/40 p-3.5 sm:grid-cols-[1fr_10rem_auto] sm:items-start"
             onSubmit={(e) => {
               e.preventDefault();
               if (handle.trim()) add.mutate(undefined);
@@ -109,21 +116,17 @@ function StaffCard({ slug, staff, scoringMode, archived }: {
                 </Select>
               )}
             </Field>
-            <Button type="submit" icon={<UserPlus className="h-4 w-4" />} loading={add.isPending} disabled={!handle.trim()} className="sm:mt-6">
+            <Button type="submit" icon={<UserPlus className="h-4 w-4" />} loading={add.isPending} disabled={!handle.trim()} className="sm:mt-[1.6rem]">
               Add
             </Button>
           </form>
         ) : null}
-        <div className="grid gap-5 lg:grid-cols-2">
-          {list(organizers, "Organizers")}
-          {list(judges, "Judges")}
-        </div>
         <p className="text-xs text-subtle">
           The competition creator and admins of the host organization always have organizer access, even if not listed.
           {scoringMode === "judged" ? <> Assign entries to judges on the <Link href={`/competitions/${slug}/manage/judging`} className="text-accent-strong hover:underline">Judging</Link> page.</> : null}
         </p>
-      </CardBody>
-    </Card>
+      </div>
+    </Panel>
   );
 }
 
@@ -156,13 +159,12 @@ function SponsorsCard({ slug, sponsors, archived }: {
   });
   const editing = sponsors.some((s) => s.org.slug === orgSlug.trim());
   return (
-    <Card>
-      <CardHeader title="Sponsors" description="Sponsor organizations are shown on the competition page. Their managers can propose announcements for your review." />
-      <CardBody className="space-y-5">
+    <Panel icon={<Building2 />} title="Sponsors" description="Sponsor organizations are shown on the competition page. Their managers can propose announcements for your review.">
+      <div className="space-y-5">
         {sponsors.length === 0 ? (
-          <p className="text-sm text-subtle">No sponsors yet.</p>
+          <InlineEmpty icon={<Building2 />} title="No sponsors yet" description="Add a sponsor organization by its slug below." className="py-6" />
         ) : (
-          <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+          <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-bg-elevated/50">
             {sponsors.map((s) => (
               <li key={s.org.id} className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
@@ -195,13 +197,13 @@ function SponsorsCard({ slug, sponsors, archived }: {
         )}
         {!archived ? (
           <form
-            className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3"
+            className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated/40 p-3.5"
             onSubmit={(e) => {
               e.preventDefault();
               if (orgSlug.trim()) save.mutate(undefined);
             }}
           >
-            <p className="text-sm font-medium text-fg">{editing ? "Update sponsor" : "Add a sponsor"}</p>
+            <SubHeading>{editing ? "Update sponsor" : "Add a sponsor"}</SubHeading>
             <div className="grid gap-3 sm:grid-cols-[1fr_12rem]">
               <Field label="Organization slug" error={error?.fields.org_slug ?? (error && !Object.keys(error.fields).length ? error.message : undefined)} hint="From the organization's URL, e.g. /orgs/acme-ai → acme-ai.">
                 {(p) => <Input {...p} value={orgSlug} onChange={(e) => { setOrgSlug(e.target.value); setError(null); }} placeholder="acme-ai" maxLength={80} />}
@@ -224,8 +226,8 @@ function SponsorsCard({ slug, sponsors, archived }: {
             </div>
           </form>
         ) : null}
-      </CardBody>
-    </Card>
+      </div>
+    </Panel>
   );
 }
 
@@ -238,7 +240,7 @@ export default function ManagePeoplePage() {
   const archived = m.lifecycle === "archived";
   return (
     <div className="space-y-6">
-      <ManageHeading title="Staff & sponsors" description="Who runs, judges and supports this competition." />
+      <ManageHeading eyebrow="Configure" icon={<UserCog />} title="Staff & sponsors" description="Who runs, judges and supports this competition." />
       <StaffCard slug={slug} staff={m.staff} scoringMode={String(m.raw.scoring_mode ?? "")} archived={archived} />
       <SponsorsCard slug={slug} sponsors={m.sponsors} archived={archived} />
     </div>

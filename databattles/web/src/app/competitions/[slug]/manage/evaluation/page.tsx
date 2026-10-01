@@ -1,19 +1,19 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Database, EyeOff, FileSpreadsheet, Link2, Lock, Search, ShieldAlert, Upload } from "lucide-react";
+import { Database, Eye, EyeOff, FileSpreadsheet, FlaskConical, Gauge, Link2, Lock, Rows3, Search, ShieldAlert, Upload } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { ManageHeading, competitionKeys, isTerminal, useCompetitionDetail, useManage } from "@/components/organizer/shared";
+import { FactGrid, InlineEmpty, Panel, SubHeading, Tile, TileGrid } from "@/components/organizer/ui";
 import { Badge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input, Select } from "@/components/ui/form";
-import { FileDrop, KeyValue } from "@/components/ui/misc";
+import { FileDrop } from "@/components/ui/misc";
 import { EmptyState, ErrorState, InlineNotice, SkeletonRows } from "@/components/ui/states";
 import { ApiError, api, errorMessage, get, upload } from "@/lib/api";
 import { formatBytes, formatDateTime, formatNumber, relativeTime } from "@/lib/format";
@@ -141,16 +141,15 @@ function TrainingDataCard({ slug, comp, locked }: { slug: string; comp: Competit
   const published = found?.versions.filter((v) => v.status === "published").sort((a, b) => b.version - a.version) ?? [];
 
   return (
-    <Card>
-      <CardHeader title="Training data" description="Attach a published dataset version participants can download. Recommended before publishing." />
-      <CardBody className="space-y-4">
+    <Panel icon={<Database />} title="Training data" description="Attach a published dataset version participants can download. Recommended before publishing.">
+      <div className="space-y-4">
         {comp.dataset ? (
-          <div className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent-strong"><Database className="h-4 w-4" aria-hidden /></span>
-              <div>
+          <div className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated/50 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-strong"><Database className="h-4 w-4" aria-hidden /></span>
+              <div className="min-w-0">
                 <Link href={`/datasets/${comp.dataset.slug}`} className="font-medium text-fg hover:text-accent-strong">{comp.dataset.title}</Link>
-                <p className="text-xs text-subtle">Version {comp.dataset.version} · {comp.dataset.file_count} files · {formatBytes(comp.dataset.total_bytes)} · {comp.dataset.license}</p>
+                <p className="tabular text-xs text-subtle">Version {comp.dataset.version} · {comp.dataset.file_count} files · {formatBytes(comp.dataset.total_bytes)} · {comp.dataset.license}</p>
               </div>
             </div>
             {!locked ? (
@@ -164,7 +163,7 @@ function TrainingDataCard({ slug, comp, locked }: { slug: string; comp: Competit
             ) : null}
           </div>
         ) : (
-          <p className="text-sm text-muted">No dataset attached.</p>
+          <InlineEmpty icon={<Database />} title="No dataset attached" description="Find a published dataset by its slug to attach it." className="py-6" />
         )}
         {!locked ? (
           <>
@@ -176,7 +175,7 @@ function TrainingDataCard({ slug, comp, locked }: { slug: string; comp: Competit
             </form>
             <FormError message={findError} />
             {found && published.length ? (
-              <div className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-border p-3 sm:flex-row sm:items-end">
+              <div className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated/50 p-3 sm:flex-row sm:items-end">
                 <Field label={`Version of “${found.title}”`} className="flex-1">
                   {(p) => (
                     <Select {...p} value={versionId} onChange={(e) => setVersionId(e.target.value)}>
@@ -197,8 +196,8 @@ function TrainingDataCard({ slug, comp, locked }: { slug: string; comp: Competit
         ) : (
           <p className="flex items-center gap-2 text-xs text-muted"><Lock className="h-3.5 w-3.5" aria-hidden /> The dataset can't change after results are final.</p>
         )}
-      </CardBody>
-    </Card>
+      </div>
+    </Panel>
   );
 }
 
@@ -218,9 +217,9 @@ export default function ManageEvaluationPage() {
   if (scoringMode !== "automatic") {
     return (
       <div>
-        <ManageHeading title="Evaluation" />
+        <ManageHeading eyebrow="Configure" icon={<FlaskConical />} title="Evaluation" />
         <EmptyState
-          icon={<FileSpreadsheet className="h-5 w-5" />}
+          icon={<FileSpreadsheet />}
           title="This competition isn't scored automatically"
           description="Ground truth and metrics apply only to automatic scoring. Change the scoring mode in Settings if you want CSV predictions scored against a hidden solution."
           action={<LinkButton href={`/competitions/${slug}/manage/settings`} variant="secondary">Open settings</LinkButton>}
@@ -255,6 +254,8 @@ export default function ManageEvaluationPage() {
   return (
     <div className="space-y-6">
       <ManageHeading
+        eyebrow="Configure"
+        icon={<FlaskConical />}
         title="Evaluation"
         description="How submissions are scored, and the hidden solution file they are scored against."
         actions={!locked && !finalized ? <LinkButton href={`/competitions/${slug}/manage/settings`} variant="secondary" size="sm">Edit metric settings</LinkButton> : undefined}
@@ -266,42 +267,38 @@ export default function ManageEvaluationPage() {
         </InlineNotice>
       ) : null}
 
-      <Card>
-        <CardHeader title="Metric configuration" />
-        <CardBody>
-          {metricKey ? (
-            <KeyValue
-              items={[
-                { label: "Evaluator", value: evaluator ? `${evaluator.label} (v${evaluator.version})` : String(ev.evaluator ?? "csv_prediction") },
-                {
-                  label: "Primary metric",
-                  value: (
-                    <span className="inline-flex flex-wrap items-center gap-2">
-                      {metric?.label ?? metricKey}
-                      {metric ? <Badge tone="outline">{metric.direction === "maximize" ? "Higher is better ↑" : "Lower is better ↓"}</Badge> : null}
-                    </span>
-                  ),
-                },
-                { label: "Metric definition", value: metric?.description ?? "—" },
-                { label: "Secondary metrics", value: secondary.length ? secondary.map((k) => config.data?.metrics.find((x) => x.key === k)?.label ?? k).join(", ") : "None" },
-                { label: "Id column", value: <code className="font-mono">{idCol}</code> },
-                { label: "Target column", value: <code className="font-mono">{targetCol}</code> },
-                { label: "Strict schema", value: ev.strict_schema === false ? "Off — extra columns are ignored" : "On — extra columns are rejected" },
-                ...(metric?.kind === "probability" ? [{ label: "Positive label", value: <code className="font-mono">{positive}</code> }] : []),
-                ...(ev.expected_row_count ? [{ label: "Expected rows", value: formatNumber(Number(ev.expected_row_count)) }] : []),
-              ]}
-            />
-          ) : (
-            <InlineNotice tone="warning" title="No metric configured" action={<LinkButton href={`/competitions/${slug}/manage/settings`} size="sm" variant="secondary">Configure</LinkButton>}>
-              Choose the metric and columns in Settings → Scoring. This is required before publishing.
-            </InlineNotice>
-          )}
-        </CardBody>
-      </Card>
+      <Panel icon={<Gauge />} title="Metric configuration" action={locked ? <Badge tone="outline" icon={<Lock className="h-3 w-3" aria-hidden />}>Locked</Badge> : undefined}>
+        {metricKey ? (
+          <FactGrid
+            items={[
+              { label: "Evaluator", value: evaluator ? `${evaluator.label} (v${evaluator.version})` : String(ev.evaluator ?? "csv_prediction") },
+              {
+                label: "Primary metric",
+                value: (
+                  <span className="inline-flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{metric?.label ?? metricKey}</span>
+                    {metric ? <Badge tone="outline">{metric.direction === "maximize" ? "Higher is better ↑" : "Lower is better ↓"}</Badge> : null}
+                  </span>
+                ),
+              },
+              { label: "Metric definition", value: <span className="text-muted">{metric?.description ?? "—"}</span> },
+              { label: "Secondary metrics", value: secondary.length ? secondary.map((k) => config.data?.metrics.find((x) => x.key === k)?.label ?? k).join(", ") : "None" },
+              { label: "Id column", value: <code className="font-mono">{idCol}</code> },
+              { label: "Target column", value: <code className="font-mono">{targetCol}</code> },
+              { label: "Strict schema", value: ev.strict_schema === false ? "Off — extra columns are ignored" : "On — extra columns are rejected" },
+              ...(metric?.kind === "probability" ? [{ label: "Positive label", value: <code className="font-mono">{positive}</code> }] : []),
+              ...(ev.expected_row_count ? [{ label: "Expected rows", value: <span className="tabular">{formatNumber(Number(ev.expected_row_count))}</span> }] : []),
+            ]}
+          />
+        ) : (
+          <InlineNotice tone="warning" title="No metric configured" action={<LinkButton href={`/competitions/${slug}/manage/settings`} size="sm" variant="secondary">Configure</LinkButton>}>
+            Choose the metric and columns in Settings → Scoring. This is required before publishing.
+          </InlineNotice>
+        )}
+      </Panel>
 
-      <Card>
-        <CardHeader title="Hidden ground truth" description="The solution file used to score every submission." />
-        <CardBody className="space-y-5">
+      <Panel icon={<EyeOff />} title="Hidden ground truth" description="The solution file used to score every submission.">
+        <div className="space-y-5">
           <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-warning/30 bg-warning-soft p-3 text-sm">
             <EyeOff className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
             <p className="text-fg/90">
@@ -310,25 +307,18 @@ export default function ManageEvaluationPage() {
             </p>
           </div>
           {asset ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-[var(--radius-md)] border border-border p-3">
-                <p className="text-xs text-subtle">Rows</p>
-                <p className="text-lg font-semibold tabular-nums">{formatNumber(asset.row_count)}</p>
-              </div>
-              <div className="rounded-[var(--radius-md)] border border-border p-3">
-                <p className="text-xs text-subtle">Public split</p>
-                <p className="text-lg font-semibold tabular-nums">{formatNumber(asset.public_count)}</p>
-              </div>
-              <div className="rounded-[var(--radius-md)] border border-border p-3">
-                <p className="text-xs text-subtle">Private split</p>
-                <p className="text-lg font-semibold tabular-nums">{formatNumber(asset.private_count)}</p>
-              </div>
-              <div className="rounded-[var(--radius-md)] border border-border p-3">
-                <p className="text-xs text-subtle">Uploaded</p>
-                <p className="text-sm font-medium" title={formatDateTime(asset.created_at)}>{relativeTime(asset.created_at)}</p>
-                <p className="font-mono text-[11px] text-subtle">sha256 {asset.sha256_prefix}…</p>
-              </div>
-            </div>
+            <TileGrid cols={4}>
+              <Tile label="Rows" value={formatNumber(asset.row_count)} icon={<Rows3 />} />
+              <Tile label="Public split" value={formatNumber(asset.public_count)} icon={<Eye />} accent="cyan" />
+              <Tile label="Private split" value={formatNumber(asset.private_count)} icon={<EyeOff />} accent="warning" />
+              <Tile
+                label="Uploaded"
+                icon={<Upload />}
+                accent="muted"
+                value={<span className="text-base font-medium tracking-normal" title={formatDateTime(asset.created_at)}>{relativeTime(asset.created_at)}</span>}
+                hint={<span className="font-mono text-[11px]">sha256 {asset.sha256_prefix}…</span>}
+              />
+            </TileGrid>
           ) : (
             <InlineNotice tone="warning" title="No ground truth uploaded">Upload the solution file — it is required before publishing.</InlineNotice>
           )}
@@ -338,23 +328,36 @@ export default function ManageEvaluationPage() {
             </InlineNotice>
           ) : null}
           <GroundTruthCard slug={slug} disabledReason={disabledReason} hasAsset={Boolean(asset)} maxMb={maxMb} />
-        </CardBody>
-      </Card>
+        </div>
+      </Panel>
 
-      <Card>
-        <CardHeader title="Required CSV format" description="Ground truth and participant submissions share the same id and target columns." />
-        <CardBody className="space-y-4 text-sm">
-          <div>
-            <p className="mb-1.5 font-medium text-fg">Ground truth (hidden)</p>
-            <pre className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface-2 p-3 font-mono text-xs leading-relaxed text-fg">
+      <Panel icon={<FileSpreadsheet />} title="Required CSV format" description="Ground truth and participant submissions share the same id and target columns.">
+        <div className="space-y-4 text-sm">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="min-w-0">
+              <SubHeading className="mb-1.5">Ground truth (hidden)</SubHeading>
+              <pre className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 font-mono text-xs leading-relaxed text-fg">
 {`${idCol},${targetCol},Usage
 1001,${sampleTarget[0]},Public
 1002,${sampleTarget[1]},Private
 1003,${sampleTarget[2]},Public
 1004,${sampleTarget[3]},Private`}
-            </pre>
+              </pre>
+            </div>
+            <div className="min-w-0">
+              <SubHeading className="mb-1.5">What participants upload</SubHeading>
+              <pre className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 font-mono text-xs leading-relaxed text-fg">
+{`${idCol},${targetCol}
+1001,${metric?.kind === "probability" ? "0.83" : sampleTarget[0]}
+1002,${metric?.kind === "probability" ? "0.12" : sampleTarget[1]}
+…`}
+              </pre>
+              <p className="mt-1.5 text-xs text-muted">
+                One row per test id{ev.strict_schema === false ? "; extra columns are ignored" : ", no extra columns"}.{evaluator ? ` ${evaluator.submission_format}` : ""}
+              </p>
+            </div>
           </div>
-          <ul className="list-disc space-y-1.5 pl-5 text-muted">
+          <ul className="list-disc space-y-1.5 pl-5 text-muted marker:text-subtle">
             <li><code className="font-mono text-fg">{idCol}</code> — unique row id. Duplicate ids are rejected.</li>
             <li>
               <code className="font-mono text-fg">{targetCol}</code> —{" "}
@@ -370,21 +373,9 @@ export default function ManageEvaluationPage() {
             </li>
             <li>UTF-8 CSV with a header row; every row must have the same number of columns.</li>
           </ul>
-          <div>
-            <p className="mb-1.5 font-medium text-fg">What participants upload</p>
-            <pre className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface-2 p-3 font-mono text-xs leading-relaxed text-fg">
-{`${idCol},${targetCol}
-1001,${metric?.kind === "probability" ? "0.83" : sampleTarget[0]}
-1002,${metric?.kind === "probability" ? "0.12" : sampleTarget[1]}
-…`}
-            </pre>
-            <p className="mt-1.5 text-xs text-muted">
-              One row per test id{ev.strict_schema === false ? "; extra columns are ignored" : ", no extra columns"}.{evaluator ? ` ${evaluator.submission_format}` : ""}
-            </p>
-          </div>
           <p className="flex items-center gap-2 text-xs text-subtle"><ShieldAlert className="h-3.5 w-3.5" aria-hidden /> Never include the private ground truth in the public dataset.</p>
-        </CardBody>
-      </Card>
+        </div>
+      </Panel>
 
       <TrainingDataCard slug={slug} comp={c} locked={finalized} />
     </div>

@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { DownloadLink, ManageHeading, useCompetitionDetail } from "@/components/organizer/shared";
+import { Toolbar } from "@/components/organizer/ui";
 import { UserLink } from "@/components/domain/cards";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/form";
@@ -32,6 +33,8 @@ export default function ManageParticipantsPage() {
   return (
     <div>
       <ManageHeading
+        eyebrow="Run"
+        icon={<Users />}
         title="Participants"
         description={
           detail.data
@@ -46,7 +49,7 @@ export default function ManageParticipantsPage() {
         isEmpty={(d) => d.total === 0}
         empty={
           <EmptyState
-            icon={<Users className="h-5 w-5" />}
+            icon={<Users />}
             title="No participants yet"
             description="Once people join they appear here with their team and submission count. Share the competition link or post an announcement to spread the word."
           />
@@ -54,17 +57,18 @@ export default function ManageParticipantsPage() {
       >
         {(d) => (
           <>
-            <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted">
-              <span aria-live="polite">
-                {formatNumber(d.total)} participants{query.isFetching ? " · updating…" : ""}
-              </span>
-              <label className="flex items-center gap-2">
-                <span>Per page</span>
-                <Select className="h-8 w-20" value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}>
+            <Toolbar className="flex-row items-center justify-between">
+              <p className="flex items-center gap-2 text-sm text-muted" aria-live="polite">
+                <span className="tabular font-semibold text-fg">{formatNumber(d.total)}</span> participants
+                {query.isFetching ? <span className="inline-flex items-center gap-1.5 text-xs text-subtle"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden />updating…</span> : null}
+              </p>
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <span className="font-mono uppercase tracking-[0.12em] text-subtle">Per page</span>
+                <Select className="h-9 w-20" value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}>
                   {[25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
                 </Select>
               </label>
-            </div>
+            </Toolbar>
             <Table>
               <caption className="sr-only">Participants</caption>
               <THead>
@@ -79,18 +83,18 @@ export default function ManageParticipantsPage() {
               <TBody>
                 {d.items.map((p) => (
                   <TR key={p.user.id}>
-                    <TD>
-                      <div className="flex flex-col">
-                        <UserLink user={p.user} />
-                        <span className="pl-8 text-xs text-subtle">@{p.user.handle}</span>
+                    <TD className="py-2.5">
+                      <div className="flex min-w-0 flex-col">
+                        <UserLink user={p.user} size={28} className="font-medium" />
+                        <span className="pl-9 font-mono text-[11px] text-subtle">@{p.user.handle}</span>
                       </div>
                     </TD>
-                    <TD>{p.team_name ?? <span className="text-subtle">No team</span>}</TD>
-                    <TD className="whitespace-nowrap" title={formatDateTime(p.joined_at)}>
+                    <TD className="whitespace-nowrap py-2.5">{p.team_name ?? <span className="text-subtle">No team</span>}</TD>
+                    <TD className="tabular whitespace-nowrap py-2.5 text-muted" title={formatDateTime(p.joined_at)}>
                       {relativeTime(p.joined_at)}
                     </TD>
-                    <TD>{p.status === "active" ? <Badge tone="success">Active</Badge> : <StatusBadge status={p.status} />}</TD>
-                    <TD className="text-right tabular-nums">{formatNumber(p.submission_count)}</TD>
+                    <TD className="py-2.5">{p.status === "active" ? <Badge tone="success">Active</Badge> : <StatusBadge status={p.status} />}</TD>
+                    <TD className="tabular py-2.5 text-right font-medium text-fg">{formatNumber(p.submission_count)}</TD>
                   </TR>
                 ))}
               </TBody>

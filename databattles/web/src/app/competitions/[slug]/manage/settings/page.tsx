@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Lock, RotateCcw, Save } from "lucide-react";
+import { Lock, RotateCcw, Save, Settings2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import {
   diffPayload,
   formFromManage,
   sectionForField,
+  sectionGroups,
   toCompetitionPayload,
   validateCompetitionForm,
   type CompetitionFormState,
@@ -22,11 +23,11 @@ import {
 } from "@/components/organizer/competition-form";
 import { ManageHeading, competitionKeys, isTerminal, useManage, type CompetitionManage } from "@/components/organizer/shared";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
 import { Field, FormError, Input } from "@/components/ui/form";
-import { ErrorState, InlineNotice, SkeletonRows } from "@/components/ui/states";
+import { ErrorState, InlineNotice, Skeleton } from "@/components/ui/states";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { ApiError, api, get, type FieldErrors } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { formatDateTime, relativeTime, titleCase } from "@/lib/format";
 import { hasRole, useApiMutation, useConfig, useMe, useUnsavedChangesWarning } from "@/lib/hooks";
 import type { CompetitionDetail, CompetitionWrite, Schemas } from "@/lib/types";
@@ -38,6 +39,8 @@ const EDITABLE_AFTER_FINALIZATION = new Set([
 const EVALUATION_FIELDS = new Set(["evaluation", "scoring_mode"]);
 
 const SECTIONS = ["basics", "schedule", "participation", "scoring", "content"] as const;
+
+const FORM_SURFACE = "rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen p-5 shadow-card sm:p-7";
 type SectionKey = (typeof SECTIONS)[number];
 
 interface Membership {
@@ -147,61 +150,83 @@ function SettingsForm({ m, onSaved, tab, setTab }: { m: CompetitionManage; onSav
       ) : null}
       {lockError ? <InlineNotice tone="danger" title="Some changes were rejected">{lockError.message}</InlineNotice> : null}
 
-      <Tabs
-        value={tab}
-        onValueChange={(v) => setTab(v as SectionKey)}
-        tabs={SECTIONS.map((s) => ({ value: s, label: <>{titleCase(s)}{errorCount(s) ? <span className="ml-1.5 text-danger" aria-label={`${errorCount(s)} errors`}>•</span> : null}</> }))}
-      >
-        <TabPanel value="basics">
-          <Card><CardBody className="py-6">
-            <BasicsSection form={form} set={set} errors={errors} locked={locked} hosts={hosts} hostsLoading={memberships.isPending} allowNoHost={isAdmin} />
-          </CardBody></Card>
-        </TabPanel>
-        <TabPanel value="schedule">
-          <Card><CardBody className="py-6">
-            <ScheduleSection form={form} set={set} errors={errors} locked={locked} />
-          </CardBody></Card>
-        </TabPanel>
-        <TabPanel value="participation">
-          <Card><CardBody className="py-6">
-            <ParticipationSection form={form} set={set} errors={errors} locked={locked} />
-          </CardBody></Card>
-        </TabPanel>
-        <TabPanel value="scoring">
-          <Card><CardBody className="py-6">
-            {scoringLocked ? (
-              <p className="mb-5 flex items-center gap-2 text-xs text-muted"><Lock className="h-3.5 w-3.5" aria-hidden /> Metric, columns and scoring mode are locked.</p>
-            ) : null}
-            <ScoringSection form={form} set={set} errors={errors} locked={locked} config={config.data} />
-          </CardBody></Card>
-        </TabPanel>
-        <TabPanel value="content">
-          <Card><CardBody className="py-6">
-            <ContentSection form={form} set={set} errors={errors} locked={locked} />
-          </CardBody></Card>
-        </TabPanel>
-      </Tabs>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_11rem]">
+        <div className="min-w-0">
+          <Tabs
+            value={tab}
+            onValueChange={(v) => setTab(v as SectionKey)}
+            tabs={SECTIONS.map((s) => ({ value: s, label: <>{titleCase(s)}{errorCount(s) ? <span className="ml-1.5 text-danger" aria-label={`${errorCount(s)} errors`}>•</span> : null}</> }))}
+          >
+            <TabPanel value="basics">
+              <div className={FORM_SURFACE}>
+                <BasicsSection form={form} set={set} errors={errors} locked={locked} hosts={hosts} hostsLoading={memberships.isPending} allowNoHost={isAdmin} />
+              </div>
+            </TabPanel>
+            <TabPanel value="schedule">
+              <div className={FORM_SURFACE}>
+                <ScheduleSection form={form} set={set} errors={errors} locked={locked} />
+              </div>
+            </TabPanel>
+            <TabPanel value="participation">
+              <div className={FORM_SURFACE}>
+                <ParticipationSection form={form} set={set} errors={errors} locked={locked} />
+              </div>
+            </TabPanel>
+            <TabPanel value="scoring">
+              <div className={FORM_SURFACE}>
+                {scoringLocked ? (
+                  <p className="mb-6 flex items-center gap-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated/60 px-3 py-2 text-xs text-muted"><Lock className="h-3.5 w-3.5 shrink-0" aria-hidden /> Metric, columns and scoring mode are locked.</p>
+                ) : null}
+                <ScoringSection form={form} set={set} errors={errors} locked={locked} config={config.data} />
+              </div>
+            </TabPanel>
+            <TabPanel value="content">
+              <div className={FORM_SURFACE}>
+                <ContentSection form={form} set={set} errors={errors} locked={locked} />
+              </div>
+            </TabPanel>
+          </Tabs>
+        </div>
+        <aside className="hidden xl:block" aria-label="On this tab">
+          <div className="sticky top-[8.5rem] pt-14">
+            <p className="mb-2 px-2 text-eyebrow text-subtle">On this tab</p>
+            <ul className="space-y-0.5 border-l border-border">
+              {sectionGroups(tab, form, { showHost: true }).map((g) => (
+                <li key={g.id}>
+                  <a
+                    href={`#${g.id}`}
+                    className="-ml-px block border-l border-transparent px-3 py-1 text-xs text-muted transition-colors hover:border-border-strong hover:text-fg focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
+                  >
+                    {g.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
+      </div>
 
       {Object.entries(serverErrors).filter(([k]) => !sectionForField(k)).length ? (
         <FormError message={Object.entries(serverErrors).filter(([k]) => !sectionForField(k)).map(([k, v]) => `${k}: ${v}`).join(" · ")} />
       ) : null}
 
-      <div className="sticky bottom-0 z-20 -mx-4 border-t border-border bg-bg/90 backdrop-blur sm:mx-0 sm:rounded-t-[var(--radius-lg)] sm:border-x">
-        <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-end">
-          <div className="min-w-0 flex-1 text-sm">
-            <p className="font-medium text-fg" aria-live="polite">
+      <div className="sticky bottom-0 z-20 -mx-4 border-t border-border bg-[var(--glass-strong)] shadow-elevated backdrop-blur-xl sm:mx-0 sm:mb-2 sm:rounded-[var(--radius-lg)] sm:border">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 px-4 py-3 lg:flex lg:items-end">
+          <div className="col-start-1 row-start-1 min-w-0 text-sm lg:flex-1">
+            <p className="flex items-center gap-2 font-medium text-fg" aria-live="polite">
+              <span className={cn("h-2 w-2 shrink-0 rounded-full", dirty ? "bg-warning" : "bg-success")} aria-hidden />
               {dirty ? `${changedKeys.length} unsaved change${changedKeys.length === 1 ? "" : "s"}` : "All changes saved"}
             </p>
-            {dirty ? <p className="truncate text-xs text-subtle">{changedKeys.map(titleCase).join(", ")}</p> : null}
+            {dirty ? <p className="truncate pl-4 text-xs text-subtle">{changedKeys.map(titleCase).join(", ")}</p> : null}
           </div>
           {m.lifecycle !== "draft" ? (
-            <Field label="Reason for change" hint="Shown in the change history for versioned fields." className="lg:w-80">
+            <Field label="Reason for change" hint="Shown in the change history for versioned fields." className="col-span-2 row-start-2 lg:w-80">
               {(p) => <Input {...p} value={reason} maxLength={500} placeholder="e.g. Extended deadline after outage" onChange={(e) => setReason(e.target.value)} />}
             </Field>
           ) : null}
-          <div className="flex gap-2">
+          <div className="col-start-2 row-start-1 flex gap-2">
             <Button variant="ghost" icon={<RotateCcw className="h-4 w-4" />} disabled={!dirty || save.isPending} onClick={() => { setForm(initial); setServerErrors({}); setLockError(null); }}>
-              Discard
+              <span className="max-sm:sr-only">Discard</span>
             </Button>
             <Button icon={<Save className="h-4 w-4" />} loading={save.isPending} disabled={!dirty} onClick={submit}>
               Save changes
@@ -218,11 +243,22 @@ export default function ManageSettingsPage() {
   const manage = useManage(slug);
   const [version, setVersion] = useState(0);
   const [tab, setTab] = useState<SectionKey>("basics");
-  if (manage.isPending) return <SkeletonRows rows={8} />;
+  if (manage.isPending) {
+    return (
+      <div className="space-y-6" role="status" aria-label="Loading settings">
+        <div className="space-y-2 border-b border-border pb-5">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-7 w-40" />
+        </div>
+        <Skeleton className="h-10 w-full max-w-lg" />
+        <Skeleton className="h-[28rem] w-full rounded-[var(--radius-lg)]" />
+      </div>
+    );
+  }
   if (manage.isError) return <ErrorState error={manage.error} onRetry={() => manage.refetch()} />;
   return (
     <div>
-      <ManageHeading title="Settings" description="Edit details, schedule, participation rules, scoring and content. Only changed fields are sent." />
+      <ManageHeading eyebrow="Configure" icon={<Settings2 />} title="Settings" description="Edit details, schedule, participation rules, scoring and content. Only changed fields are sent." />
       <SettingsForm key={version} m={manage.data} onSaved={() => setVersion((v) => v + 1)} tab={tab} setTab={setTab} />
     </div>
   );

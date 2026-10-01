@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Download } from "lucide-react";
+import { Check, Download, Minus } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { Field, Input, Select } from "@/components/ui/form";
@@ -120,15 +120,28 @@ export const SPONSOR_TIERS = ["title", "platinum", "gold", "silver", "partner", 
 
 /* ------------------------------------------------------------------ small UI pieces */
 
-/** Section heading for manage pages (the competition layout owns the page's h1). */
-export function ManageHeading({ title, description, actions }: { title: ReactNode; description?: ReactNode; actions?: ReactNode }) {
+/**
+ * Section heading for manage pages (the competition layout owns the page's h1, so this is the h2).
+ * `eyebrow` names the console group (Run / Configure / Outcomes) and `icon` mirrors the nav glyph.
+ */
+export function ManageHeading({ title, description, actions, eyebrow, icon }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0">
-        <h2 className="text-xl font-semibold tracking-tight text-fg">{title}</h2>
-        {description ? <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p> : null}
+    <div className="mb-6 flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0 animate-rise">
+        {eyebrow || icon ? (
+          <div className="mb-2 flex items-center gap-2">
+            {icon ? (
+              <span className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface-2 text-accent-strong [&_svg]:h-3.5 [&_svg]:w-3.5" aria-hidden>
+                {icon}
+              </span>
+            ) : null}
+            {eyebrow ? <p className="text-eyebrow text-accent-strong">{eyebrow}</p> : null}
+          </div>
+        ) : null}
+        <h2 className="text-xl font-semibold tracking-[-0.025em] text-fg sm:text-[1.65rem] sm:leading-tight">{title}</h2>
+        {description ? <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted">{description}</p> : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
+      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
   );
 }
@@ -140,7 +153,7 @@ export function DownloadLink({ path, children, className }: { path: string; chil
       href={`${API_BASE}${path}`}
       download
       className={cn(
-        "inline-flex h-8 items-center gap-2 whitespace-nowrap rounded-[var(--radius-md)] border border-border-strong px-3 text-sm font-medium text-fg transition-colors hover:bg-surface-2",
+        "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[var(--radius-md)] border border-border bg-surface-2 px-3 sm:h-8 text-[13px] font-medium text-fg shadow-[inset_0_1px_0_var(--hairline-highlight)] transition-[background-color,border-color] duration-200 hover:border-border-strong hover:bg-surface-3",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]",
         className,
       )}
@@ -267,23 +280,27 @@ export function TeamPicker({
 /** Simple checklist row used by publish checks and finalize prerequisites. */
 export function CheckRow({ ok, label, detail, required = true }: { ok: boolean; label: ReactNode; detail?: ReactNode; required?: boolean }) {
   return (
-    <li className="flex items-start gap-3 py-2.5">
+    <li className="flex items-start gap-3 py-3">
       <span
         className={cn(
-          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
-          ok ? "bg-success-soft text-success" : required ? "bg-danger-soft text-danger" : "bg-warning-soft text-warning",
+          "mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-1 ring-inset [&_svg]:h-3 [&_svg]:w-3",
+          ok
+            ? "bg-success-soft text-success ring-[color-mix(in_oklab,var(--success)_30%,transparent)]"
+            : required
+              ? "bg-danger-soft text-danger ring-[color-mix(in_oklab,var(--danger)_30%,transparent)]"
+              : "bg-warning-soft text-warning ring-[color-mix(in_oklab,var(--warning)_30%,transparent)]",
         )}
         aria-hidden
       >
-        {ok ? "✓" : required ? "!" : "–"}
+        {ok ? <Check strokeWidth={3} /> : required ? <span className="text-[11px] font-bold leading-none">!</span> : <Minus strokeWidth={3} />}
       </span>
       <div className="min-w-0 text-sm">
         <p className="font-medium text-fg">
           {label}
           <span className="sr-only">{ok ? " — done" : required ? " — required, not done" : " — recommended, not done"}</span>
-          {!required ? <span className="ml-2 text-xs font-normal text-subtle">Recommended</span> : null}
+          {!required ? <span className="ml-2 font-mono text-[10px] font-normal uppercase tracking-[0.12em] text-subtle">Recommended</span> : null}
         </p>
-        {detail ? <p className="mt-0.5 text-xs text-muted">{detail}</p> : null}
+        {detail ? <p className="mt-0.5 text-xs leading-relaxed text-muted">{detail}</p> : null}
       </div>
     </li>
   );

@@ -1,16 +1,18 @@
 "use client";
 
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, Building2, CalendarClock, Gavel, Plus, Send, Trophy, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, CalendarClock, ExternalLink, Gavel, LayoutGrid, Plus, Send, Settings2, Trophy, Users } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { Badge, DemoBadge, StatusBadge } from "@/components/ui/badge";
-import { LinkButton } from "@/components/ui/button";
-import { Card, Stat } from "@/components/ui/card";
+import { Button, LinkButton } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/extras";
+import { Cover } from "@/components/ui/misc";
 import { Container, PageHeader } from "@/components/ui/page";
-import { EmptyState, ErrorState, InlineNotice, SkeletonRows, Spinner } from "@/components/ui/states";
+import { EmptyState, ErrorState, InlineNotice, Skeleton, SkeletonRows, SkeletonStats } from "@/components/ui/states";
 import { publishChecksKey, type PublishCheck } from "@/components/organizer/shared";
+import { Tile, TileGrid } from "@/components/organizer/ui";
 import { get } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDateTime, formatNumber, relativeTime, titleCase } from "@/lib/format";
@@ -86,74 +88,115 @@ const toneClass: Record<Tone, string> = {
   info: "border-info/40 text-info",
 };
 
+const toneDot: Record<Tone, string> = {
+  neutral: "bg-border-strong",
+  success: "bg-success",
+  warning: "bg-warning",
+  danger: "bg-danger",
+  accent: "bg-accent",
+  info: "bg-info",
+};
+
+function RowMetric({ label, children, title }: { label: string; children: ReactNode; title?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-subtle">{label}</dt>
+      <dd className="tabular mt-1 truncate text-sm text-fg" title={title}>{children}</dd>
+    </div>
+  );
+}
+
 function CompetitionRow({ row, checks }: { row: Row; checks?: PublishCheck[] }) {
   const c = row.card;
   const action = nextAction(row, checks);
   const organizer = row.roles.includes("organizer");
+  const startsView = c.status === "upcoming" || c.status === "draft";
   return (
-    <Card className="p-4 sm:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={c.status} />
-            {c.is_demo ? <DemoBadge /> : null}
-            {row.roles.map((r) => (
-              <Badge key={r} tone="outline">{titleCase(r)}</Badge>
-            ))}
-            <Badge tone="outline">{titleCase(c.visibility)}</Badge>
+    <li className="relative grid gap-4 px-4 py-4 transition-colors duration-200 hover:bg-surface-2/40 sm:px-5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-center lg:gap-6">
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-4">
+          <Cover style={c.cover_style} className="hidden h-[3.25rem] w-[4.5rem] shrink-0 rounded-[var(--radius-md)] border border-border sm:block" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <StatusBadge status={c.status} />
+              {c.is_demo ? <DemoBadge /> : null}
+              {row.roles.map((r) => (
+                <Badge key={r} tone="outline">{titleCase(r)}</Badge>
+              ))}
+              <Badge tone="outline">{titleCase(c.visibility)}</Badge>
+            </div>
+            <h2 className="mt-1.5 line-clamp-2 text-[15px] font-semibold tracking-[-0.01em] text-fg sm:truncate">
+              <Link
+                href={organizer ? `/competitions/${c.slug}/manage` : `/competitions/${c.slug}`}
+                className="rounded-sm transition-colors hover:text-accent-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]"
+              >
+                {c.title}
+              </Link>
+            </h2>
+            <p className="mt-0.5 truncate text-xs text-subtle">
+              {titleCase(c.event_type)} · {c.scoring_mode === "automatic" ? (c.metric ?? "automatic scoring") : titleCase(c.scoring_mode)}
+              {c.host ? <> · hosted by {c.host.name}</> : null}
+            </p>
           </div>
-          <h2 className="mt-2 truncate text-base font-semibold text-fg">
-            <Link href={organizer ? `/competitions/${c.slug}/manage` : `/competitions/${c.slug}`} className="hover:text-accent-strong">
-              {c.title}
-            </Link>
-          </h2>
-          <p className="mt-0.5 text-xs text-subtle">
-            {titleCase(c.event_type)} · {c.scoring_mode === "automatic" ? (c.metric ?? "automatic scoring") : titleCase(c.scoring_mode)}
-            {c.host ? <> · hosted by {c.host.name}</> : null}
-          </p>
-          <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-            <div>
-              <dt className="text-xs text-subtle">Participants</dt>
-              <dd className="tabular-nums text-fg">{formatNumber(c.participant_count)} <span className="text-xs text-subtle">· {formatNumber(c.team_count)} teams</span></dd>
-            </div>
-            <div>
-              <dt className="text-xs text-subtle">Submissions (24h)</dt>
-              <dd className="tabular-nums text-fg">{formatNumber(row.submissions_24h)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-subtle">Queue / failed</dt>
-              <dd className="tabular-nums">
-                <span className={row.pending_submissions ? "text-warning" : "text-fg"}>{formatNumber(row.pending_submissions)}</span>
-                <span className="text-subtle"> / </span>
-                <span className={row.failed_submissions ? "font-semibold text-danger" : "text-fg"}>{formatNumber(row.failed_submissions)}</span>
-                {row.failed_submissions ? <span className="sr-only"> failed submissions need attention</span> : null}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-subtle">{c.status === "upcoming" || c.status === "draft" ? "Starts" : "Ends"}</dt>
-              <dd className="text-fg" title={formatDateTime(c.status === "upcoming" || c.status === "draft" ? c.starts_at : c.ends_at)}>
-                {c.status === "upcoming" || c.status === "draft" ? (c.starts_at ? relativeTime(c.starts_at) : "Not set") : c.ends_at ? relativeTime(c.ends_at) : "Not set"}
-              </dd>
-            </div>
-          </dl>
-          {row.last_submission_at ? <p className="mt-2 text-xs text-subtle">Last submission {relativeTime(row.last_submission_at)}</p> : null}
         </div>
-        <div className="flex shrink-0 flex-col gap-2 lg:w-72 lg:items-end">
-          <Link
-            href={action.href}
-            className={cn("inline-flex items-center justify-between gap-2 rounded-[var(--radius-md)] border px-3 py-2 text-sm font-medium transition-colors hover:bg-surface-2", toneClass[action.tone])}
-          >
-            <span>{action.label}</span>
-            <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
-          </Link>
-          <div className="flex flex-wrap gap-2 lg:justify-end">
-            {organizer ? <LinkButton href={`/competitions/${c.slug}/manage`} size="sm" variant="secondary">Manage</LinkButton> : null}
-            {row.roles.includes("judge") ? <LinkButton href={`/judge/${c.slug}`} size="sm" variant="ghost" icon={<Gavel className="h-4 w-4" />}>Judge</LinkButton> : null}
-            <LinkButton href={`/competitions/${c.slug}`} size="sm" variant="ghost">Public page</LinkButton>
+        <dl className="mt-3.5 grid grid-cols-2 gap-x-6 gap-y-3 sm:ml-[5.5rem] sm:grid-cols-4">
+          <RowMetric label="Participants">
+            {formatNumber(c.participant_count)} <span className="text-xs text-subtle">· {formatNumber(c.team_count)} teams</span>
+          </RowMetric>
+          <RowMetric label="Submissions 24h">{formatNumber(row.submissions_24h)}</RowMetric>
+          <div className="min-w-0">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-subtle">Queue / failed</dt>
+            <dd className="tabular mt-1 text-sm">
+              <span className={row.pending_submissions ? "text-warning" : "text-fg"}>{formatNumber(row.pending_submissions)}</span>
+              <span className="text-subtle"> / </span>
+              <span className={row.failed_submissions ? "font-semibold text-danger" : "text-fg"}>{formatNumber(row.failed_submissions)}</span>
+              {row.failed_submissions ? <span className="sr-only"> failed submissions need attention</span> : null}
+            </dd>
           </div>
+          <RowMetric label={startsView ? "Starts" : "Ends"} title={formatDateTime(startsView ? c.starts_at : c.ends_at)}>
+            {startsView ? (c.starts_at ? relativeTime(c.starts_at) : "Not set") : c.ends_at ? relativeTime(c.ends_at) : "Not set"}
+          </RowMetric>
+        </dl>
+        {row.last_submission_at ? <p className="mt-2.5 text-xs text-subtle sm:ml-[5.5rem]">Last submission {relativeTime(row.last_submission_at)}</p> : null}
+      </div>
+      <div className="flex min-w-0 flex-col gap-2 lg:items-stretch">
+        <Link
+          href={action.href}
+          className={cn(
+            "group/next inline-flex min-h-10 items-center justify-between gap-2 rounded-[var(--radius-md)] border bg-bg-elevated/60 px-3 py-2 text-sm font-medium transition-colors duration-200 hover:bg-surface-2",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]",
+            toneClass[action.tone],
+          )}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", toneDot[action.tone])} aria-hidden />
+            <span className="min-w-0">{action.label}</span>
+          </span>
+          <ArrowRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover/next:translate-x-0.5" aria-hidden />
+        </Link>
+        <div className="flex flex-wrap gap-1.5 lg:justify-end">
+          {organizer ? <LinkButton href={`/competitions/${c.slug}/manage`} size="sm" variant="secondary" icon={<Settings2 className="h-3.5 w-3.5" />}>Manage</LinkButton> : null}
+          {row.roles.includes("judge") ? <LinkButton href={`/judge/${c.slug}`} size="sm" variant="ghost" icon={<Gavel className="h-4 w-4" />}>Judge</LinkButton> : null}
+          <LinkButton href={`/competitions/${c.slug}`} size="sm" variant="ghost" icon={<ExternalLink className="h-3.5 w-3.5" />}>Public page</LinkButton>
         </div>
       </div>
-    </Card>
+    </li>
+  );
+}
+
+function OrganizeSkeleton() {
+  return (
+    <Container>
+      <div className="space-y-6 pb-16 pt-12" role="status" aria-label="Loading your competitions">
+        <div className="space-y-3">
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="h-9 w-72 max-w-full" />
+          <Skeleton className="h-4 w-[30rem] max-w-full" />
+        </div>
+        <SkeletonStats count={4} />
+        <SkeletonRows rows={4} />
+      </div>
+    </Container>
   );
 }
 
@@ -184,7 +227,7 @@ export default function OrganizePage() {
     return out;
   }, [drafts, checks]);
 
-  if (me.isPending || !me.data) return <Spinner />;
+  if (me.isPending || !me.data) return <OrganizeSkeleton />;
 
   const hosts = (memberships.data ?? []).filter((m) => m.status === "active" && ["owner", "admin", "manager"].includes(m.role));
   const canCreate = hosts.length > 0 || hasRole(me.data, "platform_admin");
@@ -194,11 +237,24 @@ export default function OrganizePage() {
   const visible = list.filter((r) => matches(r, filter));
 
   return (
-    <Container>
+    <Container className="pb-16">
       <PageHeader
         eyebrow="Organizer tools"
+        icon={<LayoutGrid />}
         title="Your competitions"
         description="Competitions and events you organize, judge or oversee through your organizations — with health signals and the next step for each."
+        meta={
+          memberships.isSuccess ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" aria-hidden />
+              {hosts.length
+                ? `You can host with ${hosts.length} ${hosts.length === 1 ? "organization" : "organizations"}`
+                : hasRole(me.data, "platform_admin")
+                  ? "Platform admin — you can host platform events"
+                  : "No hosting organization yet"}
+            </span>
+          ) : undefined
+        }
         actions={
           canCreate ? (
             <LinkButton href="/organize/new" icon={<Plus className="h-4 w-4" />}>Create competition</LinkButton>
@@ -230,12 +286,15 @@ export default function OrganizePage() {
       ) : null}
 
       {rows.isPending ? (
-        <SkeletonRows rows={5} />
+        <div className="space-y-6" role="status" aria-label="Loading your competitions">
+          <SkeletonStats count={4} />
+          <SkeletonRows rows={5} />
+        </div>
       ) : rows.isError ? (
         <ErrorState error={rows.error} onRetry={() => rows.refetch()} />
       ) : list.length === 0 ? (
         <EmptyState
-          icon={<Trophy className="h-5 w-5" />}
+          icon={<Trophy />}
           title="You're not organizing anything yet"
           description="Create a competition hosted by an organization you manage. You'll set up scoring, the schedule and content in a guided wizard, then publish when the checklist is complete."
           action={
@@ -248,62 +307,74 @@ export default function OrganizePage() {
         />
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Stat label="Competitions" value={formatNumber(list.filter((r) => r.card.status !== "archived").length)} icon={<Trophy className="h-4 w-4" />} />
-            <Stat label="Upcoming & live" value={formatNumber(counts.live)} icon={<CalendarClock className="h-4 w-4" />} />
-            <Stat label="Drafts" value={formatNumber(counts.draft)} icon={<Send className="h-4 w-4" />} />
-            <Stat
+          <TileGrid cols={4} className="mb-8 animate-rise [animation-delay:80ms]">
+            <Tile label="Competitions" value={formatNumber(list.filter((r) => r.card.status !== "archived").length)} icon={<Trophy />} hint="Excluding archived" />
+            <Tile label="Upcoming & live" value={formatNumber(counts.live)} icon={<CalendarClock />} accent="success" />
+            <Tile label="Drafts" value={formatNumber(counts.draft)} icon={<Send />} accent="info" />
+            <Tile
               label="Need attention"
               value={formatNumber(attention)}
               hint="Failed submissions or results to finalize"
-              icon={<AlertTriangle className={cn("h-4 w-4", attention ? "text-warning" : "")} />}
+              icon={<AlertTriangle />}
+              accent={attention ? "warning" : "muted"}
             />
-          </div>
-          <div className="mb-4 flex gap-1 overflow-x-auto border-b border-border" role="group" aria-label="Filter competitions">
-            {FILTERS.map((f) => (
-              <button
-                key={f.key}
-                type="button"
-                aria-pressed={filter === f.key}
-                onClick={() => setFilter(f.key)}
-                className={cn(
-                  "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
-                  filter === f.key ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg",
-                )}
-              >
-                {f.label}
-                <span className="ml-1.5 rounded-full bg-surface-3 px-1.5 text-xs text-subtle">{counts[f.key]}</span>
-              </button>
-            ))}
+          </TileGrid>
+
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* 36px touch targets on phones; the right-edge fade hints that the row scrolls, and the trailing
+                padding keeps the last segment clear of the fade once scrolled to the end. */}
+            <SegmentedControl
+              label="Filter competitions"
+              value={filter}
+              onChange={setFilter}
+              options={FILTERS.map((f) => ({ value: f.key, label: f.label, count: counts[f.key] }))}
+              className="pr-7 [mask-image:linear-gradient(to_right,black_calc(100%_-_28px),transparent)] sm:pr-0.5 sm:[mask-image:none] [&>button]:h-9 sm:[&>button]:h-8"
+            />
+            <p className="tabular px-1 text-xs text-subtle" aria-live="polite">
+              {/* "All" excludes archived competitions, so the total does too; the Archived view counts itself. */}
+              {filter === "archived"
+                ? `Showing ${formatNumber(visible.length)} archived`
+                : `Showing ${formatNumber(visible.length)} of ${formatNumber(counts.all)}`}
+            </p>
           </div>
           {visible.length === 0 ? (
-            <EmptyState icon={<Users className="h-5 w-5" />} title="Nothing in this view" description="Try another filter." />
+            <EmptyState
+              icon={<Users />}
+              title="Nothing in this view"
+              description="Try another filter."
+              action={filter !== "all" ? <Button variant="secondary" onClick={() => setFilter("all")}>Show all</Button> : undefined}
+            />
           ) : (
-            <div className="grid gap-3">
+            <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen shadow-card" aria-label="Competitions">
               {visible.map((r) => (
                 <CompetitionRow key={r.card.id} row={r} checks={checksBySlug[r.card.slug]} />
               ))}
-            </div>
+            </ul>
           )}
         </>
       )}
 
-      <section className="mt-10 grid gap-4 rounded-[var(--radius-lg)] border border-border bg-surface p-5 sm:grid-cols-3" aria-labelledby="organizer-guide">
-        <h2 id="organizer-guide" className="sr-only">How hosting works</h2>
-        <div>
-          <p className="text-sm font-semibold text-fg">1. Host through an organization</p>
-          <p className="mt-1 text-sm text-muted">
-            Competitions belong to an organization you manage. No organization yet? <Link href="/orgs/new" className="text-accent-strong hover:underline">Create one</Link>.
-          </p>
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-fg">2. Configure and publish</p>
-          <p className="mt-1 text-sm text-muted">Set the schedule, scoring and content, upload hidden ground truth, then publish once the checklist is green.</p>
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-fg">3. Run, finalize, certify</p>
-          <p className="mt-1 text-sm text-muted">Monitor submissions, post announcements, finalize a versioned results snapshot and issue verifiable certificates.</p>
-        </div>
+      <section className="mt-12" aria-labelledby="organizer-guide">
+        <h2 id="organizer-guide" className="mb-4 text-eyebrow text-subtle">How hosting works</h2>
+        <ol className="grid gap-px overflow-hidden rounded-[var(--radius-lg)] border border-border bg-border sm:grid-cols-3">
+          <li className="bg-surface p-5">
+            <p className="tabular font-mono text-[11px] text-accent-strong">01</p>
+            <p className="mt-2 text-sm font-semibold text-fg">Host through an organization</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">
+              Competitions belong to an organization you manage. No organization yet? <Link href="/orgs/new" className="text-accent-strong hover:underline">Create one</Link>.
+            </p>
+          </li>
+          <li className="bg-surface p-5">
+            <p className="tabular font-mono text-[11px] text-accent-strong">02</p>
+            <p className="mt-2 text-sm font-semibold text-fg">Configure and publish</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">Set the schedule, scoring and content, upload hidden ground truth, then publish once the checklist is green.</p>
+          </li>
+          <li className="bg-surface p-5">
+            <p className="tabular font-mono text-[11px] text-accent-strong">03</p>
+            <p className="mt-2 text-sm font-semibold text-fg">Run, finalize, certify</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">Monitor submissions, post announcements, finalize a versioned results snapshot and issue verifiable certificates.</p>
+          </li>
+        </ol>
       </section>
     </Container>
   );

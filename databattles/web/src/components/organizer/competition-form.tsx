@@ -358,7 +358,7 @@ export interface SectionProps {
 
 const never = () => false;
 
-function ChoiceCards({ legend, name, value, options, onChange, disabled, error }: {
+function ChoiceCards({ legend, name, value, options, onChange, disabled, error, legendHidden, cols = 2 }: {
   legend: ReactNode;
   name: string;
   value: string;
@@ -366,26 +366,32 @@ function ChoiceCards({ legend, name, value, options, onChange, disabled, error }
   onChange: (v: string) => void;
   disabled?: boolean;
   error?: string;
+  /** Keep the legend for assistive tech when a group heading already shows the same label. */
+  legendHidden?: boolean;
+  cols?: 2 | 3;
 }) {
   return (
     <fieldset disabled={disabled} className="disabled:opacity-60">
-      <legend className="mb-2 text-sm font-medium text-fg">{legend}</legend>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <legend className={cn("mb-2 text-sm font-medium text-fg", legendHidden && "sr-only")}>{legend}</legend>
+      <div className={cn("grid gap-2.5 sm:grid-cols-2", cols === 3 && "xl:grid-cols-3")}>
         {options.map((o) => {
           const checked = value === o.value;
           return (
             <label
               key={o.value}
               className={cn(
-                "flex cursor-pointer gap-3 rounded-[var(--radius-md)] border p-3 transition-colors",
-                checked ? "border-accent bg-accent-soft" : "border-border hover:border-border-strong",
+                "relative flex cursor-pointer gap-3 rounded-[var(--radius-md)] border p-3.5 transition-[border-color,background-color,box-shadow] duration-200",
+                "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--ring)]",
+                checked
+                  ? "border-[color-mix(in_oklab,var(--accent)_55%,var(--border))] bg-accent-soft shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_12%,transparent)]"
+                  : "border-border bg-bg-elevated/50 hover:border-border-strong hover:bg-surface-2/60",
                 disabled && "cursor-not-allowed",
               )}
             >
-              <input type="radio" name={name} value={o.value} checked={checked} onChange={() => onChange(o.value)} className="mt-1 accent-[var(--accent)]" />
-              <span>
+              <input type="radio" name={name} value={o.value} checked={checked} onChange={() => onChange(o.value)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]" />
+              <span className="min-w-0">
                 <span className="block text-sm font-medium text-fg">{o.label}</span>
-                <span className="mt-0.5 block text-xs text-muted">{o.description}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted">{o.description}</span>
               </span>
             </label>
           );
@@ -393,6 +399,25 @@ function ChoiceCards({ legend, name, value, options, onChange, disabled, error }
       </div>
       {error ? <p role="alert" className="mt-1.5 text-xs font-medium text-danger">{error}</p> : null}
     </fieldset>
+  );
+}
+
+/**
+ * A titled group of fields inside a form section. Its `id` is the anchor target used by the builder's
+ * section index (see `sectionGroups`).
+ */
+function FormGroup({ id, title, description, action, children }: { id: string; title: ReactNode; description?: ReactNode; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-12 border-t border-border pt-7 first:border-t-0 first:pt-0">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h3 id={`${id}-title`} className="text-[15px] font-semibold tracking-[-0.01em] text-fg">{title}</h3>
+          {description ? <p className="mt-0.5 text-xs leading-relaxed text-muted">{description}</p> : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      <div className="grid gap-5">{children}</div>
+    </section>
   );
 }
 
@@ -408,60 +433,66 @@ export function BasicsSection({ form, set, errors, locked = never, hosts, hostsL
   allowNoHost?: boolean;
 }) {
   return (
-    <div className="grid gap-5">
-      <Field label="Title" required error={fieldError(errors, "title")} hint="3–140 characters.">
-        {(p) => <Input {...p} value={form.title} maxLength={140} disabled={locked("title")} onChange={(e) => set({ title: e.target.value })} />}
-      </Field>
-      <Field label="Summary" error={fieldError(errors, "summary")} hint={`One or two sentences shown on cards. ${form.summary.length}/280 (at least 20 to publish).`}>
-        {(p) => <Textarea {...p} rows={2} value={form.summary} maxLength={280} disabled={locked("summary")} onChange={(e) => set({ summary: e.target.value })} />}
-      </Field>
-      <div className="grid gap-5 sm:grid-cols-3">
-        <Field label="Event type" error={fieldError(errors, "event_type")}>
-          {(p) => (
-            <Select {...p} value={form.event_type} disabled={locked("event_type")} onChange={(e) => set({ event_type: e.target.value })}>
-              {EVENT_TYPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </Select>
-          )}
+    <div className="grid gap-7">
+      <FormGroup id="cf-identity" title="Identity" description="How the competition appears on cards, in search and on its page.">
+        <Field label="Title" required error={fieldError(errors, "title")} hint="3–140 characters.">
+          {(p) => <Input {...p} value={form.title} maxLength={140} disabled={locked("title")} onChange={(e) => set({ title: e.target.value })} />}
         </Field>
-        <Field label="Task type" error={fieldError(errors, "task_type")}>
-          {(p) => (
-            <Select {...p} value={form.task_type} disabled={locked("task_type")} onChange={(e) => set({ task_type: e.target.value })}>
-              {TASK_TYPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </Select>
-          )}
+        <Field label="Summary" error={fieldError(errors, "summary")} hint={`One or two sentences shown on cards. ${form.summary.length}/280 (at least 20 to publish).`}>
+          {(p) => <Textarea {...p} rows={2} value={form.summary} maxLength={280} disabled={locked("summary")} onChange={(e) => set({ summary: e.target.value })} />}
         </Field>
-        <Field label="Difficulty" error={fieldError(errors, "difficulty")}>
-          {(p) => (
-            <Select {...p} value={form.difficulty} disabled={locked("difficulty")} onChange={(e) => set({ difficulty: e.target.value })}>
-              {DIFFICULTIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </Select>
-          )}
+      </FormGroup>
+      <FormGroup id="cf-classification" title="Classification" description="Helps participants find a challenge that fits them.">
+        <div className="grid gap-5 sm:grid-cols-3">
+          <Field label="Event type" error={fieldError(errors, "event_type")}>
+            {(p) => (
+              <Select {...p} value={form.event_type} disabled={locked("event_type")} onChange={(e) => set({ event_type: e.target.value })}>
+                {EVENT_TYPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </Select>
+            )}
+          </Field>
+          <Field label="Task type" error={fieldError(errors, "task_type")}>
+            {(p) => (
+              <Select {...p} value={form.task_type} disabled={locked("task_type")} onChange={(e) => set({ task_type: e.target.value })}>
+                {TASK_TYPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </Select>
+            )}
+          </Field>
+          <Field label="Difficulty" error={fieldError(errors, "difficulty")}>
+            {(p) => (
+              <Select {...p} value={form.difficulty} disabled={locked("difficulty")} onChange={(e) => set({ difficulty: e.target.value })}>
+                {DIFFICULTIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </Select>
+            )}
+          </Field>
+        </div>
+        <Field label="Tags" error={fieldError(errors, "tags")} hint="Press Enter or comma after each tag (up to 12).">
+          {(p) => (locked("tags") ? <Input {...p} value={form.tags.join(", ")} disabled readOnly /> : <TagInput id={p.id} value={form.tags} onChange={(tags) => set({ tags })} placeholder="tabular, beginner-friendly…" />)}
         </Field>
-      </div>
-      <Field label="Tags" error={fieldError(errors, "tags")} hint="Press Enter or comma after each tag (up to 12).">
-        {(p) => (locked("tags") ? <Input {...p} value={form.tags.join(", ")} disabled readOnly /> : <TagInput id={p.id} value={form.tags} onChange={(tags) => set({ tags })} placeholder="tabular, beginner-friendly…" />)}
-      </Field>
+      </FormGroup>
       {hosts !== undefined || hostsLoading ? (
-        <Field
-          label="Host organization"
-          required={!allowNoHost}
-          error={fieldError(errors, "host_org_id")}
-          hint="Competitions are hosted by an organization you manage (owner, admin or manager)."
-        >
-          {(p) => (
-            <Select {...p} value={form.host_org_id} disabled={hostsLoading || locked("host_org_id")} onChange={(e) => set({ host_org_id: e.target.value })}>
-              <option value="" disabled={!allowNoHost}>
-                {hostsLoading ? "Loading your organizations…" : allowNoHost ? "No host (platform event)" : "Choose an organization"}
-              </option>
-              {form.host_org_id && hosts && !hosts.some((h) => h.id === form.host_org_id) ? <option value={form.host_org_id}>Current host</option> : null}
-              {hosts?.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name} ({h.role})
+        <FormGroup id="cf-host" title="Host" description="The organization that runs the competition and appears as its host.">
+          <Field
+            label="Host organization"
+            required={!allowNoHost}
+            error={fieldError(errors, "host_org_id")}
+            hint="Competitions are hosted by an organization you manage (owner, admin or manager)."
+          >
+            {(p) => (
+              <Select {...p} value={form.host_org_id} disabled={hostsLoading || locked("host_org_id")} onChange={(e) => set({ host_org_id: e.target.value })}>
+                <option value="" disabled={!allowNoHost}>
+                  {hostsLoading ? "Loading your organizations…" : allowNoHost ? "No host (platform event)" : "Choose an organization"}
                 </option>
-              ))}
-            </Select>
-          )}
-        </Field>
+                {form.host_org_id && hosts && !hosts.some((h) => h.id === form.host_org_id) ? <option value={form.host_org_id}>Current host</option> : null}
+                {hosts?.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name} ({h.role})
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        </FormGroup>
       ) : null}
     </div>
   );
@@ -470,21 +501,29 @@ export function BasicsSection({ form, set, errors, locked = never, hosts, hostsL
 export function ScheduleSection({ form, set, errors, locked = never }: SectionProps) {
   const tz = form.timezone || "UTC";
   return (
-    <div className="grid gap-5">
-      <Field
-        label="Time zone"
-        error={fieldError(errors, "timezone")}
-        hint="Times below are entered in this zone. Participants always see deadlines in their own local time. Changing the zone keeps the wall-clock times and moves the actual instants."
-      >
-        {(p) => <TimeZoneSelect {...p} value={tz} disabled={locked("timezone")} onChange={(timezone) => set({ timezone })} />}
-      </Field>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <ZonedDateTimeField label="Starts" timeZone={tz} value={form.starts_at} onChange={(v) => set({ starts_at: v })} error={fieldError(errors, "starts_at")} disabled={locked("starts_at")} hint="Submissions open at this time (required to publish)." />
-        <ZonedDateTimeField label="Ends" timeZone={tz} value={form.ends_at} onChange={(v) => set({ ends_at: v })} error={fieldError(errors, "ends_at")} disabled={locked("ends_at")} hint="Submissions close at this instant (exclusive)." />
-        <ZonedDateTimeField label="Registration opens" timeZone={tz} value={form.registration_opens_at} onChange={(v) => set({ registration_opens_at: v })} error={fieldError(errors, "registration_opens_at")} disabled={locked("registration_opens_at")} hint="Optional — defaults to publication." />
-        <ZonedDateTimeField label="Registration closes" timeZone={tz} value={form.registration_closes_at} onChange={(v) => set({ registration_closes_at: v })} error={fieldError(errors, "registration_closes_at")} disabled={locked("registration_closes_at")} hint="Optional — defaults to the end." />
-        <ZonedDateTimeField label="Team changes lock" timeZone={tz} value={form.team_lock_at} onChange={(v) => set({ team_lock_at: v })} error={fieldError(errors, "team_lock_at")} disabled={locked("team_lock_at")} hint="Optional — after this, teams can't merge or change members." />
-      </div>
+    <div className="grid gap-7">
+      <FormGroup id="cf-timezone" title="Time zone" description="The zone organizers enter times in.">
+        <Field
+          label="Time zone"
+          error={fieldError(errors, "timezone")}
+          hint="Times below are entered in this zone. Participants always see deadlines in their own local time. Changing the zone keeps the wall-clock times and moves the actual instants."
+        >
+          {(p) => <TimeZoneSelect {...p} value={tz} disabled={locked("timezone")} onChange={(timezone) => set({ timezone })} />}
+        </Field>
+      </FormGroup>
+      <FormGroup id="cf-window" title="Competition window" description="When submissions open and close.">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <ZonedDateTimeField label="Starts" timeZone={tz} value={form.starts_at} onChange={(v) => set({ starts_at: v })} error={fieldError(errors, "starts_at")} disabled={locked("starts_at")} hint="Submissions open at this time (required to publish)." />
+          <ZonedDateTimeField label="Ends" timeZone={tz} value={form.ends_at} onChange={(v) => set({ ends_at: v })} error={fieldError(errors, "ends_at")} disabled={locked("ends_at")} hint="Submissions close at this instant (exclusive)." />
+        </div>
+      </FormGroup>
+      <FormGroup id="cf-registration" title="Registration & teams" description="Optional — sensible defaults apply when left blank.">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <ZonedDateTimeField label="Registration opens" timeZone={tz} value={form.registration_opens_at} onChange={(v) => set({ registration_opens_at: v })} error={fieldError(errors, "registration_opens_at")} disabled={locked("registration_opens_at")} hint="Optional — defaults to publication." />
+          <ZonedDateTimeField label="Registration closes" timeZone={tz} value={form.registration_closes_at} onChange={(v) => set({ registration_closes_at: v })} error={fieldError(errors, "registration_closes_at")} disabled={locked("registration_closes_at")} hint="Optional — defaults to the end." />
+          <ZonedDateTimeField label="Team changes lock" timeZone={tz} value={form.team_lock_at} onChange={(v) => set({ team_lock_at: v })} error={fieldError(errors, "team_lock_at")} disabled={locked("team_lock_at")} hint="Optional — after this, teams can't merge or change members." />
+        </div>
+      </FormGroup>
     </div>
   );
 }
@@ -508,51 +547,58 @@ export function ParticipationSection({ form, set, errors, locked = never }: Sect
     </Field>
   );
   return (
-    <div className="grid gap-6">
-      <ChoiceCards
-        legend="Visibility"
-        name="visibility"
-        value={form.visibility}
-        options={VISIBILITIES}
-        onChange={(visibility) => set({ visibility })}
-        disabled={locked("visibility")}
-        error={fieldError(errors, "visibility")}
-      />
-      {form.visibility === "invite_only" || form.visibility === "private" ? (
-        <InlineNotice tone="info">An invite code is generated when you publish. You can share or rotate it from the overview page.</InlineNotice>
-      ) : null}
-      <div className="grid gap-5 sm:grid-cols-2">
-        {num("team_min_size", "Minimum team size", "1 lets people compete solo.", 1, 20)}
-        {num("team_max_size", "Maximum team size", "Up to 20 members.", 1, 20)}
-        {num("daily_submission_limit", "Daily submissions per team", "Resets at 00:00 UTC.", 1, 100)}
-        {num("total_submission_limit", "Total submissions per team", "Leave blank for no overall limit.", 1, 10000, "Unlimited")}
-        {num("max_submission_mb", "Max submission size (MB)", "Per file, 1–200 MB.", 1, 200)}
-        {num("final_selection_limit", "Final submissions a team may select", "Used for the private leaderboard (1–5).", 1, 5)}
-      </div>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Format" error={fieldError(errors, "format")}>
-          {(p) => (
-            <Select {...p} value={form.format} disabled={locked("format")} onChange={(e) => set({ format: e.target.value })}>
-              {FORMATS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </Select>
-          )}
-        </Field>
-        {form.format !== "online" ? (
-          <Field label="Venue name" error={fieldError(errors, "venue_name")}>
-            {(p) => <Input {...p} value={form.venue_name} maxLength={160} disabled={locked("venue_name")} onChange={(e) => set({ venue_name: e.target.value })} />}
-          </Field>
+    <div className="grid gap-7">
+      <FormGroup id="cf-visibility" title="Visibility" description="Who can find, view and join the competition.">
+        <ChoiceCards
+          legendHidden
+          legend="Visibility"
+          name="visibility"
+          value={form.visibility}
+          options={VISIBILITIES}
+          onChange={(visibility) => set({ visibility })}
+          disabled={locked("visibility")}
+          error={fieldError(errors, "visibility")}
+        />
+        {form.visibility === "invite_only" || form.visibility === "private" ? (
+          <InlineNotice tone="info">An invite code is generated when you publish. You can share or rotate it from the overview page.</InlineNotice>
         ) : null}
-      </div>
-      {form.format !== "online" ? (
+      </FormGroup>
+      <FormGroup id="cf-limits" title="Teams & submission limits" description="Team sizes and how often teams can submit.">
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Venue address" error={fieldError(errors, "venue_address")}>
-            {(p) => <Input {...p} value={form.venue_address} maxLength={300} disabled={locked("venue_address")} onChange={(e) => set({ venue_address: e.target.value })} />}
-          </Field>
-          <Field label="Venue notes" error={fieldError(errors, "venue_notes")} hint="Access, parking, what to bring.">
-            {(p) => <Textarea {...p} rows={2} value={form.venue_notes} maxLength={5000} disabled={locked("venue_notes")} onChange={(e) => set({ venue_notes: e.target.value })} />}
-          </Field>
+          {num("team_min_size", "Minimum team size", "1 lets people compete solo.", 1, 20)}
+          {num("team_max_size", "Maximum team size", "Up to 20 members.", 1, 20)}
+          {num("daily_submission_limit", "Daily submissions per team", "Resets at 00:00 UTC.", 1, 100)}
+          {num("total_submission_limit", "Total submissions per team", "Leave blank for no overall limit.", 1, 10000, "Unlimited")}
+          {num("max_submission_mb", "Max submission size (MB)", "Per file, 1–200 MB.", 1, 200)}
+          {num("final_selection_limit", "Final submissions a team may select", "Used for the private leaderboard (1–5).", 1, 5)}
         </div>
-      ) : null}
+      </FormGroup>
+      <FormGroup id="cf-format" title="Format & venue" description="Online, in person or hybrid.">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Format" error={fieldError(errors, "format")}>
+            {(p) => (
+              <Select {...p} value={form.format} disabled={locked("format")} onChange={(e) => set({ format: e.target.value })}>
+                {FORMATS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </Select>
+            )}
+          </Field>
+          {form.format !== "online" ? (
+            <Field label="Venue name" error={fieldError(errors, "venue_name")}>
+              {(p) => <Input {...p} value={form.venue_name} maxLength={160} disabled={locked("venue_name")} onChange={(e) => set({ venue_name: e.target.value })} />}
+            </Field>
+          ) : null}
+        </div>
+        {form.format !== "online" ? (
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Venue address" error={fieldError(errors, "venue_address")}>
+              {(p) => <Input {...p} value={form.venue_address} maxLength={300} disabled={locked("venue_address")} onChange={(e) => set({ venue_address: e.target.value })} />}
+            </Field>
+            <Field label="Venue notes" error={fieldError(errors, "venue_notes")} hint="Access, parking, what to bring.">
+              {(p) => <Textarea {...p} rows={2} value={form.venue_notes} maxLength={5000} disabled={locked("venue_notes")} onChange={(e) => set({ venue_notes: e.target.value })} />}
+            </Field>
+          </div>
+        ) : null}
+      </FormGroup>
     </div>
   );
 }
@@ -562,18 +608,29 @@ export function ScoringSection({ form, set, errors, locked = never, config }: Se
   const metric = metrics.find((m) => m.key === form.metric);
   const evalLocked = locked("evaluation");
   return (
-    <div className="grid gap-6">
-      <ChoiceCards
-        legend="Scoring mode"
-        name="scoring_mode"
-        value={form.scoring_mode}
-        options={SCORING_MODES}
-        onChange={(scoring_mode) => set({ scoring_mode })}
-        disabled={locked("scoring_mode")}
-        error={fieldError(errors, "scoring_mode")}
-      />
+    <div className="grid gap-7">
+      <FormGroup id="cf-mode" title="Scoring mode" description="How entries are evaluated and ranked.">
+        <ChoiceCards
+          legendHidden
+          cols={3}
+          legend="Scoring mode"
+          name="scoring_mode"
+          value={form.scoring_mode}
+          options={SCORING_MODES}
+          onChange={(scoring_mode) => set({ scoring_mode })}
+          disabled={locked("scoring_mode")}
+          error={fieldError(errors, "scoring_mode")}
+        />
+        {form.scoring_mode === "judged" ? (
+          <InlineNotice tone="info" title="Judging is configured after creation">
+            Define the rubric, assign judges and schedule presentations from the Judging tab of the manage area. The public leaderboard stays hidden until results are finalized.
+          </InlineNotice>
+        ) : form.scoring_mode !== "automatic" ? (
+          <InlineNotice tone="info">No leaderboard or scores — participation certificates can still be issued to people who joined and took part.</InlineNotice>
+        ) : null}
+      </FormGroup>
       {form.scoring_mode === "automatic" ? (
-        <div className="grid gap-5">
+        <FormGroup id="cf-metric" title="Metric & submission format" description="What participants upload and how it is compared with your hidden ground truth.">
           {config && config.evaluators.length > 1 ? (
             <Field label="Evaluator" error={fieldError(errors, "evaluation.evaluator")}>
               {(p) => (
@@ -651,6 +708,10 @@ export function ScoringSection({ form, set, errors, locked = never, config }: Se
             label="Strict schema"
             description="Reject submissions that contain columns other than the id and target columns."
           />
+        </FormGroup>
+      ) : null}
+      <FormGroup id="cf-recognition" title="Leaderboard & certificates" description="What participants see while it runs and what they receive afterwards.">
+        {form.scoring_mode === "automatic" ? (
           <Field label="Leaderboard visibility" error={fieldError(errors, "leaderboard_visibility")}>
             {(p) => (
               <Select {...p} value={form.leaderboard_visibility} disabled={locked("leaderboard_visibility")} onChange={(e) => set({ leaderboard_visibility: e.target.value })}>
@@ -658,33 +719,27 @@ export function ScoringSection({ form, set, errors, locked = never, config }: Se
               </Select>
             )}
           </Field>
-        </div>
-      ) : form.scoring_mode === "judged" ? (
-        <InlineNotice tone="info" title="Judging is configured after creation">
-          Define the rubric, assign judges and schedule presentations from the Judging tab of the manage area. The public leaderboard stays hidden until results are finalized.
-        </InlineNotice>
-      ) : (
-        <InlineNotice tone="info">No leaderboard or scores — participation certificates can still be issued to people who joined and took part.</InlineNotice>
-      )}
-      <Switch
-        checked={form.show_university_on_leaderboard}
-        disabled={locked("show_university_on_leaderboard")}
-        onChange={(show_university_on_leaderboard) => set({ show_university_on_leaderboard })}
-        label="Show universities on the leaderboard"
-        description="Displays each member's verified university next to their name."
-      />
-      <fieldset disabled={locked("certificate_rules")} className="grid gap-4 rounded-[var(--radius-md)] border border-border p-4 disabled:opacity-60">
-        <legend className="px-1 text-sm font-medium text-fg">Certificates</legend>
+        ) : null}
         <Switch
-          checked={form.cert_participation}
-          onChange={(cert_participation) => set({ cert_participation })}
-          label="Participation certificates"
-          description="For members of teams with at least one valid entry."
+          checked={form.show_university_on_leaderboard}
+          disabled={locked("show_university_on_leaderboard")}
+          onChange={(show_university_on_leaderboard) => set({ show_university_on_leaderboard })}
+          label="Show universities on the leaderboard"
+          description="Displays each member's verified university next to their name."
         />
-        <Field label="Award certificates for the top N" error={fieldError(errors, "certificate_rules")} hint="Ranks 1–N receive an award certificate. Use 0 to disable.">
-          {(p) => <Input {...p} type="number" min={0} max={1000} value={form.cert_award_top_n} onChange={(e) => set({ cert_award_top_n: e.target.value })} className="sm:max-w-40" />}
-        </Field>
-      </fieldset>
+        <fieldset disabled={locked("certificate_rules")} className="grid gap-4 rounded-[var(--radius-md)] border border-border bg-bg-elevated/50 p-4 disabled:opacity-60">
+          <legend className="px-1 text-sm font-medium text-fg">Certificates</legend>
+          <Switch
+            checked={form.cert_participation}
+            onChange={(cert_participation) => set({ cert_participation })}
+            label="Participation certificates"
+            description="For members of teams with at least one valid entry."
+          />
+          <Field label="Award certificates for the top N" error={fieldError(errors, "certificate_rules")} hint="Ranks 1–N receive an award certificate. Use 0 to disable.">
+            {(p) => <Input {...p} type="number" min={0} max={1000} value={form.cert_award_top_n} onChange={(e) => set({ cert_award_top_n: e.target.value })} className="sm:max-w-40" />}
+          </Field>
+        </fieldset>
+      </FormGroup>
     </div>
   );
 }
@@ -709,100 +764,110 @@ export function ContentSection({ form, set, errors, locked = never }: SectionPro
     set({ faq: next });
   };
   return (
-    <div className="grid gap-6">
-      {md("description_md", "Problem statement", "What participants will build and why it matters (at least 50 characters to publish).", 12)}
-      {md("rules_md", "Rules", "Eligibility, external data, team rules, code of conduct (at least 20 characters to publish).", 10)}
-      {form.scoring_mode === "automatic" ? md("evaluation_md", "Evaluation", "How submissions are scored, the submission format and the public/private split.", 8, 50000) : null}
-      {md("scoring_notes_md", "Scoring notes", "Optional clarifications shown next to the leaderboard.", 4, 20000)}
+    <div className="grid gap-7">
+      <FormGroup id="cf-statement" title="Statement & rules" description="Markdown supported — use Preview to check formatting.">
+        {md("description_md", "Problem statement", "What participants will build and why it matters (at least 50 characters to publish).", 12)}
+        {md("rules_md", "Rules", "Eligibility, external data, team rules, code of conduct (at least 20 characters to publish).", 10)}
+        {form.scoring_mode === "automatic" ? md("evaluation_md", "Evaluation", "How submissions are scored, the submission format and the public/private split.", 8, 50000) : null}
+        {md("scoring_notes_md", "Scoring notes", "Optional clarifications shown next to the leaderboard.", 4, 20000)}
+      </FormGroup>
 
-      <div className="grid gap-4 rounded-[var(--radius-md)] border border-border p-4">
-        <Switch checked={form.has_prize} disabled={locked("has_prize")} onChange={(has_prize) => set({ has_prize })} label="This competition has prizes" />
-        {form.has_prize ? (
-          <>
-            <Field label="Prize summary" error={fieldError(errors, "prize_summary")} hint="Short text shown on cards, e.g. “$1,000 + internships”.">
-              {(p) => <Input {...p} value={form.prize_summary} maxLength={120} disabled={locked("prize_summary")} onChange={(e) => set({ prize_summary: e.target.value })} />}
-            </Field>
-            {md("prize_md", "Prize details", "Amounts, eligibility and how prizes are delivered.", 6, 20000)}
-          </>
-        ) : null}
-      </div>
+      <FormGroup id="cf-prizes" title="Prizes" description="Shown on cards and the competition page.">
+        <div className="grid gap-4 rounded-[var(--radius-md)] border border-border bg-bg-elevated/50 p-4">
+          <Switch checked={form.has_prize} disabled={locked("has_prize")} onChange={(has_prize) => set({ has_prize })} label="This competition has prizes" />
+          {form.has_prize ? (
+            <>
+              <Field label="Prize summary" error={fieldError(errors, "prize_summary")} hint="Short text shown on cards, e.g. “$1,000 + internships”.">
+                {(p) => <Input {...p} value={form.prize_summary} maxLength={120} disabled={locked("prize_summary")} onChange={(e) => set({ prize_summary: e.target.value })} />}
+              </Field>
+              {md("prize_md", "Prize details", "Amounts, eligibility and how prizes are delivered.", 6, 20000)}
+            </>
+          ) : null}
+        </div>
+      </FormGroup>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-medium text-fg">FAQ</h3>
-            <p className="text-xs text-muted">Common questions, shown on the overview page.</p>
-          </div>
+      <FormGroup
+        id="cf-faq"
+        title="FAQ"
+        description="Common questions, shown on the overview page."
+        action={
           <Button size="sm" variant="secondary" icon={<Plus className="h-4 w-4" />} disabled={locked("faq") || form.faq.length >= 30} onClick={() => set({ faq: [...form.faq, { q: "", a: "" }] })}>
             Add question
           </Button>
-        </div>
-        {form.faq.length === 0 ? <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-3 text-sm text-subtle">No questions yet.</p> : null}
-        <ol className="grid gap-3">
-          {form.faq.map((item, i) => (
-            <li key={i} className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-subtle">Question {i + 1}</span>
-                <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" aria-label={`Move question ${i + 1} up`} disabled={i === 0 || locked("faq")} onClick={() => moveFaq(i, -1)}><ArrowUp className="h-4 w-4" /></Button>
-                  <Button size="icon" variant="ghost" aria-label={`Move question ${i + 1} down`} disabled={i === form.faq.length - 1 || locked("faq")} onClick={() => moveFaq(i, 1)}><ArrowDown className="h-4 w-4" /></Button>
-                  <Button size="icon" variant="ghost" aria-label={`Remove question ${i + 1}`} disabled={locked("faq")} onClick={() => set({ faq: form.faq.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></Button>
+        }
+      >
+          {form.faq.length === 0 ? <p className="rounded-[var(--radius-md)] border border-dashed border-border-strong px-4 py-3 text-sm text-subtle">No questions yet.</p> : null}
+          {form.faq.length ? (
+          <ol className="grid gap-3">
+            {form.faq.map((item, i) => (
+              <li key={i} className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated/50 p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="tabular font-mono text-[10.5px] uppercase tracking-[0.12em] text-subtle">Question {i + 1}</span>
+                  <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" aria-label={`Move question ${i + 1} up`} disabled={i === 0 || locked("faq")} onClick={() => moveFaq(i, -1)}><ArrowUp className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label={`Move question ${i + 1} down`} disabled={i === form.faq.length - 1 || locked("faq")} onClick={() => moveFaq(i, 1)}><ArrowDown className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label={`Remove question ${i + 1}`} disabled={locked("faq")} onClick={() => set({ faq: form.faq.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
                 </div>
-              </div>
-              <Field label="Question" error={fieldError(errors, `faq.${i}.q`)}>
-                {(p) => <Input {...p} value={item.q} maxLength={300} disabled={locked("faq")} onChange={(e) => set({ faq: form.faq.map((f, j) => (j === i ? { ...f, q: e.target.value } : f)) })} />}
-              </Field>
-              <Field label="Answer" error={fieldError(errors, `faq.${i}.a`)}>
-                {(p) => <Textarea {...p} rows={3} value={item.a} maxLength={4000} disabled={locked("faq")} onChange={(e) => set({ faq: form.faq.map((f, j) => (j === i ? { ...f, a: e.target.value } : f)) })} />}
-              </Field>
-            </li>
-          ))}
-        </ol>
-      </div>
+                <Field label="Question" error={fieldError(errors, `faq.${i}.q`)}>
+                  {(p) => <Input {...p} value={item.q} maxLength={300} disabled={locked("faq")} onChange={(e) => set({ faq: form.faq.map((f, j) => (j === i ? { ...f, q: e.target.value } : f)) })} />}
+                </Field>
+                <Field label="Answer" error={fieldError(errors, `faq.${i}.a`)}>
+                  {(p) => <Textarea {...p} rows={3} value={item.a} maxLength={4000} disabled={locked("faq")} onChange={(e) => set({ faq: form.faq.map((f, j) => (j === i ? { ...f, a: e.target.value } : f)) })} />}
+                </Field>
+              </li>
+            ))}
+          </ol>
+          ) : null}
+      </FormGroup>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-medium text-fg">Starter assets</h3>
-            <p className="text-xs text-muted">Links to starter notebooks, repos or docs. Changing them bumps the starter-asset version.</p>
-          </div>
+      <FormGroup
+        id="cf-assets"
+        title="Starter assets"
+        description="Links to starter notebooks, repos or docs. Changing them bumps the starter-asset version."
+        action={
           <Button size="sm" variant="secondary" icon={<Plus className="h-4 w-4" />} disabled={locked("starter_assets") || form.starter_assets.length >= 20} onClick={() => set({ starter_assets: [...form.starter_assets, { label: "", url: "", kind: "notebook" }] })}>
             Add link
           </Button>
-        </div>
-        {form.starter_assets.length === 0 ? <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-3 text-sm text-subtle">No starter assets.</p> : null}
-        <ul className="grid gap-3">
-          {form.starter_assets.map((a, i) => (
-            <li key={i} className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3 sm:grid-cols-[1fr_2fr_9rem_auto] sm:items-start">
-              <Field label="Label" error={fieldError(errors, `starter_assets.${i}.label`)}>
-                {(p) => <Input {...p} value={a.label} maxLength={120} disabled={locked("starter_assets")} onChange={(e) => set({ starter_assets: form.starter_assets.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />}
-              </Field>
-              <Field label="URL" error={fieldError(errors, `starter_assets.${i}.url`) ?? (i === 0 ? fieldError(errors, "starter_assets") : undefined)}>
-                {(p) => <Input {...p} type="url" placeholder="https://" value={a.url} maxLength={500} disabled={locked("starter_assets")} onChange={(e) => set({ starter_assets: form.starter_assets.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)) })} />}
-              </Field>
-              <Field label="Kind">
-                {(p) => (
-                  <Select {...p} value={a.kind} disabled={locked("starter_assets")} onChange={(e) => set({ starter_assets: form.starter_assets.map((x, j) => (j === i ? { ...x, kind: e.target.value as StarterKind } : x)) })}>
-                    {STARTER_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
-                  </Select>
-                )}
-              </Field>
-              <Button size="icon" variant="ghost" className="sm:mt-6" aria-label={`Remove link ${i + 1}`} disabled={locked("starter_assets")} onClick={() => set({ starter_assets: form.starter_assets.filter((_, j) => j !== i) })}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      </div>
+        }
+      >
+          {form.starter_assets.length === 0 ? <p className="rounded-[var(--radius-md)] border border-dashed border-border-strong px-4 py-3 text-sm text-subtle">No starter assets.</p> : null}
+          {form.starter_assets.length ? (
+          <ul className="grid gap-3">
+            {form.starter_assets.map((a, i) => (
+              <li key={i} className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated/50 p-3.5 sm:grid-cols-[1fr_2fr_9rem_auto] sm:items-start">
+                <Field label="Label" error={fieldError(errors, `starter_assets.${i}.label`)}>
+                  {(p) => <Input {...p} value={a.label} maxLength={120} disabled={locked("starter_assets")} onChange={(e) => set({ starter_assets: form.starter_assets.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />}
+                </Field>
+                <Field label="URL" error={fieldError(errors, `starter_assets.${i}.url`) ?? (i === 0 ? fieldError(errors, "starter_assets") : undefined)}>
+                  {(p) => <Input {...p} type="url" placeholder="https://" value={a.url} maxLength={500} disabled={locked("starter_assets")} onChange={(e) => set({ starter_assets: form.starter_assets.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)) })} />}
+                </Field>
+                <Field label="Kind">
+                  {(p) => (
+                    <Select {...p} value={a.kind} disabled={locked("starter_assets")} onChange={(e) => set({ starter_assets: form.starter_assets.map((x, j) => (j === i ? { ...x, kind: e.target.value as StarterKind } : x)) })}>
+                      {STARTER_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+                    </Select>
+                  )}
+                </Field>
+                <Button size="icon" variant="ghost" className="sm:mt-6" aria-label={`Remove link ${i + 1}`} disabled={locked("starter_assets")} onClick={() => set({ starter_assets: form.starter_assets.filter((_, j) => j !== i) })}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+          ) : null}
+      </FormGroup>
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Organizer contact email" error={fieldError(errors, "organizer_contact_email")} hint="Shown to participants for questions. Optional.">
-          {(p) => <Input {...p} type="email" value={form.organizer_contact_email} disabled={locked("organizer_contact_email")} onChange={(e) => set({ organizer_contact_email: e.target.value })} />}
-        </Field>
-        <Field label={<>Organizer notes <Badge tone="outline" className="ml-1">Staff only</Badge></>} error={fieldError(errors, "organizer_notes")} hint="Private notes for your team — never shown to participants.">
-          {(p) => <Textarea {...p} rows={3} value={form.organizer_notes} maxLength={20000} disabled={locked("organizer_notes")} onChange={(e) => set({ organizer_notes: e.target.value })} />}
-        </Field>
-      </div>
+      <FormGroup id="cf-contact" title="Contact & private notes" description="How participants reach you, and notes only staff can see.">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Organizer contact email" error={fieldError(errors, "organizer_contact_email")} hint="Shown to participants for questions. Optional.">
+            {(p) => <Input {...p} type="email" value={form.organizer_contact_email} disabled={locked("organizer_contact_email")} onChange={(e) => set({ organizer_contact_email: e.target.value })} />}
+          </Field>
+          <Field label={<>Organizer notes <Badge tone="outline" className="ml-1">Staff only</Badge></>} error={fieldError(errors, "organizer_notes")} hint="Private notes for your team — never shown to participants.">
+            {(p) => <Textarea {...p} rows={3} value={form.organizer_notes} maxLength={20000} disabled={locked("organizer_notes")} onChange={(e) => set({ organizer_notes: e.target.value })} />}
+          </Field>
+        </div>
+      </FormGroup>
     </div>
   );
 }
@@ -822,4 +887,48 @@ export function sectionForField(key: string): keyof typeof SECTION_FIELDS | null
     if (keys.includes(root)) return section as keyof typeof SECTION_FIELDS;
   }
   return null;
+}
+
+export type CompetitionSectionKey = keyof typeof SECTION_FIELDS;
+
+/**
+ * Field groups rendered by each section, in order — the anchor targets for the builder's section index.
+ * Mirrors the conditional rendering above (host picker, automatic-scoring groups) so no link points at
+ * a group that isn't on screen.
+ */
+export function sectionGroups(section: CompetitionSectionKey, form: CompetitionFormState, opts: { showHost?: boolean } = {}): { id: string; label: string }[] {
+  switch (section) {
+    case "basics":
+      return [
+        { id: "cf-identity", label: "Identity" },
+        { id: "cf-classification", label: "Classification" },
+        ...(opts.showHost ? [{ id: "cf-host", label: "Host" }] : []),
+      ];
+    case "schedule":
+      return [
+        { id: "cf-timezone", label: "Time zone" },
+        { id: "cf-window", label: "Competition window" },
+        { id: "cf-registration", label: "Registration & teams" },
+      ];
+    case "participation":
+      return [
+        { id: "cf-visibility", label: "Visibility" },
+        { id: "cf-limits", label: "Teams & limits" },
+        { id: "cf-format", label: "Format & venue" },
+      ];
+    case "scoring":
+      return [
+        { id: "cf-mode", label: "Scoring mode" },
+        ...(form.scoring_mode === "automatic" ? [{ id: "cf-metric", label: "Metric & format" }] : []),
+        { id: "cf-recognition", label: "Leaderboard & certificates" },
+      ];
+    case "content":
+      return [
+        { id: "cf-statement", label: "Statement & rules" },
+        { id: "cf-prizes", label: "Prizes" },
+        { id: "cf-faq", label: "FAQ" },
+        { id: "cf-assets", label: "Starter assets" },
+        { id: "cf-contact", label: "Contact & notes" },
+      ];
+  }
 }

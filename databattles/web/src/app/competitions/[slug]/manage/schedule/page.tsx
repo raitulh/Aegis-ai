@@ -1,18 +1,19 @@
 "use client";
 
-import { Award, CalendarPlus, ExternalLink, MapPin, Plus, Trash2, Trophy } from "lucide-react";
+import { Award, CalendarClock, CalendarPlus, ExternalLink, MapPin, Plus, Trash2, Trophy } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { zonedInputToUtc } from "@/components/organizer/datetime";
 import { ManageHeading, SCHEDULE_KINDS, TeamPicker, ZonedDateTimeField, fieldError, useCompetitionDetail, useManage } from "@/components/organizer/shared";
+import { InlineEmpty, Panel, SubHeading } from "@/components/organizer/ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input, Select, Textarea } from "@/components/ui/form";
-import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/states";
+import { ErrorState, SkeletonRows } from "@/components/ui/states";
 import { ApiError, del, post, put } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { formatDateTime, relativeTime, titleCase } from "@/lib/format";
 import { useApiMutation } from "@/lib/hooks";
 import { qk } from "@/lib/query";
@@ -62,8 +63,8 @@ function ScheduleForm({ slug, timeZone }: { slug: string; timeZone: string }) {
   }
   const err = (k: string) => localErr[k] ?? fieldError(error?.fields, k);
   return (
-    <form onSubmit={submit} className="grid gap-4 rounded-[var(--radius-md)] border border-border p-4" noValidate>
-      <p className="text-sm font-medium text-fg">Add a schedule item</p>
+    <form onSubmit={submit} className="grid gap-4 rounded-[var(--radius-md)] border border-border bg-bg-elevated/40 p-4" noValidate>
+      <SubHeading>Add a schedule item</SubHeading>
       <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
         <Field label="Title" required error={err("title")}>
           {(p) => <Input {...p} value={f.title} maxLength={160} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Kick-off livestream" />}
@@ -102,21 +103,28 @@ function ScheduleList({ slug, items, timeZone, readOnly }: { slug: string; items
     success: "Removed from the schedule.",
     invalidate: [qk.competition(slug)],
   });
-  if (!items.length) return <EmptyState title="No schedule items" description="Add workshops, deadlines, presentations or the award ceremony." className="py-8" />;
+  if (!items.length) return <InlineEmpty icon={<CalendarClock />} title="No schedule items" description="Add workshops, deadlines, presentations or the award ceremony." />;
   return (
-    <ol className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+    <ol className="relative space-y-1 before:absolute before:bottom-3 before:left-[0.69rem] before:top-3 before:w-px before:bg-border" aria-label="Schedule">
       {[...items].sort((a, b) => a.starts_at.localeCompare(b.starts_at)).map((s) => (
-        <li key={s.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+        <li key={s.id} className="relative flex flex-col gap-2 rounded-[var(--radius-md)] py-2.5 pl-9 pr-2 transition-colors hover:bg-surface-2/40 sm:flex-row sm:items-start sm:justify-between">
+          <span
+            aria-hidden
+            className={cn(
+              "absolute left-1.5 top-4 h-2.5 w-2.5 rounded-full ring-4 ring-[var(--surface)]",
+              s.kind === "deadline" ? "bg-warning" : s.kind === "ceremony" ? "bg-accent" : "bg-border-strong",
+            )}
+          />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={s.kind === "deadline" ? "warning" : s.kind === "ceremony" ? "accent" : "outline"}>{titleCase(s.kind)}</Badge>
               <p className="font-medium text-fg">{s.title}</p>
             </div>
-            <p className="mt-1 text-sm text-muted">
+            <p className="tabular mt-1 text-sm text-muted">
               {formatDateTime(s.starts_at)}
               {s.ends_at ? <> – {formatDateTime(s.ends_at)}</> : null} <span className="text-xs text-subtle">({relativeTime(s.starts_at)})</span>
             </p>
-            <p className="text-xs text-subtle">Event time: {formatDateTime(s.starts_at, timeZone)}</p>
+            <p className="tabular text-xs text-subtle">Event time: {formatDateTime(s.starts_at, timeZone)}</p>
             <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
               {s.location ? <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" aria-hidden /> {s.location}</span> : null}
               {s.url ? (
@@ -162,9 +170,11 @@ function AwardRow({ slug, award, readOnly }: { slug: string; award: AwardCategor
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Award className="h-4 w-4 text-accent-strong" aria-hidden />
+            <span className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface-2 text-accent-strong" aria-hidden>
+              <Award className="h-3.5 w-3.5" />
+            </span>
             <p className="font-medium text-fg">{award.name}</p>
-            <span className="text-xs text-subtle">#{award.position}</span>
+            <span className="tabular font-mono text-[11px] text-subtle">#{award.position}</span>
           </div>
           {award.description ? <p className="mt-0.5 text-sm text-muted">{award.description}</p> : null}
           <p className="mt-1 text-sm">
@@ -204,7 +214,7 @@ function AwardRow({ slug, award, readOnly }: { slug: string; award: AwardCategor
         ) : null}
       </div>
       {editing ? (
-        <div className="mt-3 grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface-2/50 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <div className="mt-3 grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated/60 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <TeamPicker slug={slug} value={teamId} onChange={setTeamId} label="Winning team" />
           <Button loading={setWinner.isPending} disabled={!teamId || teamId === award.winner_team_id} onClick={() => setWinner.mutate(teamId)} className="sm:mb-5">
             Save winner
@@ -236,13 +246,13 @@ function AwardForm({ slug, nextPosition }: { slug: string; nextPosition: number 
   );
   return (
     <form
-      className="grid gap-3 rounded-[var(--radius-md)] border border-border p-4"
+      className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated/40 p-4"
       onSubmit={(e) => {
         e.preventDefault();
         if (name.trim().length >= 2) add.mutate(undefined);
       }}
     >
-      <p className="text-sm font-medium text-fg">Add an award category</p>
+      <SubHeading>Add an award category</SubHeading>
       <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
         <Field label="Name" required error={error?.fields.name} hint="e.g. “Best use of open data”.">
           {(p) => <Input {...p} value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />}
@@ -273,27 +283,30 @@ export default function ManageSchedulePage() {
   const awards = [...c.awards].sort((a, b) => a.position - b.position);
   return (
     <div className="space-y-6">
-      <ManageHeading title="Schedule & awards" description={`Times are entered in the event's time zone (${c.timezone}) and shown to participants in their own.`} />
-      <Card>
-        <CardHeader title="Schedule" description="Sessions, workshops, deadlines and ceremonies shown on the competition page." />
-        <CardBody className="space-y-5">
+      <ManageHeading
+        eyebrow="Configure"
+        icon={<CalendarClock />}
+        title="Schedule & awards"
+        description={`Times are entered in the event's time zone (${c.timezone}) and shown to participants in their own.`}
+      />
+      <Panel icon={<CalendarClock />} title="Schedule" description="Sessions, workshops, deadlines and ceremonies shown on the competition page." action={<Badge tone="outline" className="tabular">{c.schedule.length} {c.schedule.length === 1 ? "item" : "items"}</Badge>}>
+        <div className="space-y-5">
           <ScheduleList slug={slug} items={c.schedule} timeZone={c.timezone} readOnly={readOnly} />
           {!readOnly ? <ScheduleForm slug={slug} timeZone={c.timezone} /> : null}
-        </CardBody>
-      </Card>
-      <Card>
-        <CardHeader title="Award categories" description="Special prizes beyond the ranking, e.g. “Best visualization”. Winners receive award certificates when you issue certificates." />
-        <CardBody className="space-y-5">
+        </div>
+      </Panel>
+      <Panel icon={<Trophy />} title="Award categories" description="Special prizes beyond the ranking, e.g. “Best visualization”. Winners receive award certificates when you issue certificates.">
+        <div className="space-y-5">
           {awards.length ? (
-            <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+            <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-bg-elevated/50">
               {awards.map((a) => <AwardRow key={a.id} slug={slug} award={a} readOnly={readOnly} />)}
             </ul>
           ) : (
-            <EmptyState icon={<Award className="h-5 w-5" />} title="No award categories" description="Add categories now and pick winners once judging or results are in." className="py-8" />
+            <InlineEmpty icon={<Award />} title="No award categories" description="Add categories now and pick winners once judging or results are in." />
           )}
           {!readOnly ? <AwardForm slug={slug} nextPosition={awards.length ? Math.max(...awards.map((a) => a.position)) + 1 : 1} /> : null}
-        </CardBody>
-      </Card>
+        </div>
+      </Panel>
     </div>
   );
 }
