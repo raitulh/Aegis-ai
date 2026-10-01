@@ -12,15 +12,20 @@ export function CopyButton({ value, label = "Copy", className }: { value: string
   return (
     <button
       type="button"
-      className={cn("inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted hover:text-fg", className)}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors duration-200",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]",
+        done ? "border-success/40 bg-success-soft text-success" : "border-border text-muted hover:border-border-strong hover:bg-surface-2 hover:text-fg",
+        className,
+      )}
       onClick={async () => {
         await navigator.clipboard.writeText(value);
         setDone(true);
         setTimeout(() => setDone(false), 1500);
       }}
     >
-      {done ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-      {done ? "Copied" : label}
+      {done ? <Check className="h-3.5 w-3.5 animate-pop" /> : <Copy className="h-3.5 w-3.5" />}
+      <span aria-live="polite">{done ? "Copied" : label}</span>
     </button>
   );
 }
@@ -28,8 +33,11 @@ export function CopyButton({ value, label = "Copy", className }: { value: string
 export function ProgressBar({ value, className, label }: { value: number; className?: string; label?: string }) {
   const v = Math.max(0, Math.min(100, value));
   return (
-    <div className={cn("h-2 w-full overflow-hidden rounded-full bg-surface-3", className)} role="progressbar" aria-valuenow={Math.round(v)} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
-      <div className="h-full rounded-full bg-gradient-to-r from-accent to-cyan transition-[width] duration-500" style={{ width: `${v}%` }} />
+    <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-surface-3", className)} role="progressbar" aria-valuenow={Math.round(v)} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+      <div
+        className="relative h-full rounded-full bg-brand shadow-[0_0_12px_-2px_color-mix(in_oklab,var(--accent)_70%,transparent)] transition-[width] duration-700 ease-out-expo"
+        style={{ width: `${v}%` }}
+      />
     </div>
   );
 }
@@ -38,18 +46,29 @@ export function ProgressRing({ value, size = 44, stroke = 4 }: { value: number; 
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const v = Math.max(0, Math.min(100, value));
+  const gid = `pr-${size}-${stroke}`;
   return (
     <svg width={size} height={size} role="img" aria-label={`${Math.round(v)}% complete`}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="var(--accent-strong)" />
+          <stop offset="1" stopColor="var(--cyan)" />
+        </linearGradient>
+      </defs>
       <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--surface-3)" strokeWidth={stroke} fill="none" />
-      <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--accent)" strokeWidth={stroke} fill="none" strokeLinecap="round"
-        strokeDasharray={c} strokeDashoffset={c * (1 - v / 100)} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+      <circle cx={size / 2} cy={size / 2} r={r} stroke={`url(#${gid})`} strokeWidth={stroke} fill="none" strokeLinecap="round"
+        strokeDasharray={c} strokeDashoffset={c * (1 - v / 100)} transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        className="transition-[stroke-dashoffset] duration-700 ease-out-expo" />
       <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" className="fill-[var(--fg)] text-[11px] font-semibold">{Math.round(v)}%</text>
     </svg>
   );
 }
 
-/** Live countdown to a UTC deadline, announced politely to screen readers once per minute at most. */
-export function Countdown({ to, prefix, className }: { to: string | null | undefined; prefix?: string; className?: string }) {
+/**
+ * Live countdown to a UTC deadline, announced politely to screen readers once per minute at most.
+ * `variant="blocks"` renders segmented d/h/m/s tiles for hero placements.
+ */
+export function Countdown({ to, prefix, className, variant = "inline" }: { to: string | null | undefined; prefix?: string; className?: string; variant?: "inline" | "blocks" }) {
   const now = useNow(1000);
   if (!to) return null;
   const ms = new Date(to).getTime() - now.getTime();
@@ -59,6 +78,19 @@ export function Countdown({ to, prefix, className }: { to: string | null | undef
   const m = Math.floor((ms % 3600000) / 60000);
   const s = Math.floor((ms % 60000) / 1000);
   const text = d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+  if (variant === "blocks") {
+    const parts: [number, string][] = d > 0 ? [[d, "days"], [h, "hrs"], [m, "min"]] : [[h, "hrs"], [m, "min"], [s, "sec"]];
+    return (
+      <span className={cn("inline-flex items-stretch gap-1.5", className)} aria-label={`${prefix ?? ""}${text}`} role="timer" aria-live="off">
+        {parts.map(([n, unit]) => (
+          <span key={unit} className="flex min-w-[3.1rem] flex-col items-center rounded-[var(--radius-md)] border border-border bg-bg-elevated/80 px-2 py-1.5 shadow-[inset_0_1px_0_var(--hairline-highlight)]">
+            <span className="tabular text-lg font-semibold leading-tight tracking-[-0.02em] text-fg">{String(n).padStart(2, "0")}</span>
+            <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-subtle">{unit}</span>
+          </span>
+        ))}
+      </span>
+    );
+  }
   return (
     <span className={cn("tabular-nums", className)} aria-live="off">
       {prefix}
@@ -77,9 +109,27 @@ const COVERS: Record<string, string> = {
   sunrise: "radial-gradient(90% 90% at 50% 100%, #fbbf24 0%, transparent 55%), radial-gradient(120% 100% at 50% 0%, #60a5fa 0%, transparent 60%), linear-gradient(180deg, #102037, #0b1220)",
 };
 
-export function Cover({ style = "aurora", className, children }: { style?: string; className?: string; children?: ReactNode }) {
+/**
+ * Generated cover art from the API's `cover_style` key. Layers a faint data grid, a top sheen and grain over
+ * the gradient for depth; `interactive` adds a slow zoom on hover when placed inside a `group` link.
+ */
+export function Cover({ style = "aurora", className, children, interactive = false }: { style?: string; className?: string; children?: ReactNode; interactive?: boolean }) {
   return (
-    <div className={cn("relative overflow-hidden", className)} style={{ background: COVERS[style] ?? COVERS.aurora, backgroundSize: style === "mono" ? "28px 28px, cover" : undefined }}>
+    <div className={cn("relative isolate overflow-hidden", className)}>
+      <div
+        aria-hidden
+        className={cn("absolute inset-0 -z-10", interactive && "transition-transform duration-700 ease-out-expo group-hover:scale-[1.06]")}
+        style={{ background: COVERS[style] ?? COVERS.aurora, backgroundSize: style === "mono" ? "28px 28px, cover" : undefined }}
+      />
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-10 opacity-40 [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"
+        style={{
+          backgroundImage: "linear-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 0.07) 1px, transparent 1px)",
+          backgroundSize: "22px 22px",
+        }}
+      />
+      <div aria-hidden className="absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgb(255_255_255/0.08),transparent_40%,rgb(0_0_0/0.25))]" />
       {children}
     </div>
   );
@@ -135,11 +185,16 @@ export function FileDrop({
           pick(e.dataTransfer.files?.[0]);
         }}
         className={cn(
-          "flex w-full flex-col items-center justify-center gap-2 rounded-[var(--radius-lg)] border-2 border-dashed px-6 py-8 text-center transition-colors disabled:opacity-50",
-          drag ? "border-accent bg-accent-soft" : "border-border hover:border-border-strong hover:bg-surface-2",
+          "group/drop flex w-full flex-col items-center justify-center gap-2 rounded-[var(--radius-lg)] border border-dashed px-6 py-9 text-center transition-[border-color,background-color,box-shadow] duration-200 disabled:opacity-50",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]",
+          drag
+            ? "border-accent bg-accent-soft shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_12%,transparent)]"
+            : "border-border-strong bg-bg-elevated/40 hover:border-[color-mix(in_oklab,var(--accent)_45%,var(--border-strong))] hover:bg-surface-2",
         )}
       >
-        <UploadCloud className="h-6 w-6 text-muted" aria-hidden />
+        <span className={cn("flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface-2 transition-transform duration-300", drag ? "scale-110 text-accent-strong" : "text-muted group-hover/drop:-translate-y-0.5")}>
+          <UploadCloud className="h-5 w-5" aria-hidden />
+        </span>
         <span className="text-sm font-medium text-fg">{name ?? "Drop a file here or click to browse"}</span>
         {hint ? <span className="text-xs text-subtle">{hint}</span> : null}
       </button>
@@ -152,11 +207,11 @@ export function FileDrop({
 
 export function KeyValue({ items }: { items: { label: ReactNode; value: ReactNode }[] }) {
   return (
-    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
       {items.map((it, i) => (
-        <div key={i} className="flex flex-col">
-          <dt className="text-xs text-subtle">{it.label}</dt>
-          <dd className="mt-0.5 text-fg">{it.value}</dd>
+        <div key={i} className="flex min-w-0 flex-col border-l border-border pl-3">
+          <dt className="text-eyebrow text-subtle">{it.label}</dt>
+          <dd className="mt-1 min-w-0 break-words text-fg">{it.value}</dd>
         </div>
       ))}
     </dl>

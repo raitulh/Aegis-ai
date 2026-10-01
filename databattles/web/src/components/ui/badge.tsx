@@ -6,23 +6,33 @@ import { cn } from "@/lib/cn";
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info" | "outline";
 
 const tones: Record<Tone, string> = {
-  neutral: "bg-surface-3 text-muted",
-  accent: "bg-accent-soft text-accent-strong",
-  success: "bg-success-soft text-success",
-  warning: "bg-warning-soft text-warning",
-  danger: "bg-danger-soft text-danger",
-  info: "bg-info-soft text-info",
-  outline: "border border-border text-muted",
+  neutral: "bg-surface-3/80 text-muted ring-border",
+  accent: "bg-accent-soft text-accent-strong ring-[color-mix(in_oklab,var(--accent)_28%,transparent)]",
+  success: "bg-success-soft text-success ring-[color-mix(in_oklab,var(--success)_26%,transparent)]",
+  warning: "bg-warning-soft text-warning ring-[color-mix(in_oklab,var(--warning)_26%,transparent)]",
+  danger: "bg-danger-soft text-danger ring-[color-mix(in_oklab,var(--danger)_26%,transparent)]",
+  info: "bg-info-soft text-info ring-[color-mix(in_oklab,var(--info)_26%,transparent)]",
+  outline: "bg-transparent text-muted ring-border-strong",
 };
 
 export function Badge({ tone = "neutral", children, className, icon, title }: { tone?: Tone; children: ReactNode; className?: string; icon?: ReactNode; title?: string }) {
   return (
-    <span title={title} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap", tones[tone], className)}>
+    <span
+      title={title}
+      className={cn(
+        "inline-flex h-[22px] items-center gap-1 whitespace-nowrap rounded-full px-2 text-[11.5px] font-medium leading-none ring-1 ring-inset",
+        tones[tone],
+        className,
+      )}
+    >
       {icon}
       {children}
     </span>
   );
 }
+
+/** Statuses that represent work in motion get a softly pulsing dot (colour is never the only signal — the label says it). */
+const LIVE = new Set(["active", "validating", "scoring", "queued"]);
 
 const STATUS: Record<string, { tone: Tone; label: string }> = {
   draft: { tone: "neutral", label: "Draft" },
@@ -51,7 +61,10 @@ export function StatusBadge({ status, className }: { status: string; className?:
   const s = STATUS[status] ?? { tone: "neutral" as Tone, label: status };
   return (
     <Badge tone={s.tone} className={className}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+      <span className="relative flex h-1.5 w-1.5" aria-hidden>
+        {LIVE.has(status) ? <span className="absolute inset-0 rounded-full bg-current opacity-60 motion-safe:animate-[ping_2.2s_cubic-bezier(0,0,0.2,1)_infinite]" /> : null}
+        <span className="relative h-1.5 w-1.5 rounded-full bg-current" />
+      </span>
       {s.label}
     </Badge>
   );

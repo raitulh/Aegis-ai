@@ -7,6 +7,16 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
+/**
+ * Shared tab styling: a gradient underline grows from the centre on the active tab, and hover gives a
+ * soft pill. Works for Radix tabs (data-state) and route tabs (aria-current).
+ */
+const TAB =
+  "relative -mb-px shrink-0 rounded-t-md px-3 py-2.5 text-sm font-medium text-muted transition-colors duration-200 hover:text-fg " +
+  "before:absolute before:inset-x-1 before:inset-y-1.5 before:-z-10 before:rounded-md before:bg-surface-2 before:opacity-0 before:transition-opacity hover:before:opacity-100 " +
+  "after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-brand after:opacity-0 after:transition-[transform,opacity] after:duration-300 after:ease-out-expo after:scale-x-0 " +
+  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)] isolate";
+
 export function Tabs({ value, onValueChange, defaultValue, tabs, children }: {
   value?: string;
   onValueChange?: (v: string) => void;
@@ -16,15 +26,15 @@ export function Tabs({ value, onValueChange, defaultValue, tabs, children }: {
 }) {
   return (
     <RT.Root value={value} onValueChange={onValueChange} defaultValue={defaultValue ?? tabs[0]?.value}>
-      <RT.List className="flex gap-1 overflow-x-auto border-b border-border" aria-label="Sections">
+      <RT.List className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]" aria-label="Sections">
         {tabs.map((t) => (
           <RT.Trigger
             key={t.value}
             value={t.value}
-            className="-mb-px shrink-0 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:text-fg"
+            className={cn(TAB, "data-[state=active]:text-fg data-[state=active]:after:scale-x-100 data-[state=active]:after:opacity-100")}
           >
             {t.label}
-            {t.count !== undefined ? <span className="ml-1.5 rounded-full bg-surface-3 px-1.5 text-xs text-subtle">{t.count}</span> : null}
+            {t.count !== undefined ? <span className="tabular ml-1.5 rounded-full bg-surface-3 px-1.5 py-px text-[11px] text-subtle">{t.count}</span> : null}
           </RT.Trigger>
         ))}
       </RT.List>
@@ -43,7 +53,7 @@ export const TabPanel = ({ value, children, className }: { value: string; childr
 export function NavTabs({ items, className }: { items: { href: string; label: ReactNode; exact?: boolean; hidden?: boolean }[]; className?: string }) {
   const pathname = usePathname();
   return (
-    <nav className={cn("flex gap-1 overflow-x-auto border-b border-border", className)} aria-label="Sections">
+    <nav className={cn("flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]", className)} aria-label="Sections">
       {items
         .filter((i) => !i.hidden)
         .map((i) => {
@@ -53,10 +63,7 @@ export function NavTabs({ items, className }: { items: { href: string; label: Re
               key={i.href}
               href={i.href}
               aria-current={active ? "page" : undefined}
-              className={cn(
-                "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
-                active ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg",
-              )}
+              className={cn(TAB, active && "text-fg after:scale-x-100 after:opacity-100")}
             >
               {i.label}
             </Link>

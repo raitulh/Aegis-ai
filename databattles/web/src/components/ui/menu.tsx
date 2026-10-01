@@ -15,7 +15,11 @@ export function MenuContent({ children, align = "end", className }: { children: 
       <DM.Content
         align={align}
         sideOffset={6}
-        className={cn("z-50 min-w-48 rounded-[var(--radius-md)] border border-border bg-surface p-1 shadow-card data-[state=open]:animate-fade-in", className)}
+        className={cn(
+          "z-50 min-w-48 origin-[var(--radix-dropdown-menu-content-transform-origin)] rounded-[var(--radius-lg)] border border-border-strong bg-surface/95 p-1.5 shadow-elevated backdrop-blur-xl",
+          "data-[state=open]:animate-[menu-in_180ms_var(--ease-out)_both]",
+          className,
+        )}
       >
         {children}
       </DM.Content>
@@ -29,8 +33,8 @@ export function MenuItem({ children, onSelect, destructive, disabled }: { childr
       disabled={disabled}
       onSelect={onSelect}
       className={cn(
-        "flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-none data-[disabled]:opacity-50 data-[highlighted]:bg-surface-2",
-        destructive ? "text-danger" : "text-fg",
+        "flex cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-[13.5px] outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:text-subtle",
+        destructive ? "text-danger data-[highlighted]:bg-danger-soft [&_svg]:text-danger" : "text-fg data-[highlighted]:bg-surface-2 data-[highlighted]:[&_svg]:text-accent-strong",
       )}
     >
       {children}
@@ -39,11 +43,11 @@ export function MenuItem({ children, onSelect, destructive, disabled }: { childr
 }
 
 export function MenuLabel({ children }: { children: ReactNode }) {
-  return <DM.Label className="px-2.5 py-1.5 text-xs text-subtle">{children}</DM.Label>;
+  return <DM.Label className="px-2.5 py-2 text-xs text-subtle">{children}</DM.Label>;
 }
 
 export function MenuSeparator() {
-  return <DM.Separator className="my-1 h-px bg-border" />;
+  return <DM.Separator className="-mx-1.5 my-1.5 h-px bg-border" />;
 }
 
 export function Tooltip({ content, children }: { content: ReactNode; children: ReactNode }) {
@@ -52,7 +56,7 @@ export function Tooltip({ content, children }: { content: ReactNode; children: R
       <TT.Root>
         <TT.Trigger asChild>{children}</TT.Trigger>
         <TT.Portal>
-          <TT.Content sideOffset={6} className="z-50 max-w-xs rounded-md border border-border bg-surface-3 px-2.5 py-1.5 text-xs text-fg shadow-card">
+          <TT.Content sideOffset={6} className="z-50 max-w-xs rounded-lg border border-border-strong bg-surface-3/95 px-2.5 py-1.5 text-xs text-fg shadow-elevated backdrop-blur-md data-[state=delayed-open]:animate-[menu-in_160ms_var(--ease-out)_both]">
             {content}
           </TT.Content>
         </TT.Portal>

@@ -5,7 +5,7 @@
  * information is available to screen readers, not just as pixels.
  */
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { formatDate, formatNumber } from "@/lib/format";
@@ -36,7 +36,7 @@ export function Sparkline({ data, width = 120, height = 32, className, label = "
   const pts = data.map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / span) * (height - 4) - 2}`).join(" ");
   return (
     <svg width={width} height={height} className={className} role="img" aria-label={`${label}: from ${formatNumber(data[0], 4)} to ${formatNumber(data[data.length - 1], 4)}`}>
-      <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={pts} fill="none" stroke="var(--accent-strong)" strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
@@ -52,6 +52,7 @@ export function LineChart({ data, height = 200, label, yFormat = (v: number) => 
   className?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const gid = `lc${useId().replace(/:/g, "")}`;
   const width = 640;
   const pad = LINE_PAD;
   const { path, area, xs, ys, min, max } = useMemo(() => {
@@ -70,35 +71,40 @@ export function LineChart({ data, height = 200, label, yFormat = (v: number) => 
     <div className={cn("relative", className)}>
       <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img" aria-label={label} onMouseLeave={() => setHover(null)}>
         <defs>
-          <linearGradient id="lc-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.25" />
+          <linearGradient id={`${gid}-fill`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
             <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id={`${gid}-stroke`} x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor="var(--accent-strong)" />
+            <stop offset="100%" stopColor="var(--cyan)" />
           </linearGradient>
         </defs>
         {[0, 0.5, 1].map((f) => {
           const y = pad.t + f * (height - pad.t - pad.b);
           return (
             <g key={f}>
-              <line x1={pad.l} x2={width - pad.r} y1={y} y2={y} stroke="var(--border)" strokeDasharray="3 4" />
+              <line x1={pad.l} x2={width - pad.r} y1={y} y2={y} stroke="var(--border)" strokeDasharray="2 5" />
               <text x={pad.l - 6} y={y} textAnchor="end" dominantBaseline="central" className="fill-[var(--fg-subtle)] text-[10px]">
                 {yFormat(max - f * (max - min))}
               </text>
             </g>
           );
         })}
-        <path d={area} fill="url(#lc-fill)" />
-        <path d={path} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round" />
+        <path d={area} fill={`url(#${gid}-fill)`} />
+        <path d={path} fill="none" stroke={`url(#${gid}-stroke)`} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {hover !== null ? <line x1={xs[hover]} x2={xs[hover]} y1={pad.t} y2={height - pad.b} stroke="var(--border-strong)" /> : null}
         {xs.map((x, i) => (
           <g key={i}>
             <rect x={x - 8} y={pad.t} width={16} height={height - pad.t - pad.b} fill="transparent" onMouseEnter={() => setHover(i)} />
-            {hover === i ? <circle cx={x} cy={ys[i]} r={4} fill="var(--accent)" stroke="var(--surface)" strokeWidth={2} /> : null}
+            {hover === i ? <circle cx={x} cy={ys[i]} r={4.5} fill="var(--accent-strong)" stroke="var(--surface)" strokeWidth={2} /> : null}
           </g>
         ))}
         <text x={pad.l} y={height - 6} className="fill-[var(--fg-subtle)] text-[10px]">{xFormat(data[0].x)}</text>
         <text x={width - pad.r} y={height - 6} textAnchor="end" className="fill-[var(--fg-subtle)] text-[10px]">{xFormat(data[data.length - 1].x)}</text>
       </svg>
       {hover !== null ? (
-        <div className="pointer-events-none absolute right-2 top-2 rounded-md border border-border bg-surface-3 px-2 py-1 text-xs">
+        <div className="tabular pointer-events-none absolute right-2 top-2 rounded-lg border border-border-strong bg-surface-2/95 px-2.5 py-1 text-xs shadow-card backdrop-blur animate-fade-in">
           {xFormat(data[hover].x)} · <span className="font-semibold">{yFormat(data[hover].y)}</span>
         </div>
       ) : null}
@@ -115,7 +121,7 @@ export function BarChart({ data, label, height = 180, valueFormat = (v: number) 
       <div className="flex items-end gap-1.5" style={{ height }} role="img" aria-label={label}>
         {data.map((d, i) => (
           <div key={i} className="group relative flex h-full flex-1 flex-col justify-end" title={`${d.label}: ${valueFormat(d.value)}`}>
-            <div className="rounded-t-[4px] bg-gradient-to-t from-accent/70 to-accent transition-opacity group-hover:opacity-80" style={{ height: `${(d.value / max) * 100}%`, minHeight: d.value ? 2 : 0 }} />
+            <div className="rounded-t-[5px] bg-gradient-to-t from-accent/55 to-accent-strong transition-[opacity,filter] duration-200 group-hover:brightness-125" style={{ height: `${(d.value / max) * 100}%`, minHeight: d.value ? 2 : 0 }} />
           </div>
         ))}
       </div>
@@ -136,10 +142,10 @@ export function HBarList({ data, label, valueFormat = (v: number) => formatNumbe
         <li key={i} className="text-sm">
           <div className="mb-1 flex justify-between gap-3">
             <span className="truncate text-fg">{d.label}</span>
-            <span className="tabular-nums text-muted">{valueFormat(d.value)}</span>
+            <span className="tabular text-muted">{valueFormat(d.value)}</span>
           </div>
           <div className="h-1.5 rounded-full bg-surface-3">
-            <div className="h-full rounded-full bg-accent" style={{ width: `${(d.value / max) * 100}%` }} />
+            <div className="h-full rounded-full bg-brand transition-[width] duration-700 ease-out-expo" style={{ width: `${(d.value / max) * 100}%` }} />
           </div>
         </li>
       ))}
@@ -166,7 +172,13 @@ export function ActivityHeatmap({ counts, days = 182, label = "Activity" }: { co
   const max = Math.max(...cells.map((c) => c.count), 1);
   const weeks = Math.ceil(cells.length / 7);
   const level = (n: number) => (n === 0 ? 0 : Math.min(4, Math.ceil((n / max) * 4)));
-  const fills = ["var(--surface-3)", "rgb(139 109 255 / 0.35)", "rgb(139 109 255 / 0.55)", "rgb(139 109 255 / 0.78)", "var(--accent)"];
+  const fills = [
+    "var(--surface-3)",
+    "color-mix(in oklab, var(--accent) 32%, var(--surface-3))",
+    "color-mix(in oklab, var(--accent) 55%, var(--surface-3))",
+    "color-mix(in oklab, var(--accent) 78%, var(--surface-3))",
+    "var(--accent-strong)",
+  ];
   return (
     <div>
       <div className="overflow-x-auto">
