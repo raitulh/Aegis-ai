@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { Reveal } from "@/components/motion/reveal";
 import { DemoBadge } from "@/components/ui/badge";
+import { RankBadge } from "@/components/ui/extras";
 import { Container } from "@/components/ui/page";
 import { Skeleton } from "@/components/ui/states";
 import { get } from "@/lib/api";
@@ -80,14 +81,7 @@ function LiveBoard({ comp }: { comp: CompetitionCard }) {
             {rows.map((r, i) => (
               <tr key={r.team_id} className="animate-rise" style={{ animationDelay: `${i * 60}ms` }}>
                 <td className="w-12 py-3 pl-5">
-                  <span
-                    className={cn(
-                      "tabular flex h-7 w-7 items-center justify-center rounded-full font-mono text-xs font-semibold",
-                      r.rank === 1 ? "bg-[linear-gradient(135deg,#fde68a,#f59e0b)] text-black" : r.rank === 2 ? "bg-[linear-gradient(135deg,#e5e7eb,#9ca3af)] text-black" : r.rank === 3 ? "bg-[linear-gradient(135deg,#fdba74,#c2410c)] text-black" : "bg-surface-3 text-muted",
-                    )}
-                  >
-                    {r.rank ?? "—"}
-                  </span>
+                  <RankBadge rank={r.rank} />
                 </td>
                 <td className="max-w-0 px-3 py-3">
                   <span className="block truncate font-medium text-fg">{r.team_name ?? r.members[0]?.display_name ?? "Team"}</span>

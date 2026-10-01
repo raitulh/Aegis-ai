@@ -49,11 +49,29 @@ export const TabPanel = ({ value, children, className }: { value: string; childr
   </RT.Content>
 );
 
-/** Route-based tabs (each tab is its own URL). */
-export function NavTabs({ items, className }: { items: { href: string; label: ReactNode; exact?: boolean; hidden?: boolean }[]; className?: string }) {
+/**
+ * Route-based tabs (each tab is its own URL). `sticky` pins the bar under the global header on a glass
+ * strip so section navigation stays in reach on long pages.
+ */
+export function NavTabs({
+  items,
+  className,
+  sticky = false,
+}: {
+  items: { href: string; label: ReactNode; exact?: boolean; hidden?: boolean }[];
+  className?: string;
+  sticky?: boolean;
+}) {
   const pathname = usePathname();
   return (
-    <nav className={cn("flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]", className)} aria-label="Sections">
+    <nav
+      className={cn(
+        "flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]",
+        sticky && "sticky top-14 z-30 -mx-4 bg-[var(--glass-strong)] px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:top-[4.25rem] lg:mx-0 lg:rounded-t-[var(--radius-md)] lg:px-1",
+        className,
+      )}
+      aria-label="Sections"
+    >
       {items
         .filter((i) => !i.hidden)
         .map((i) => {

@@ -59,7 +59,7 @@ export function CompetitionCard({ c, featured = false }: { c: CompetitionCardT; 
       <Cover style={c.cover_style} interactive className={featured ? "h-44 shrink-0 sm:h-56 lg:h-auto lg:min-h-56 lg:flex-1" : "h-32 shrink-0"}>
         <div className="absolute inset-x-3 top-3 flex flex-wrap items-center gap-1.5">
           <StatusBadge status={c.status} className={glassChip} />
-          {c.is_demo ? <DemoBadge /> : null}
+          {c.is_demo ? <DemoBadge className={cn(glassChip, "text-amber-200")} /> : null}
           <Badge className={cn(glassChip, "ml-auto")}>{titleCase(c.difficulty)}</Badge>
         </div>
         <div className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
@@ -213,7 +213,7 @@ export function CourseCard({ c }: { c: CourseCardT }) {
       <Cover style={c.cover_style} interactive className="h-28">
         <div className="absolute inset-x-3 top-3 flex gap-1.5">
           <Badge className={glassChip}>{titleCase(c.difficulty)}</Badge>
-          {c.is_demo ? <DemoBadge /> : null}
+          {c.is_demo ? <DemoBadge className={cn(glassChip, "text-amber-200")} /> : null}
         </div>
         <span className="absolute bottom-3 left-3 flex h-8 w-8 items-center justify-center rounded-lg bg-black/40 text-white ring-1 ring-inset ring-white/15 backdrop-blur-md">
           <BookOpen className="h-4 w-4" aria-hidden />

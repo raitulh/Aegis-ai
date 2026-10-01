@@ -118,9 +118,11 @@ export function ToggleChip({
       aria-pressed={pressed}
       onClick={() => onChange(!pressed)}
       className={cn(
-        "inline-flex h-10 items-center gap-1.5 rounded-[var(--radius-md)] border px-3 text-sm font-medium transition-colors",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]",
-        pressed ? "border-accent bg-accent-soft text-accent-strong" : "border-border text-muted hover:border-border-strong hover:text-fg",
+        "inline-flex h-10 items-center gap-1.5 rounded-[var(--radius-md)] border px-3 text-sm font-medium transition-[background-color,border-color,color,box-shadow] duration-200",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] active:scale-[0.98]",
+        pressed
+          ? "border-[color-mix(in_oklab,var(--accent)_55%,transparent)] bg-accent-soft text-accent-strong shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_10%,transparent)]"
+          : "border-border bg-bg-elevated/60 text-muted hover:border-border-strong hover:text-fg",
       )}
     >
       {icon}
@@ -135,7 +137,10 @@ export function FilterBar({ children, className }: { children: ReactNode; classN
   return (
     <div
       role="search"
-      className={cn("mb-6 flex flex-col gap-3 rounded-[var(--radius-lg)] border border-border bg-surface p-3 sm:flex-row sm:flex-wrap sm:items-end", className)}
+      className={cn(
+        "relative mb-6 flex flex-col gap-3 rounded-[var(--radius-lg)] border border-border bg-glass p-3 shadow-card backdrop-blur-md sm:flex-row sm:flex-wrap sm:items-end",
+        className,
+      )}
     >
       {children}
     </div>
@@ -145,9 +150,10 @@ export function FilterBar({ children, className }: { children: ReactNode; classN
 /** "3 results" line with an optional clear action. */
 export function ResultSummary({ total, noun, onClear, active }: { total: number; noun: string; onClear?: () => void; active?: boolean }) {
   return (
-    <div className="mb-3 flex items-center justify-between text-sm text-muted" aria-live="polite">
-      <span>
-        {total.toLocaleString()} {total === 1 ? noun : `${noun}s`}
+    <div className="mb-4 flex items-center justify-between text-sm text-muted" aria-live="polite">
+      <span className="flex items-center gap-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
+        <span className="tabular font-medium text-fg">{total.toLocaleString()}</span> {total === 1 ? noun : `${noun}s`}
       </span>
       {active && onClear ? (
         <button type="button" onClick={onClear} className="text-accent-strong hover:underline">

@@ -33,7 +33,8 @@ export function Hero({ signedIn, demo }: { signedIn: boolean; demo: boolean }) {
               </span>
               Evidence-backed
             </span>
-            Reproducible scoring · verifiable credentials
+            <span className="hidden min-[400px]:inline">Reproducible scoring · verifiable credentials</span>
+            <span className="min-[400px]:hidden">Verifiable results</span>
           </p>
 
           <h1 id="hero-title" className="mt-6 animate-rise-lg text-display text-fg [animation-delay:60ms]">

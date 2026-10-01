@@ -52,3 +52,49 @@ when the API takes a reason). Long forms warn on unsaved changes (`useUnsavedCha
 * Never display private scores unless the API returned them; never render unsanitized HTML; external links get
   `target="_blank" rel="noopener noreferrer"`.
 * Seeded demo content (`is_demo`) always shows `<DemoBadge/>`; never claim demo data is live.
+
+## Design system (v2 — "data orbit")
+
+Dark is the flagship theme, light is fully supported; both are driven by the semantic tokens in
+`src/app/globals.css`. Never hard-code colours for UI chrome — the only hex values outside the token file are the
+podium medals (`RankBadge`) and the WebGL scene palette.
+
+**Tokens:** canvas `bg`, `bg-elevated`; surfaces `surface` → `surface-3`, translucent `glass` / `--glass-strong`;
+hairlines `border`, `border-strong`; text `fg`, `muted`, `subtle`; energy `accent` (+ `-strong`, `-soft`), `blue`,
+`cyan` (+ `-soft`); status `success|warning|danger|info` (+ `-soft`); depth `shadow-card`, `shadow-elevated`,
+`shadow-glow`; radii `--radius-sm|md|lg|xl|2xl`; motion `--ease-out` (`ease-out-expo`), `--ease-spring`,
+`--dur-fast|base|slow|slower` (JS mirror in `src/lib/motion.ts`).
+
+**Type scale utilities:** `text-display` (hero), `text-headline` (section titles), `text-title` (page `h1` via
+`PageHeader`), `text-eyebrow` (mono uppercase labels), `text-gradient` (1–2 words max), `tabular` (all numbers in
+tables, scores, counters).
+
+**Surface utilities:** `surface-sheen` (top highlight), `surface-glass` (only over ambient visuals),
+`border-gradient` (focal panels only), `bg-brand`, `dot-grid`, `grid-bg`, `noise`, `lift` (hover lift for link
+cards), `spotlight` (cursor glow — pair with `useSpotlight`/`useTilt`), `skeleton`.
+
+**Motion:** entrance `animate-rise` / `animate-rise-lg` for above-the-fold content (pure CSS, works before
+hydration); `Reveal` (`components/motion/reveal`) for below-the-fold blocks — never for the `h1`/LCP; `Magnetic`
+for at most one or two primary CTAs per page; `useTilt`/`useSpotlight` for interactive cards; `CountUp` for real
+numbers only (it shows "—" until data exists). Success moments use `animate-pulse-ring` + `animate-check` /
+`animate-pop`, only on real success. Everything respects `prefers-reduced-motion` *and* the in-app setting
+(`data-motion="reduced"`): CSS animations are neutralised globally and JS effects check `useReducedMotion()`.
+
+**Visual layer:** `AmbientBackground` is rendered once by the shell (do not add another). `GridPlane`
+(perspective floor) and `SignalLines` (animated data paths) are decorative and `aria-hidden`.
+
+**3D:** the homepage hero uses `DataOrbit` (`components/visual/data-orbit.tsx`). The SVG fallback renders on the
+server and stays for reduced motion, missing WebGL or a lost GPU context; three.js + React Three Fiber load in a
+separate chunk on browser idle, run at a capped DPR with fewer particles on small/low-power devices, and stop
+rendering when the hero is off screen. Its six nodes are platform concepts (data → learn → build → compete → verify
+→ showcase) defined once in `orbit-concepts.ts`. Don't add WebGL elsewhere without the same safeguards.
+
+**New/extended primitives:** `Card variant` (default|glass|elevated|outline|inset), `CardHeader icon`, `Stat accent`,
+`PageHeader icon/meta`, `Section eyebrow/id`, `NavTabs sticky`, `Countdown variant="blocks"`, `Cover interactive`,
+`SkeletonStats`, `SkeletonHero`, `SkeletonCards media`, and `components/ui/extras`: `Kbd`, `SegmentedControl`,
+`MetaItem`, `RankBadge`. `ErrorState` only shows API-provided (user-safe) messages and always offers retry + back.
+
+**Layout rules:** prefer hairline-divided lists, gap-px tile grids and a primary column with a sticky aside over
+wrapping everything in cards. Grids start from `grid-cols-1` (or `minmax(0,…)` tracks) so long text never forces
+horizontal scroll; check 320 px, 390 px, tablet, desktop and ultrawide. Operational screens (organizer, judge,
+admin, moderation, settings) are dense, calm and have no decorative 3D.
