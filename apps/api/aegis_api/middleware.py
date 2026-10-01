@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import time
@@ -12,6 +13,8 @@ import structlog
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from aegis_api.config import get_settings
+from aegis_api.observability import metrics
+from aegis_api.observability.tracing import new_span_id, new_trace_id, parse_traceparent, traceparent
 
 log = structlog.get_logger("aegis.http")
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9\-_.]{8,64}$")
@@ -31,9 +34,14 @@ class RequestContextMiddleware:
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
         incoming = headers.get("x-request-id", "")
         request_id = incoming if _REQUEST_ID_RE.match(incoming) else f"req_{uuid.uuid4().hex[:20]}"
-        scope.setdefault("state", {})["request_id"] = request_id
+        parent = parse_traceparent(headers.get("traceparent"))
+        trace_id = parent[0] if parent else new_trace_id()
+        span_id = new_span_id()
+        state = scope.setdefault("state", {})
+        state["request_id"] = request_id
+        state["trace_id"] = trace_id
         structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(request_id=request_id)
+        structlog.contextvars.bind_contextvars(request_id=request_id, trace_id=trace_id)
         started = time.perf_counter()
         status_holder: dict[str, int] = {"status": 500}
 
@@ -42,6 +50,7 @@ class RequestContextMiddleware:
                 status_holder["status"] = message["status"]
                 raw = list(message.get("headers", []))
                 raw.append((b"x-request-id", request_id.encode()))
+                raw.append((b"traceparent", traceparent(trace_id, span_id).encode()))
                 message["headers"] = raw
             await send(message)
 
@@ -49,14 +58,23 @@ class RequestContextMiddleware:
             await self.app(scope, receive, send_wrapper)
         finally:
             path = scope.get("path", "")
-            if path not in ("/health", "/ready"):
+            elapsed = time.perf_counter() - started
+            route = getattr(scope.get("route"), "path", None) or "unmatched"
+            if path not in ("/health", "/ready", "/live", "/metrics"):
+                principal = state.get("principal")
                 log.info(
                     "request",
                     method=scope.get("method"),
                     path=path,
+                    route=route,
                     status=status_holder["status"],
-                    latency_ms=round((time.perf_counter() - started) * 1000, 1),
+                    latency_ms=round(elapsed * 1000, 1),
+                    tenant=str(principal.organization_id) if principal is not None else None,
                 )
+                with contextlib.suppress(Exception):
+                    metrics.HTTP_REQUESTS.labels(scope.get("method"), route, str(status_holder["status"])).inc()
+                    if not path.endswith("/stream"):
+                        metrics.HTTP_LATENCY.labels(scope.get("method"), route).observe(elapsed)
 
 
 class SecureHeadersMiddleware:
@@ -91,6 +109,72 @@ class SecureHeadersMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
+
+
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+SESSION_COOKIE_NAME = b"aegis_session"
+
+
+def _origin_of(url: str) -> str | None:
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    if not parts.scheme or not parts.netloc:
+        return None
+    return f"{parts.scheme}://{parts.netloc}".lower()
+
+
+class OriginGuardMiddleware:
+    """CSRF defence for cookie-authenticated requests (in addition to SameSite=Lax cookies and strict CORS).
+
+    For unsafe methods:
+      * a request carrying an ``Origin`` header that is not a trusted origin is rejected;
+      * a request authenticated by the session cookie (no ``Authorization``/``X-API-Key``) must present a
+        trusted ``Origin`` — or, failing that, a trusted ``Referer``.
+    API-key and bearer-token clients (SDK, CI, MCP) are unaffected: they send no ambient credentials."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("method") not in UNSAFE_METHODS:
+            await self.app(scope, receive, send)
+            return
+        headers = {k.decode().lower(): v.decode(errors="replace") for k, v in scope.get("headers", [])}
+        trusted = get_settings().trusted_origins
+        origin = headers.get("origin")
+        if origin and origin != "null" and origin.rstrip("/").lower() not in {t.lower() for t in trusted}:
+            await _reject_origin(scope, send)
+            return
+        has_bearer = bool(headers.get("authorization") or headers.get("x-api-key"))
+        cookie_auth = SESSION_COOKIE_NAME.decode() + "=" in headers.get("cookie", "")
+        if cookie_auth and not has_bearer:
+            candidate = origin if origin and origin != "null" else _origin_of(headers.get("referer", "") or "")
+            if not candidate or candidate.rstrip("/").lower() not in {t.lower() for t in trusted}:
+                await _reject_origin(scope, send)
+                return
+        await self.app(scope, receive, send)
+
+
+async def _reject_origin(scope: Scope, send: Send) -> None:
+    request_id: Any = scope.get("state", {}).get("request_id")
+    body = json.dumps(
+        {
+            "error": {
+                "code": "origin_rejected",
+                "message": "Cross-origin request rejected",
+                "request_id": request_id,
+            }
+        }
+    ).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 403,
+            "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
 
 
 class BodySizeLimitMiddleware:

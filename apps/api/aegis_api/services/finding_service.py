@@ -5,22 +5,24 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from aegis_api.db.base import utcnow
+from aegis_api.db.session import session_scope
 from aegis_api.models import (
     Audit,
     Evidence,
     EvidenceLink,
     Finding,
     FindingEvent,
+    FindingOccurrence,
     Membership,
     Notification,
     Organization,
     TestResult,
 )
-from aegis_api.models.enums import CATEGORY_DIMENSION, OPEN_FINDING_STATUSES, FindingStatus, Severity
+from aegis_api.models.enums import CATEGORY_DIMENSION, FindingStatus, Severity
 from aegis_api.security.context import Principal
 from aegis_api.services import audit_log
 from engines.risk.scoring import assess_finding_risk
@@ -34,9 +36,83 @@ POLICY_IMPORTANCE = {
 }
 
 
+def allocate_finding_number(organization_id: uuid.UUID) -> int:
+    """Atomically allocate the next human-readable finding number for a workspace.
+
+    Runs in its own short transaction so concurrent audits never hold (or race on) the organization row
+    for the duration of an audit. A rolled-back audit leaves a gap in the sequence, which is acceptable:
+    numbers are identifiers, not counts."""
+    with session_scope(org_id=organization_id) as s:
+        value: int = s.execute(
+            text(
+                "UPDATE organizations SET finding_seq = coalesce(finding_seq, 1000) + 1 WHERE id = :id RETURNING finding_seq"
+            ),
+            {"id": organization_id},
+        ).scalar_one()
+    return int(value)
+
+
 def _next_number(session: Session, org: Organization) -> int:
-    org.finding_seq = (org.finding_seq or 1000) + 1
-    return org.finding_seq
+    return allocate_finding_number(org.id)
+
+
+# Statuses from which a re-detected issue is treated as a regression and reopened.
+REOPENABLE_STATUSES = {FindingStatus.RESOLVED, "fixed"}
+
+
+def find_existing(
+    session: Session, organization_id: uuid.UUID, system_id: uuid.UUID, fingerprint: str
+) -> Finding | None:
+    """Deduplication is scoped to (organization, system, fingerprint): the same issue on two systems is two
+    findings. The most recent matching finding wins."""
+    return session.scalar(
+        select(Finding)
+        .where(
+            Finding.organization_id == organization_id,
+            Finding.system_id == system_id,
+            Finding.fingerprint == fingerprint,
+        )
+        .order_by(Finding.created_at.desc())
+        .limit(1)
+    )
+
+
+def record_occurrence(
+    session: Session,
+    finding: Finding,
+    *,
+    source_type: str,
+    source_id: uuid.UUID,
+    audit_id: uuid.UUID | None,
+    occurrences: int,
+    sample_size: int,
+    system_version: str | None,
+) -> None:
+    exists = session.scalar(
+        select(FindingOccurrence.id).where(
+            FindingOccurrence.finding_id == finding.id,
+            FindingOccurrence.source_type == source_type,
+            FindingOccurrence.source_id == source_id,
+        )
+    )
+    if exists:
+        return
+    session.add(
+        FindingOccurrence(
+            organization_id=finding.organization_id,
+            finding_id=finding.id,
+            system_id=finding.system_id,
+            audit_id=audit_id,
+            source_type=source_type,
+            source_id=source_id,
+            severity=finding.severity,
+            risk_level=finding.risk_level,
+            occurrences=occurrences,
+            sample_size=sample_size,
+            system_version=system_version,
+            observed_at=utcnow(),
+        )
+    )
 
 
 def create_from_group(
@@ -57,13 +133,7 @@ def create_from_group(
         evidence_confidence=ev_conf,
     )
     fingerprint = group.fingerprint()
-    existing = session.scalar(
-        select(Finding).where(
-            Finding.organization_id == org.id,
-            Finding.fingerprint == fingerprint,
-            Finding.status.in_(list(OPEN_FINDING_STATUSES)),
-        )
-    )
+    existing = find_existing(session, org.id, system.id, fingerprint)
     control = _resolve_control(session, audit, group.control_ref)
     details = {
         "evaluator_summary": rep.outcome.summary,
@@ -81,19 +151,46 @@ def create_from_group(
         existing.risk_score = risk.score
         existing.risk_reasons = risk.reasons
         existing.risk_factors = [f.__dict__ | {"contribution": f.contribution} for f in risk.factors]
-        existing.audit_id = audit.id
+        existing.last_audit_id = audit.id
+        existing.last_seen_at = utcnow()
         existing.details = details
         existing.updated_at = utcnow()
         _link_evidence(session, org.id, existing.id, evidence_ids)
         _tag_results(session, audit.id, group, existing.id)
-        session.add(
-            FindingEvent(
-                organization_id=org.id,
-                finding_id=existing.id,
-                type="reobserved",
-                note=f"Reobserved in audit {audit.id}",
-                data={"audit_id": str(audit.id)},
+        if existing.status in REOPENABLE_STATUSES:
+            session.add(
+                FindingEvent(
+                    organization_id=org.id,
+                    finding_id=existing.id,
+                    type="regressed",
+                    from_status=existing.status,
+                    to_status=FindingStatus.OPEN,
+                    note=f"Issue detected again by audit {audit.id} after it was {existing.status}",
+                    data={"audit_id": str(audit.id)},
+                )
             )
+            existing.status = FindingStatus.OPEN
+            existing.resolved_at = None
+            existing.details = {**details, "regressed": True}
+        else:
+            session.add(
+                FindingEvent(
+                    organization_id=org.id,
+                    finding_id=existing.id,
+                    type="reobserved",
+                    note=f"Reobserved in audit {audit.id}",
+                    data={"audit_id": str(audit.id)},
+                )
+            )
+        record_occurrence(
+            session,
+            existing,
+            source_type="audit",
+            source_id=audit.id,
+            audit_id=audit.id,
+            occurrences=group.occurrences,
+            sample_size=group.sample_size,
+            system_version=system.version,
         )
         return existing
 
@@ -110,6 +207,8 @@ def create_from_group(
         system_version=system.version,
         model_version=f"{system.model_name} {system.model_version or ''}".strip() or None,
         audit_id=audit.id,
+        last_audit_id=audit.id,
+        last_seen_at=utcnow(),
         control_id=control.id if control else None,
         control_ref=group.control_ref,
         policy_id=control.policy_id if control else None,
@@ -143,6 +242,16 @@ def create_from_group(
     session.flush()
     _link_evidence(session, org.id, finding.id, evidence_ids)
     _tag_results(session, audit.id, group, finding.id)
+    record_occurrence(
+        session,
+        finding,
+        source_type="audit",
+        source_id=audit.id,
+        audit_id=audit.id,
+        occurrences=group.occurrences,
+        sample_size=group.sample_size,
+        system_version=system.version,
+    )
     session.add(
         FindingEvent(
             organization_id=org.id,
@@ -259,13 +368,22 @@ def transition(
     return finding
 
 
-def notify_audit_complete(session: Session, audit: Audit, findings: list[Finding]) -> None:
+def notify_audit_complete(
+    session: Session, audit: Any, findings: list[Finding], *, new_findings: list[Finding] | None = None
+) -> None:
+    """In-app notifications and webhook events for a completed audit.
+
+    ``finding.created`` fires only for findings first detected by this audit; re-observed findings are
+    summarised in the audit notification instead of re-announced."""
+    new_findings = findings if new_findings is None else new_findings
+    new_ids = {f.id for f in new_findings}
     members = session.scalars(
         select(Membership.user_id).where(
             Membership.organization_id == audit.organization_id, Membership.status == "active"
         )
     ).all()
     critical = [f for f in findings if f.risk_level in ("high", "critical")]
+    critical_new = [f for f in critical if f.id in new_ids or (f.details or {}).get("regressed")]
     for user_id in members:
         session.add(
             Notification(
@@ -273,12 +391,12 @@ def notify_audit_complete(session: Session, audit: Audit, findings: list[Finding
                 user_id=user_id,
                 type="audit.completed",
                 title=f"Audit '{audit.name}' completed",
-                body=f"{len(findings)} finding(s), {len(critical)} high-risk.",
+                body=f"{len(findings)} finding(s) ({len(new_findings)} new), {len(critical)} high-risk.",
                 link=f"/dashboard/audits/{audit.id}",
                 severity="high" if critical else "info",
             )
         )
-    for finding in critical:
+    for finding in critical_new:
         for user_id in members:
             session.add(
                 Notification(
@@ -297,24 +415,31 @@ def notify_audit_complete(session: Session, audit: Audit, findings: list[Finding
         session,
         audit.organization_id,
         "audit.completed",
-        {"audit_id": str(audit.id), "findings": len(findings), "status": audit.status},
+        {
+            "audit_id": str(audit.id),
+            "system_id": str(audit.system_id),
+            "findings": len(findings),
+            "new_findings": len(new_findings),
+            "status": audit.status,
+        },
     )
-    for finding in findings:
+    for finding in new_findings:
         webhook_service.enqueue_event(
             session,
             audit.organization_id,
             "finding.created",
             {
                 "finding_id": str(finding.id),
+                "audit_id": str(audit.id),
                 "number": finding.number,
                 "severity": finding.severity,
                 "risk_level": finding.risk_level,
             },
         )
-        if finding.risk_level in ("high", "critical"):
-            webhook_service.enqueue_event(
-                session,
-                audit.organization_id,
-                "critical_risk.detected",
-                {"finding_id": str(finding.id), "risk_level": finding.risk_level},
-            )
+    for finding in critical_new:
+        webhook_service.enqueue_event(
+            session,
+            audit.organization_id,
+            "critical_risk.detected",
+            {"finding_id": str(finding.id), "risk_level": finding.risk_level},
+        )

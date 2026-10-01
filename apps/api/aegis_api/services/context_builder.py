@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from aegis_api.models import AISystem, Control, KnowledgeChunk, KnowledgeDocument
-from aegis_api.security.ssrf import validate_outbound_url
+from aegis_api.security.ssrf import guarded_client, validate_outbound_url
 from aegis_api.services import secrets_service
 from aegis_api.services.model_gateway import build_embedder, build_judge_router, build_target_provider
 from engines.evaluation.base import ControlSpec, EvaluationContext, RetrievedDoc, SystemProfile
@@ -55,7 +55,7 @@ def build_target(session: Session, system: AISystem) -> Target:
         url = validate_outbound_url(system.endpoint_url)
         auth = secrets_service.resolve_optional(session, system.auth_secret_id, system.organization_id)
         header = f"Bearer {auth}" if auth else None
-        return HTTPEndpointTarget(url, auth_header=header)
+        return HTTPEndpointTarget(url, auth_header=header, client=guarded_client(timeout=30.0))
     raise ValueError("System has no runnable provider, model or endpoint configured")
 
 

@@ -8,9 +8,13 @@ from enum import StrEnum
 class Role(StrEnum):
     OWNER = "owner"
     ADMIN = "admin"
+    SECURITY_ENGINEER = "security_engineer"
     AUDITOR = "auditor"
+    AI_ENGINEER = "ai_engineer"
     ANALYST = "analyst"
+    DEVELOPER = "developer"
     VIEWER = "viewer"
+    SERVICE_ACCOUNT = "service_account"
 
 
 class MembershipStatus(StrEnum):

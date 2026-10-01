@@ -11,7 +11,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from aegis_api.config import get_settings
 from aegis_api.errors import install_error_handlers
 from aegis_api.logging import configure_logging
-from aegis_api.middleware import BodySizeLimitMiddleware, RequestContextMiddleware, SecureHeadersMiddleware
+from aegis_api.middleware import (
+    BodySizeLimitMiddleware,
+    OriginGuardMiddleware,
+    RequestContextMiddleware,
+    SecureHeadersMiddleware,
+)
 from aegis_api.routers import (
     audits,
     auth,
@@ -63,8 +68,27 @@ async def lifespan(app: FastAPI):
     )
     if settings.uses_dev_secrets and settings.is_production:
         raise RuntimeError("Refusing to start in production without SECRETS_ENCRYPTION_KEY and API_KEY_PEPPER")
+    if settings.uses_dev_secrets:
+        log.warning("dev_secrets_in_use", detail="Development-only secrets are active; never use in production")
     _seed_reference_data()
-    yield
+    from aegis_api.jobs import dispatcher
+    from aegis_api.jobs.maintenance import scheduler
+    from aegis_api.realtime import hub
+    from aegis_api.routers.health import set_draining
+
+    set_draining(False)
+    if settings.scheduler_enabled and settings.effective_job_backend == "inline":
+        scheduler.start()
+    try:
+        yield
+    finally:
+        # Graceful shutdown: fail readiness first so the load balancer drains this instance, then stop
+        # background activity. In-flight inline jobs are recovered by the stale-run reaper if interrupted.
+        set_draining(True)
+        scheduler.stop()
+        await hub.close()
+        dispatcher.shutdown(wait=False)
+        log.info("shutdown_complete")
 
 
 def _seed_reference_data() -> None:
@@ -102,12 +126,20 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["X-Request-ID"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Request-ID",
+            "X-Aegis-Org",
+            "Idempotency-Key",
+            "Last-Event-ID",
+        ],
+        expose_headers=["X-Request-ID", "Retry-After", "Idempotency-Replayed"],
         max_age=600,
     )
     app.add_middleware(BodySizeLimitMiddleware)
+    app.add_middleware(OriginGuardMiddleware)
     app.add_middleware(SecureHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)
 

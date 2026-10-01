@@ -191,16 +191,111 @@ def _issue_session(session: Session, user: User, guest: bool = False) -> tuple[s
 
 def resolve_session(session: Session, token: str) -> User | None:
     record = session.scalar(select(AuthSession).where(AuthSession.token_hash == keyed_hash(token)))
-    if record is None or record.revoked_at is not None or record.expires_at < utcnow():
+    now = utcnow()
+    if record is None or record.revoked_at is not None or record.expires_at < now:
         return None
-    record.last_used_at = utcnow()
+    if record.last_used_at is None or (now - record.last_used_at).total_seconds() > 60:
+        record.last_used_at = now
     return session.get(User, record.user_id)
 
 
-def revoke_session(session: Session, token: str) -> None:
+def revoke_session(session: Session, token: str) -> uuid.UUID | None:
     record = session.scalar(select(AuthSession).where(AuthSession.token_hash == keyed_hash(token)))
     if record and record.revoked_at is None:
         record.revoked_at = utcnow()
+        return record.user_id
+    return None
+
+
+def revoke_user_sessions(session: Session, user_id: uuid.UUID) -> int:
+    records = session.scalars(
+        select(AuthSession).where(AuthSession.user_id == user_id, AuthSession.revoked_at.is_(None))
+    ).all()
+    for record in records:
+        record.revoked_at = utcnow()
+    return len(records)
+
+
+def accept_invitation(
+    session: Session,
+    *,
+    token: str,
+    current_user: User | None,
+    password: str | None,
+    full_name: str | None,
+) -> SessionResult:
+    """Consume a single-use invitation token and activate the membership.
+
+    The token is matched by keyed hash only. An invitation for an existing account can only be accepted
+    by that account (signed in); otherwise a new local account is created for the invited email."""
+    from aegis_api.models import Invitation
+
+    invitation = session.scalar(select(Invitation).where(Invitation.token_hash == keyed_hash(token)))
+    if invitation is None or invitation.status != "pending" or invitation.expires_at < utcnow():
+        raise ValidationFailed("This invitation is invalid or has expired")
+    email = invitation.email.strip().lower()
+    existing = session.scalar(select(User).where(func.lower(User.email) == email))
+    token_out: str | None = None
+    expires: datetime | None = None
+    if existing is not None:
+        if current_user is None or current_user.id != existing.id:
+            raise Unauthorized("Sign in as the invited account to accept this invitation")
+        user = existing
+    else:
+        if not get_settings().local_auth_enabled:
+            raise ValidationFailed("Local authentication is disabled on this deployment")
+        problems = password_problems(password or "")
+        if problems:
+            raise ValidationFailed("Password does not meet requirements: " + "; ".join(problems))
+        user = User(
+            email=email,
+            full_name=full_name,
+            auth_provider="local",
+            auth_subject=f"local:{uuid.uuid4()}",
+            password_hash=hash_password(password or ""),
+            email_verified=True,  # possession of the emailed token proves control of the address
+        )
+        session.add(user)
+        session.flush()
+        token_out, expires = _issue_session(session, user)
+    membership = session.scalar(
+        select(Membership).where(
+            Membership.organization_id == invitation.organization_id, Membership.user_id == user.id
+        )
+    )
+    if membership is None:
+        membership = Membership(
+            organization_id=invitation.organization_id,
+            user_id=user.id,
+            role=invitation.role,
+            status=MembershipStatus.ACTIVE,
+        )
+        session.add(membership)
+    else:
+        membership.status = MembershipStatus.ACTIVE
+        membership.role = invitation.role
+    invitation.status = "accepted"
+    invitation.accepted_at = utcnow()
+    user.default_organization_id = invitation.organization_id
+    session.flush()
+    org = session.get(Organization, invitation.organization_id)
+    assert org is not None
+    from aegis_api.services import audit_log
+
+    audit_log.record(
+        session,
+        organization_id=org.id,
+        action="team.invitation_accepted",
+        resource_type="membership",
+        resource_id=membership.id,
+        actor_type="user",
+        actor_label=user.email,
+        user_id=user.id,
+        after={"role": membership.role},
+    )
+    return SessionResult(
+        user=user, membership=membership, organization=org, session_token=token_out, expires_at=expires
+    )
 
 
 def _primary_membership(session: Session, user: User) -> Membership | None:

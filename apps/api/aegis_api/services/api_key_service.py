@@ -15,6 +15,8 @@ from aegis_api.models.enums import Role
 from aegis_api.security.rbac import ALL_SCOPES
 from aegis_api.security.tokens import keyed_hash, new_api_key
 
+LAST_USED_RESOLUTION_SECONDS = 60
+
 
 @dataclass
 class IssuedKey:
@@ -58,7 +60,10 @@ def verify_api_key(session: Session, plaintext: str) -> ApiKey | None:
         return None
     if record.expires_at is not None and record.expires_at < utcnow():
         return None
-    record.last_used_at = utcnow()
+    # Throttled bookkeeping: a hot key (e.g. runtime ingestion) must not serialise every request on one row.
+    now = utcnow()
+    if record.last_used_at is None or (now - record.last_used_at).total_seconds() > LAST_USED_RESOLUTION_SECONDS:
+        record.last_used_at = now
     return record
 
 

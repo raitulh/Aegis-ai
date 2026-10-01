@@ -13,11 +13,13 @@ from aegis_api.models.audit import (
     TestResult,
     TestSuite,
 )
+from aegis_api.models.billing import BillingEvent, Subscription, UsageEvent
 from aegis_api.models.findings import (
     Evidence,
     EvidenceLink,
     Finding,
     FindingEvent,
+    FindingOccurrence,
     RedTeamProbe,
     RedTeamRun,
     RegressionRun,
@@ -37,6 +39,7 @@ from aegis_api.models.operations import (
     Webhook,
     WebhookDelivery,
 )
+from aegis_api.models.platform import IdempotencyKey, JobRun
 from aegis_api.models.policy import (
     Control,
     ControlAssessment,
@@ -85,6 +88,7 @@ __all__ = [
     "AuditRun",
     "AuthSession",
     "AuthToken",
+    "BillingEvent",
     "Claim",
     "Control",
     "ControlAssessment",
@@ -97,10 +101,13 @@ __all__ = [
     "FeatureFlag",
     "Finding",
     "FindingEvent",
+    "FindingOccurrence",
     "Framework",
     "FrameworkControl",
+    "IdempotencyKey",
     "Integration",
     "Invitation",
+    "JobRun",
     "KnowledgeChunk",
     "KnowledgeDocument",
     "Membership",
@@ -124,6 +131,7 @@ __all__ = [
     "RiskSnapshot",
     "SavedFilter",
     "Secret",
+    "Subscription",
     "SystemEvent",
     "SystemVersion",
     "TestCase",
@@ -131,6 +139,7 @@ __all__ = [
     "TestSuite",
     "ToolCall",
     "TraceEvent",
+    "UsageEvent",
     "User",
     "Webhook",
     "WebhookDelivery",

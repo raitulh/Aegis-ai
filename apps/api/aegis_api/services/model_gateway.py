@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from aegis_api.config import get_settings
 from aegis_api.models import AISystem, Provider
-from aegis_api.security.ssrf import validate_outbound_url
+from aegis_api.security.ssrf import guarded_client, validate_outbound_url
 from aegis_api.services import secrets_service
 from engines.providers.anthropic import AnthropicProvider
 from engines.providers.base import ModelProvider, ProviderUnavailable
@@ -28,7 +28,17 @@ def build_provider(session: Session, provider: Provider) -> ModelProvider:
     api_key = secrets_service.resolve_optional(session, provider.secret_id, provider.organization_id)
     timeout = settings.model_timeout_seconds
     if provider.kind == "ollama":
-        base = provider.base_url or settings.ollama_base_url or "http://localhost:11434"
+        if provider.base_url:
+            # Tenant-supplied URL: re-validated and connected through the SSRF-guarded transport.
+            base = validate_outbound_url(provider.base_url)
+            return OllamaProvider(
+                base_url=base,
+                default_model=provider.default_model or settings.ollama_model,
+                timeout=timeout,
+                client=guarded_client(timeout=timeout),
+            )
+        # Operator-configured (environment) URL: trusted, may be a private address.
+        base = settings.ollama_base_url or "http://localhost:11434"
         return OllamaProvider(
             base_url=base, default_model=provider.default_model or settings.ollama_model, timeout=timeout
         )

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from aegis_api.db.base import utcnow
 from aegis_api.deps import get_db, require
-from aegis_api.errors import Forbidden, NotFound, ValidationFailed
+from aegis_api.errors import Conflict, Forbidden, NotFound, ValidationFailed
 from aegis_api.models import (
     AISystem,
     Audit,
@@ -26,11 +26,19 @@ from aegis_api.models import (
 )
 from aegis_api.models.enums import OPEN_FINDING_STATUSES, IntegrationKind, Role
 from aegis_api.routers._helpers import paginate
-from aegis_api.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut, InviteCreate, MemberOut, RoleUpdate
+from aegis_api.schemas.auth import (
+    ApiKeyCreate,
+    ApiKeyCreated,
+    ApiKeyOut,
+    InviteCreate,
+    InviteCreated,
+    MemberOut,
+    RoleUpdate,
+)
 from aegis_api.schemas.common import Message, Page, PageParams
 from aegis_api.schemas.findings import IntegrationOut, NotificationOut, OverviewStats, SearchResponse, SearchResult
 from aegis_api.security.context import Principal
-from aegis_api.security.rbac import can_assign_role
+from aegis_api.security.rbac import ASSIGNABLE_ROLES, can_assign_role
 from aegis_api.services import api_key_service, audit_log, risk_service
 
 router = APIRouter(prefix="/api/v1", tags=["Workspace"])
@@ -237,36 +245,71 @@ def list_team(principal: Principal = Depends(require("team:read")), db: Session 
     ]
 
 
-@router.post("/team/invite", response_model=Message)
+@router.post("/team/invite", response_model=InviteCreated, status_code=201)
 def invite(
     body: InviteCreate, principal: Principal = Depends(require("team:manage")), db: Session = Depends(get_db)
-) -> Message:
+) -> InviteCreated:
+    if body.role not in ASSIGNABLE_ROLES:
+        raise ValidationFailed("That role cannot be assigned to a person")
     if not can_assign_role(principal.role, body.role):
         raise Forbidden("You cannot assign that role")
-
+    from aegis_api.config import get_settings
     from aegis_api.models import Invitation
     from aegis_api.security.tokens import keyed_hash, random_token
+    from aegis_api.services import email_service
 
-    token = random_token()
-    db.add(
-        Invitation(
-            organization_id=principal.organization_id,
-            email=body.email.lower(),
-            role=body.role,
-            token_hash=keyed_hash(token),
-            invited_by_id=principal.user_id,
-            expires_at=utcnow() + timedelta(days=7),
+    email = body.email.strip().lower()
+    existing_member = db.scalar(
+        select(Membership.id)
+        .join(User, User.id == Membership.user_id)
+        .where(Membership.organization_id == principal.organization_id, func.lower(User.email) == email)
+    )
+    if existing_member:
+        raise ValidationFailed("That person is already a member of this workspace")
+    # Supersede any pending invitation for the same address.
+    for pending in db.scalars(
+        select(Invitation).where(
+            Invitation.organization_id == principal.organization_id,
+            Invitation.email == email,
+            Invitation.status == "pending",
         )
+    ).all():
+        pending.status = "revoked"
+    token = random_token()
+    expires = utcnow() + timedelta(days=7)
+    invitation = Invitation(
+        organization_id=principal.organization_id,
+        email=email,
+        role=body.role,
+        token_hash=keyed_hash(token),
+        invited_by_id=principal.user_id,
+        expires_at=expires,
+    )
+    db.add(invitation)
+    db.flush()
+    invite_url = f"{get_settings().web_base_url.rstrip('/')}/invite?token={token}"
+    sent = email_service.send(
+        to=email,
+        subject="You have been invited to an Aegis workspace",
+        body=f"You were invited to join a workspace on Aegis as {body.role}.\n\nAccept: {invite_url}\n\n"
+        "This link expires in 7 days.",
     )
     audit_log.record(
         db,
         organization_id=principal.organization_id,
         action="team.invited",
         resource_type="invitation",
+        resource_id=invitation.id,
         principal=principal,
-        after={"email": body.email, "role": body.role},
+        after={"email": email, "role": body.role, "email_sent": sent},
     )
-    return Message(message=f"Invitation created for {body.email}")
+    return InviteCreated(
+        message=f"Invitation created for {email}",
+        invitation_id=str(invitation.id),
+        invite_url=invite_url,
+        email_sent=sent,
+        expires_at=expires,
+    )
 
 
 @router.patch("/team/{membership_id}/role", response_model=MemberOut)
@@ -279,14 +322,37 @@ def change_role(
     membership = db.get(Membership, membership_id)
     if membership is None or membership.organization_id != principal.organization_id:
         raise NotFound("Member not found")
-    if body.role not in {r.value for r in Role}:
+    if body.role not in ASSIGNABLE_ROLES:
         raise ValidationFailed("Invalid role")
-    if not can_assign_role(principal.role, body.role):
-        raise Forbidden("You cannot assign that role")
+    # The actor must be allowed to both hold the *current* role's authority and grant the new one:
+    # an admin can neither demote an owner nor promote anyone to owner.
+    if not can_assign_role(principal.role, body.role) or not can_assign_role(principal.role, membership.role):
+        raise Forbidden("You cannot change this member's role")
+    if membership.role == Role.OWNER and body.role != Role.OWNER:
+        owners = db.scalar(
+            select(func.count(Membership.id)).where(
+                Membership.organization_id == principal.organization_id,
+                Membership.role == Role.OWNER,
+                Membership.status == "active",
+            )
+        )
+        if (owners or 0) <= 1:
+            raise Conflict("A workspace must keep at least one owner")
+    before = membership.role
     membership.role = body.role
     user = db.get(User, membership.user_id)
     if user is None:
         raise NotFound("Member not found")
+    audit_log.record(
+        db,
+        organization_id=principal.organization_id,
+        action="team.role_changed",
+        resource_type="membership",
+        resource_id=membership.id,
+        principal=principal,
+        before={"role": before},
+        after={"role": body.role, "user": user.email},
+    )
     return MemberOut(
         membership_id=str(membership.id),
         user_id=str(user.id),
@@ -307,6 +373,31 @@ def remove_member(
         raise NotFound("Member not found")
     if membership.role == Role.OWNER:
         raise Forbidden("The workspace owner cannot be removed")
+    if not can_assign_role(principal.role, membership.role):
+        raise Forbidden("You cannot remove this member")
+    from aegis_api.models import ApiKey
+
+    # Keys a departing member created stop working with them.
+    revoked = 0
+    for key in db.scalars(
+        select(ApiKey).where(
+            ApiKey.organization_id == principal.organization_id,
+            ApiKey.created_by_id == membership.user_id,
+            ApiKey.revoked_at.is_(None),
+        )
+    ).all():
+        key.revoked_at = utcnow()
+        revoked += 1
+    audit_log.record(
+        db,
+        organization_id=principal.organization_id,
+        action="team.member_removed",
+        resource_type="membership",
+        resource_id=membership.id,
+        principal=principal,
+        before={"user_id": str(membership.user_id), "role": membership.role},
+        after={"api_keys_revoked": revoked},
+    )
     db.delete(membership)
     return Message(message="Member removed")
 

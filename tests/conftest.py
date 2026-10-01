@@ -21,6 +21,10 @@ os.environ.setdefault("JOB_BACKEND", "inline")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("EMBEDDING_PROVIDER", "hash")
 os.environ.setdefault("REDIS_URL", "")
+os.environ.setdefault("SCHEDULER_ENABLED", "false")
+os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
+os.environ.setdefault("WEB_BASE_URL", "http://localhost:3000")
+TRUSTED_ORIGIN = "http://localhost:3000"
 
 
 def _db_available() -> bool:
@@ -51,7 +55,8 @@ def client():
 
     from aegis_api.app import create_app
 
-    with TestClient(create_app()) as c:
+    # Browsers always send Origin on cross-origin and same-origin unsafe requests; mirror the web console.
+    with TestClient(create_app(), headers={"origin": TRUSTED_ORIGIN}) as c:
         yield c
 
 

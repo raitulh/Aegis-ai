@@ -32,8 +32,10 @@ def _unique_slug(session: Session, org_id: uuid.UUID, name: str) -> str:
 
 def create_system(session: Session, principal: Principal, data: Any) -> AISystem:
     provider_id = uuid.UUID(data.provider_id) if data.provider_id else None
-    if provider_id and not session.get(Provider, provider_id):
-        raise ValidationFailed("Provider not found")
+    if provider_id:
+        provider = session.get(Provider, provider_id)
+        if provider is None or provider.organization_id != principal.organization_id:
+            raise ValidationFailed("Provider not found")
     if data.endpoint_url:
         validate_outbound_url(data.endpoint_url)
     auth_secret_id = None
@@ -91,6 +93,9 @@ def update_system(
     for field, value in payload.items():
         if field == "provider_id" and value is not None:
             value = uuid.UUID(value)
+            provider = session.get(Provider, value)
+            if provider is None or provider.organization_id != system.organization_id:
+                raise ValidationFailed("Provider not found")
         if field == "endpoint_url" and value:
             validate_outbound_url(value)
         if getattr(system, field, None) != value and value is not None:
@@ -126,24 +131,45 @@ def update_system(
 
 
 def change_impact(session: Session, system: AISystem, changed: list[str]) -> dict[str, Any]:
-    controls = (
-        session.scalar(select(func.count(Control.id)).where(Control.organization_id == system.organization_id)) or 0
+    """Impact of a configuration change, computed from real data: the system's regression tests and the
+    automated controls of the policies most recently audited against it. No estimates are invented."""
+    from aegis_api.models import Audit, PolicyVersion, RegressionTest
+
+    regression_tests = int(
+        session.scalar(
+            select(func.count(RegressionTest.id)).where(
+                RegressionTest.system_id == system.id, RegressionTest.active.is_(True)
+            )
+        )
+        or 0
     )
+    last_audit = session.scalar(
+        select(Audit).where(Audit.system_id == system.id).order_by(Audit.created_at.desc()).limit(1)
+    )
+    policy_ids = [uuid.UUID(p) for p in (last_audit.policy_version_ids if last_audit else [])]
+    automated_controls = 0
+    if policy_ids:
+        automated_controls = int(
+            session.scalar(
+                select(func.count(Control.id)).where(
+                    Control.policy_version_id.in_(select(PolicyVersion.id).where(PolicyVersion.id.in_(policy_ids))),
+                    Control.automation == "automated",
+                )
+            )
+            or 0
+        )
     notes = []
-    affected_tests = 0
     if "model_name" in changed or "model_version" in changed:
-        notes.append("Model changed — full re-audit recommended.")
-        affected_tests = int(controls) * 5
+        notes.append("Model changed — a full re-audit is recommended.")
     if "system_instructions" in changed or "prompt_version" in changed:
-        notes.append("Prompt changed — regression tests recommended.")
-        affected_tests = max(affected_tests, 15)
+        notes.append("Prompt changed — re-run regression tests.")
     if "config" in changed:
         notes.append("Configuration (guardrails/tools) changed — re-run affected controls.")
     return {
         "changed_fields": changed,
-        "affected_controls": int(controls),
-        "affected_tests": affected_tests,
-        "recommended_regression_tests": min(int(controls), 20),
+        "affected_controls": automated_controls,
+        "affected_tests": regression_tests,
+        "recommended_regression_tests": regression_tests,
         "notes": notes,
     }
 
@@ -202,7 +228,8 @@ def get_system(session: Session, system_id: uuid.UUID, organization_id: uuid.UUI
 
 def create_provider(session: Session, principal: Principal, data: Any) -> Provider:
     if data.base_url:
-        validate_outbound_url(data.base_url, allow_private=True)
+        # Private targets (e.g. a self-hosted Ollama) follow ALLOW_PRIVATE_NETWORK_TARGETS.
+        validate_outbound_url(data.base_url)
     secret_id = None
     if data.api_key:
         secret = secrets_service.create_secret(

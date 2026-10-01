@@ -9,22 +9,42 @@ Design choices:
 * A provider becoming unavailable degrades the audit to ``partially_completed`` with the affected
   categories recorded — it is never silently marked as passed.
 * Evidence is written as an append-only hash chain for tamper-evidence.
+
+Execution model (crash- and duplicate-safe):
+* **Claim.** A worker atomically moves the audit ``queued → running`` and takes a lease
+  (``lease_owner`` + ``heartbeat_at``) in its own committed transaction. A duplicate delivery finds nothing
+  to claim and exits without side effects.
+* **Progress channel.** Events, progress and heartbeats are written through separate short transactions
+  (:class:`ProgressChannel`) so SSE clients see them immediately. The main session never touches the
+  ``audits`` row before finalisation, so the two connections can never deadlock.
+* **Results transaction.** Test cases, results, evidence, findings, assessments and the report are written
+  in one transaction and committed together, together with a *conditional* terminal update
+  (``WHERE status = 'running' AND lease_owner = me AND NOT cancel_requested``). A cancelled audit or a lost
+  lease rolls everything back, so a retried attempt never duplicates results.
+* **Cancellation** is cooperative: the runner checks the flag at stage boundaries and during inference.
+* **Lost workers** are detected by the maintenance reaper from a stale heartbeat (see ``maintenance``).
 """
 
 from __future__ import annotations
 
+import os
+import socket
 import uuid
 from collections import defaultdict
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from aegis_api.config import get_settings
 from aegis_api.db.base import utcnow
+from aegis_api.db.session import rowcount, session_factory
 from aegis_api.models import (
     Audit,
     AuditEvent,
@@ -103,15 +123,216 @@ class _Tally:
         }
 
 
+class AuditCancelled(Exception):
+    """Raised inside the runner when a cancellation request is observed."""
+
+
+def worker_identity() -> str:
+    return f"{socket.gethostname()}:{os.getpid()}"
+
+
+class ProgressChannel:
+    """Append-only audit event log, progress and heartbeat, each written in its own committed transaction.
+
+    Separate from the runner's results transaction so progress is visible to SSE clients immediately and
+    survives a rollback of the results (the timeline explains *why* an attempt failed)."""
+
+    def __init__(self, organization_id: uuid.UUID, audit_id: uuid.UUID, lease_owner: str) -> None:
+        self.org_id = organization_id
+        self.audit_id = audit_id
+        self.lease_owner = lease_owner
+        self.progress = 0
+        self._factory = session_factory()
+        with self._session() as s:
+            self.seq = int(
+                s.scalar(select(func.coalesce(func.max(AuditEvent.seq), 0)).where(AuditEvent.audit_id == audit_id)) or 0
+            )
+
+    @contextmanager
+    def _session(self) -> Iterator[Session]:
+        s = self._factory()
+        s.info["org_id"] = self.org_id
+        try:
+            yield s
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+        finally:
+            s.close()
+
+    def emit(
+        self,
+        type_: str,
+        message: str,
+        *,
+        stage: str | None = None,
+        level: str = "info",
+        data: dict[str, Any] | None = None,
+        progress: int | None = None,
+        fields: dict[str, Any] | None = None,
+    ) -> None:
+        if progress is not None:
+            self.progress = max(self.progress, min(progress, 100))
+        self.seq += 1
+        values: dict[str, Any] = {"heartbeat_at": utcnow(), "progress": self.progress}
+        if stage:
+            values["stage"] = stage
+        if fields:
+            values.update(fields)
+        with self._session() as s:
+            s.add(
+                AuditEvent(
+                    organization_id=self.org_id,
+                    audit_id=self.audit_id,
+                    seq=self.seq,
+                    type=type_,
+                    stage=stage,
+                    level=level,
+                    message=message,
+                    progress=self.progress,
+                    data=data or {},
+                )
+            )
+            s.execute(
+                update(Audit)
+                .where(
+                    Audit.id == self.audit_id,
+                    Audit.status == AuditStatus.RUNNING,
+                    Audit.lease_owner == self.lease_owner,
+                )
+                .values(**values)
+            )
+        _publish(self.org_id, self.audit_id, self.seq)
+
+    def append_terminal(self, type_: str, message: str, *, level: str, data: dict[str, Any] | None = None) -> None:
+        """Event written after the audit left ``running`` (no lease condition applies)."""
+        self.seq += 1
+        with self._session() as s:
+            s.add(
+                AuditEvent(
+                    organization_id=self.org_id,
+                    audit_id=self.audit_id,
+                    seq=self.seq,
+                    type=type_,
+                    stage=None,
+                    level=level,
+                    message=message,
+                    progress=self.progress,
+                    data=data or {},
+                )
+            )
+        _publish(self.org_id, self.audit_id, self.seq)
+
+    def cancel_requested(self) -> bool:
+        with self._session() as s:
+            row = s.execute(
+                select(Audit.status, Audit.cancel_requested, Audit.lease_owner).where(Audit.id == self.audit_id)
+            ).one_or_none()
+        if row is None:
+            return True
+        return bool(row.cancel_requested) or row.status != AuditStatus.RUNNING or row.lease_owner != self.lease_owner
+
+    def fail(self, run_id: uuid.UUID | None, code: str, message: str) -> None:
+        now = utcnow()
+        with self._session() as s:
+            s.execute(
+                update(Audit)
+                .where(
+                    Audit.id == self.audit_id,
+                    Audit.status == AuditStatus.RUNNING,
+                    Audit.lease_owner == self.lease_owner,
+                )
+                .values(status=AuditStatus.FAILED, error_code=code, error_message=message[:2000], completed_at=now)
+            )
+            if run_id is not None:
+                s.execute(
+                    update(AuditRun)
+                    .where(AuditRun.id == run_id)
+                    .values(status=RunStatus.FAILED, finished_at=now, error=message[:2000])
+                )
+        self.append_terminal("audit.failed", f"Audit failed: {message}", level="error", data={"code": code})
+
+    def finish_run(self, run_id: uuid.UUID | None, status: str, error: str | None = None) -> None:
+        if run_id is None:
+            return
+        with self._session() as s:
+            s.execute(
+                update(AuditRun).where(AuditRun.id == run_id).values(status=status, finished_at=utcnow(), error=error)
+            )
+
+
+def _publish(organization_id: uuid.UUID, audit_id: uuid.UUID, seq: int) -> None:
+    try:
+        from aegis_api.realtime import publish_audit_event
+
+        publish_audit_event(organization_id, audit_id, seq)
+    except Exception:  # pragma: no cover - realtime fan-out is best-effort; the DB log is the source of truth
+        log.debug("audit_event_publish_failed", exc_info=True)
+
+
+def claim_audit(organization_id: uuid.UUID, audit_id: uuid.UUID, worker: str) -> tuple[int, uuid.UUID] | None:
+    """Atomically claim a queued audit. Returns (attempt, audit_run_id) or None when there is nothing to claim."""
+    now = utcnow()
+    factory = session_factory()
+    s = factory()
+    s.info["org_id"] = organization_id
+    try:
+        row = s.execute(
+            update(Audit)
+            .where(Audit.id == audit_id, Audit.status == AuditStatus.QUEUED, Audit.cancel_requested.is_(False))
+            .values(
+                status=AuditStatus.RUNNING,
+                started_at=func.coalesce(Audit.started_at, now),
+                lease_owner=worker,
+                heartbeat_at=now,
+                attempts=Audit.attempts + 1,
+                stage=AuditStage.SETUP,
+                progress=0,
+                error_code=None,
+                error_message=None,
+            )
+            .returning(Audit.attempts)
+        ).first()
+        if row is None:
+            s.rollback()
+            return None
+        run = AuditRun(
+            organization_id=organization_id,
+            audit_id=audit_id,
+            attempt=int(row.attempts),
+            worker=worker,
+            status=RunStatus.RUNNING,
+            started_at=now,
+        )
+        s.add(run)
+        s.flush()
+        run_id = run.id
+        s.commit()
+        return int(row.attempts), run_id
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
+
+
 class AuditRunner:
-    def __init__(self, session: Session, audit: Audit) -> None:
+    def __init__(self, session: Session, audit: Audit, *, worker: str | None = None) -> None:
         self.session = session
         self.audit = audit
+        self.audit_id = audit.id
         self.org_id = audit.organization_id
-        self._seq = 0
+        self.worker = worker or worker_identity()
         self._tally = _Tally()
         self.chain = ChainState()
         self._evidence_seq = 0
+        self.channel: ProgressChannel | None = None
+        self.run_id: uuid.UUID | None = None
+        # Values accumulated during the run and written once, conditionally, at finalisation.
+        self.test_count = 0
+        self.tests_completed = 0
+        self.evidence_count = 0
 
     # -- events ---------------------------------------------------------------------------------
     def emit(
@@ -123,23 +344,15 @@ class AuditRunner:
         level: str = "info",
         data: dict[str, Any] | None = None,
         progress: int | None = None,
+        fields: dict[str, Any] | None = None,
     ) -> None:
-        self._seq += 1
-        if progress is not None:
-            self.audit.progress = progress
-        event = AuditEvent(
-            organization_id=self.org_id,
-            audit_id=self.audit.id,
-            seq=self._seq,
-            type=type_,
-            stage=stage,
-            level=level,
-            message=message,
-            progress=self.audit.progress,
-            data=data or {},
-        )
-        self.session.add(event)
-        self.session.flush()
+        assert self.channel is not None
+        self.channel.emit(type_, message, stage=stage, level=level, data=data, progress=progress, fields=fields)
+
+    def checkpoint(self) -> None:
+        assert self.channel is not None
+        if self.channel.cancel_requested():
+            raise AuditCancelled()
 
     def _on_model_call(self, task: str, result: Any, error: str | None) -> None:
         if error:
@@ -158,20 +371,21 @@ class AuditRunner:
 
     # -- main -----------------------------------------------------------------------------------
     def run(self) -> Audit:
+        claim = claim_audit(self.org_id, self.audit_id, self.worker)
+        if claim is None:
+            log.info("audit_claim_skipped", audit_id=str(self.audit_id), status=self.audit.status)
+            return self.audit
+        attempt, self.run_id = claim
+        self.session.refresh(self.audit)
         audit = self.audit
-        run = AuditRun(
-            organization_id=self.org_id, audit_id=audit.id, attempt=1, status=RunStatus.RUNNING, started_at=utcnow()
-        )
-        self.session.add(run)
-        audit.status = AuditStatus.RUNNING
-        audit.started_at = utcnow()
-        audit.stage = AuditStage.SETUP
+        self.channel = ProgressChannel(self.org_id, self.audit_id, self.worker)
         self.emit(
             "audit.started",
-            f"Audit '{audit.name}' started",
+            f"Audit '{audit.name}' started" + (f" (attempt {attempt})" if attempt > 1 else ""),
             stage=AuditStage.SETUP,
             level="success",
             progress=STAGE_PROGRESS[AuditStage.SETUP],
+            data={"attempt": attempt, "worker": self.worker},
         )
         try:
             system = audit.system
@@ -202,33 +416,45 @@ class AuditRunner:
             cases = self._generate(ctx, config, corpus)
             if not cases:
                 raise ValueError("No test cases were generated for the selected categories")
+            self.checkpoint()
             invocations = self._infer(target, cases, config.get("concurrency", 4))
+            self.checkpoint()
             rows = self._evaluate(ctx, cases, invocations)
+            self.checkpoint()
             self._record_traces(system, cases, invocations)
             self._build_evidence(rows)
-            findings = self._create_findings(rows)
+            findings, new_findings = self._create_findings(rows)
             self._map_controls(rows, policy_ids)
-            self._finalize(rows, findings, run)
+            self.checkpoint()
+            self._finalize(rows, findings, new_findings)
+        except AuditCancelled:
+            self.session.rollback()
+            self.channel.finish_run(self.run_id, RunStatus.CANCELLED)
+            self.channel.append_terminal(
+                "audit.cancelled", "Audit cancelled; no results were recorded", level="warning"
+            )
         except ProviderUnavailable as exc:
-            self._fail(run, "provider_unavailable", str(exc))
+            self.session.rollback()
+            self.channel.fail(self.run_id, "provider_unavailable", str(exc))
         except Exception as exc:
-            log.exception("audit_failed", audit_id=str(audit.id))
-            self._fail(run, "execution_error", f"{type(exc).__name__}: {exc}")
-        return audit
+            log.exception("audit_failed", audit_id=str(self.audit_id))
+            self.session.rollback()
+            self.channel.fail(self.run_id, "execution_error", f"{type(exc).__name__}: {exc}")
+        self.session.expire_all()
+        refreshed = self.session.get(Audit, self.audit_id)
+        return refreshed or audit
 
     # -- stages ---------------------------------------------------------------------------------
     def _generate(
         self, ctx: EvaluationContext, config: dict[str, Any], corpus: ProbeCorpus | None
     ) -> list[TestCaseSpec]:
-        self.audit.stage = AuditStage.TEST_GENERATION
-        fact_qs = self._fact_questions()
         gen = TestGenerator(
             GenerationConfig(
                 intensity=self.audit.intensity,
                 seed=config.get("seed", 1337),
                 max_cases_per_category=config.get("cases_per_category"),
                 repetitions_override=config.get("repetitions"),
-                fact_questions=fact_qs,
+                fact_questions=self._fact_questions(),
                 corpus=corpus,
                 domain=ctx.system.domain,
                 tool_policies=ctx.system.tools,
@@ -249,11 +475,12 @@ class AuditRunner:
         self.session.flush()
         self.suite_id = suite.id
         total_invocations = 0
+        records: dict[str, TestCase] = {}
         for case in cases:
             tc = TestCase(
                 organization_id=self.org_id,
                 suite_id=suite.id,
-                audit_id=self.audit.id,
+                audit_id=self.audit_id,
                 external_key=case.key,
                 category=case.category,
                 test_type=case.test_type,
@@ -269,14 +496,11 @@ class AuditRunner:
                 params=case.params,
             )
             self.session.add(tc)
-            case.params["_db_id"] = None  # placeholder; set after flush
+            records[case.key] = tc
             total_invocations += len(case.inputs) * case.repetitions
         self.session.flush()
-        self._case_db_ids = {
-            c.external_key: c.id
-            for c in self.session.scalars(select(TestCase).where(TestCase.audit_id == self.audit.id)).all()
-        }
-        self.audit.test_count = len(cases)
+        self._case_db_ids = {key: tc.id for key, tc in records.items()}
+        self.test_count = len(cases)
         self.emit(
             "audit.tests_generated",
             f"Generated {len(cases)} test case(s) ({total_invocations} invocations)",
@@ -284,6 +508,7 @@ class AuditRunner:
             level="success",
             data={"cases": len(cases), "invocations": total_invocations},
             progress=STAGE_PROGRESS[AuditStage.TEST_GENERATION],
+            fields={"test_count": len(cases)},
         )
         for cat in sorted({c.category for c in cases}):
             n = sum(1 for c in cases if c.category == cat)
@@ -296,23 +521,10 @@ class AuditRunner:
         return cases
 
     def _fact_questions(self) -> list[str]:
-        from aegis_api.models import KnowledgeDocument
-
-        docs = self.session.scalars(
-            select(KnowledgeDocument).where(
-                KnowledgeDocument.organization_id == self.org_id,
-                (KnowledgeDocument.system_id == self.audit.system_id) | (KnowledgeDocument.system_id.is_(None)),
-            )
-        ).all()
-        questions: list[str] = []
-        for doc in docs:
-            questions.extend((doc.version and []) or [])
-        # System config may carry curated fact questions for groundedness.
-        cfg_qs = (self.audit.system.config or {}).get("fact_questions", [])
-        return list(cfg_qs) + questions
+        # Curated groundedness questions live in the system configuration.
+        return list((self.audit.system.config or {}).get("fact_questions", []))
 
     def _infer(self, target: Any, cases: list[TestCaseSpec], concurrency: int) -> dict[str, list[SystemInvocation]]:
-        self.audit.stage = AuditStage.INFERENCE
         self.emit(
             "audit.stage",
             "Running inference against the system under test",
@@ -334,7 +546,8 @@ class AuditRunner:
 
         span = STAGE_PROGRESS[AuditStage.INFERENCE] - STAGE_PROGRESS[AuditStage.TEST_GENERATION]
         workers = max(1, min(concurrency, get_settings().inline_job_workers * 4, 12))
-        with ThreadPoolExecutor(max_workers=workers) as pool:
+        pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="aegis-infer")
+        try:
             for key, inv in pool.map(invoke, jobs):
                 results[key].append(inv)
                 completed += 1
@@ -352,14 +565,18 @@ class AuditRunner:
                         }
                     )
                 if completed % max(1, len(jobs) // 12) == 0 or completed == len(jobs):
-                    self.audit.tests_completed = completed
+                    self.tests_completed = completed
                     self.emit(
                         "audit.inference_progress",
                         f"{completed}/{len(jobs)} invocations complete",
                         stage=AuditStage.INFERENCE,
                         data={"completed": completed, "total": len(jobs)},
                         progress=STAGE_PROGRESS[AuditStage.TEST_GENERATION] + int(span * completed / len(jobs)),
+                        fields={"tests_completed": completed},
                     )
+                    self.checkpoint()
+        finally:
+            pool.shutdown(wait=True, cancel_futures=True)
         if unavailable:
             self.emit(
                 "audit.warning",
@@ -372,7 +589,6 @@ class AuditRunner:
     def _evaluate(
         self, ctx: EvaluationContext, cases: list[TestCaseSpec], invocations: dict[str, list[SystemInvocation]]
     ) -> list[ResultRow]:
-        self.audit.stage = AuditStage.EVALUATION
         self.emit(
             "audit.stage",
             "Evaluating responses",
@@ -508,7 +724,6 @@ class AuditRunner:
                 recorded += 1
 
     def _build_evidence(self, rows: list[ResultRow]) -> None:
-        self.audit.stage = AuditStage.EVIDENCE
         self.emit(
             "audit.stage",
             "Collecting evidence",
@@ -517,6 +732,7 @@ class AuditRunner:
         )
         count = 0
         for row in rows:
+            evidence_ids: list[uuid.UUID] = []
             for artifact in row.outcome.artifacts:
                 self._evidence_seq += 1
                 payload = {
@@ -528,7 +744,7 @@ class AuditRunner:
                 c_hash, ch_hash, prev = self.chain.append(payload)
                 ev = Evidence(
                     organization_id=self.org_id,
-                    audit_id=self.audit.id,
+                    audit_id=self.audit_id,
                     system_id=self.audit.system_id,
                     seq=self._evidence_seq,
                     kind=artifact.kind,
@@ -556,13 +772,10 @@ class AuditRunner:
                             relation="supports",
                         )
                     )
-                row.setdefault_evidence = getattr(row, "evidence_ids", [])  # type: ignore[attr-defined]
-                if not hasattr(row, "evidence_ids"):
-                    row.evidence_ids = []  # type: ignore[attr-defined]
-                row.evidence_ids.append(ev.id)  # type: ignore[attr-defined]
+                evidence_ids.append(ev.id)
                 count += 1
-        self.audit.evidence_count = count
-        self.audit.evidence_head_hash = self.chain.head
+            row.evidence_ids = evidence_ids  # type: ignore[attr-defined]
+        self.evidence_count = count
         self.emit(
             "audit.evidence",
             f"Captured {count} evidence artifact(s) in a hash chain",
@@ -571,8 +784,7 @@ class AuditRunner:
             data={"count": count, "head": self.chain.head},
         )
 
-    def _create_findings(self, rows: list[ResultRow]) -> list[Finding]:
-        self.audit.stage = AuditStage.RISK_SCORING
+    def _create_findings(self, rows: list[ResultRow]) -> tuple[list[Finding], list[Finding]]:
         self.emit(
             "audit.stage",
             "Scoring risk and creating findings",
@@ -583,6 +795,7 @@ class AuditRunner:
         org = self.session.get(Organization, self.org_id)
         assert org is not None
         findings: list[Finding] = []
+        new_findings: list[Finding] = []
         for group in groups:
             evidence_ids: list[uuid.UUID] = []
             for row in group.rows:
@@ -596,6 +809,9 @@ class AuditRunner:
                 self._extra_stats(group),
             )
             findings.append(finding)
+            # A finding first detected by this audit is new; others were re-observed (or regressed).
+            if finding.audit_id == self.audit_id:
+                new_findings.append(finding)
             self.emit(
                 "audit.finding_created",
                 f"Finding #{finding.number}: {finding.title} [{finding.risk_level.upper()}]",
@@ -603,21 +819,9 @@ class AuditRunner:
                 level="warning",
                 data={"finding_id": str(finding.id), "severity": finding.severity, "risk": finding.risk_level},
             )
-        self.audit.findings_count = len(findings)
-        return findings
-
-    def _extra_stats(self, group: Any) -> dict[str, Any]:
-        # Pool counterfactual statistics across the group for the finding detail.
-        if group.category == "fairness":
-            evaluator = REGISTRY.get("fairness.counterfactual")
-            if evaluator and hasattr(evaluator, "aggregate"):
-                outcomes = [r.outcome for r in group.rows if r.outcome.observed.get("deltas")]
-                if outcomes:
-                    return {"counterfactual": evaluator.aggregate(outcomes)}
-        return {}
+        return findings, new_findings
 
     def _map_controls(self, rows: list[ResultRow], policy_ids: list[uuid.UUID]) -> None:
-        self.audit.stage = AuditStage.POLICY_MAPPING
         if not policy_ids:
             return
         by_control: dict[str, list[ResultRow]] = defaultdict(list)
@@ -639,7 +843,7 @@ class AuditRunner:
             self.session.add(
                 ControlAssessment(
                     organization_id=self.org_id,
-                    audit_id=self.audit.id,
+                    audit_id=self.audit_id,
                     control_id=control.id,
                     status=status,
                     tests_run=len(control_rows),
@@ -657,24 +861,30 @@ class AuditRunner:
             progress=STAGE_PROGRESS[AuditStage.POLICY_MAPPING],
         )
 
-    def _finalize(self, rows: list[ResultRow], findings: list[Finding], run: AuditRun) -> None:
+    def _finalize(self, rows: list[ResultRow], findings: list[Finding], new_findings: list[Finding]) -> None:
         from aegis_api.services import report_service, risk_service
+        from engines.risk.scoring import dimension_scores_from_results, posture_from_scores
 
-        self.audit.stage = AuditStage.REPORT_GENERATION
+        assert self.channel is not None
+        self.emit(
+            "audit.stage",
+            "Generating report",
+            stage=AuditStage.REPORT_GENERATION,
+            progress=STAGE_PROGRESS[AuditStage.RISK_SCORING],
+        )
         result_dicts = [
             {"category": r.case.category, "status": r.outcome.status, "severity": r.outcome.severity} for r in rows
         ]
-        from engines.risk.scoring import dimension_scores_from_results, posture_from_scores
-
         scores = dimension_scores_from_results(result_dicts)
         matrix = test_matrix(rows)
-        errored_categories = self._missing_categories(rows)
+        missing = self._missing_categories(rows)
         summary = {
             "dimensions": scores,
             "posture": posture_from_scores(scores),
             "test_matrix": matrix,
             "findings": {
                 "total": len(findings),
+                "new": len(new_findings),
                 "by_severity": _severity_counts(findings),
                 "by_dimension": _dimension_counts(findings),
             },
@@ -685,14 +895,28 @@ class AuditRunner:
             },
             "high_risk": sum(1 for f in findings if f.risk_level in ("high", "critical")),
         }
-        self.audit.summary = summary
-        self.audit.cost = self._tally.cost(get_settings().model_pricing)
-        self.audit.manifest = self._manifest()
+        final_status = AuditStatus.PARTIALLY_COMPLETED if missing else AuditStatus.COMPLETED
+        completed_at = utcnow()
+        values: dict[str, Any] = {
+            "status": final_status,
+            "summary": summary,
+            "cost": self._tally.cost(get_settings().model_pricing),
+            "manifest": self._manifest(),
+            "missing_categories": missing,
+            "completed_at": completed_at,
+            "progress": 100,
+            "stage": AuditStage.REPORT_GENERATION,
+            "test_count": self.test_count,
+            "tests_completed": self.tests_completed,
+            "findings_count": len(findings),
+            "evidence_count": self.evidence_count,
+            "evidence_head_hash": self.chain.head,
+        }
         for mc in self._tally.model_calls:
             self.session.add(
                 ModelCall(
                     organization_id=self.org_id,
-                    audit_id=self.audit.id,
+                    audit_id=self.audit_id,
                     purpose=mc["purpose"],
                     provider=mc["provider"],
                     model=mc.get("model"),
@@ -702,27 +926,74 @@ class AuditRunner:
                     simulated=mc["provider"] == "demo",
                 )
             )
-        risk_service.write_snapshot(self.session, self.audit, scores, findings)
-        report_service.generate_report(self.session, self.audit, rows, findings, matrix, scores)
-        if errored_categories:
-            self.audit.status = AuditStatus.PARTIALLY_COMPLETED
-            self.audit.missing_categories = errored_categories
-        else:
-            self.audit.status = AuditStatus.COMPLETED
-        self.audit.completed_at = utcnow()
-        self.audit.progress = 100
-        run.status = RunStatus.COMPLETED
-        run.finished_at = utcnow()
-        level = "warning" if self.audit.status == AuditStatus.PARTIALLY_COMPLETED else "success"
-        self.emit(
+        # The report and snapshot read a view of the final audit; the audits row itself is only written by
+        # the conditional update below, so no lock is held on it while the results are assembled.
+        view = SimpleNamespace(
+            id=self.audit_id,
+            organization_id=self.org_id,
+            system_id=self.audit.system_id,
+            system=self.audit.system,
+            name=self.audit.name,
+            categories=self.audit.categories,
+            intensity=self.audit.intensity,
+            policy_version_ids=self.audit.policy_version_ids,
+            config=self.audit.config,
+            started_at=self.audit.started_at,
+            **values,
+        )
+        risk_service.write_snapshot(self.session, view, scores, findings)  # type: ignore[arg-type]
+        report_service.generate_report(self.session, view, rows, findings, matrix, scores)  # type: ignore[arg-type]
+        finding_service.notify_audit_complete(self.session, view, findings, new_findings=new_findings)
+        from aegis_api.services import usage_service
+
+        usage_service.record(
+            self.session,
+            self.org_id,
+            "audit_run",
+            quantity=1,
+            source_type="audit",
+            source_id=self.audit_id,
+            metadata={"tests": len(rows), "intensity": self.audit.intensity},
+        )
+        updated = rowcount(
+            self.session.execute(
+                update(Audit)
+                .where(
+                    Audit.id == self.audit_id,
+                    Audit.status == AuditStatus.RUNNING,
+                    Audit.lease_owner == self.worker,
+                    Audit.cancel_requested.is_(False),
+                )
+                .values(**values)
+            )
+        )
+        if not updated:
+            # Cancelled (or lease lost) while finalising: discard every result of this attempt.
+            raise AuditCancelled()
+        if self.run_id is not None:
+            self.session.execute(
+                update(AuditRun)
+                .where(AuditRun.id == self.run_id)
+                .values(status=RunStatus.COMPLETED, finished_at=completed_at)
+            )
+        self.session.commit()
+        level = "warning" if final_status == AuditStatus.PARTIALLY_COMPLETED else "success"
+        self.channel.append_terminal(
             "audit.completed",
-            f"Audit complete — {len(findings)} finding(s), posture {summary['posture']}",
-            stage=AuditStage.REPORT_GENERATION,
+            f"Audit complete — {len(findings)} finding(s) ({len(new_findings)} new), posture {summary['posture']}",
             level=level,
             data=summary,
-            progress=100,
         )
-        finding_service.notify_audit_complete(self.session, self.audit, findings)
+
+    def _extra_stats(self, group: Any) -> dict[str, Any]:
+        # Pool counterfactual statistics across the group for the finding detail.
+        if group.category == "fairness":
+            evaluator = REGISTRY.get("fairness.counterfactual")
+            if evaluator and hasattr(evaluator, "aggregate"):
+                outcomes = [r.outcome for r in group.rows if r.outcome.observed.get("deltas")]
+                if outcomes:
+                    return {"counterfactual": evaluator.aggregate(outcomes)}
+        return {}
 
     def _missing_categories(self, rows: list[ResultRow]) -> list[dict[str, Any]]:
         by_cat: dict[str, list[ResultRow]] = defaultdict(list)
@@ -755,16 +1026,6 @@ class AuditRunner:
             "thresholds": {},
             "timestamp": utcnow().isoformat(),
         }
-
-    def _fail(self, run: AuditRun, code: str, message: str) -> None:
-        self.audit.status = AuditStatus.FAILED
-        self.audit.error_code = code
-        self.audit.error_message = message
-        self.audit.completed_at = utcnow()
-        run.status = RunStatus.FAILED
-        run.finished_at = utcnow()
-        run.error = message
-        self.emit("audit.failed", f"Audit failed: {message}", level="error", data={"code": code})
 
 
 def _severity_counts(findings: list[Finding]) -> dict[str, int]:

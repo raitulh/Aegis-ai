@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import Boolean, Date, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from aegis_api.db.base import Base, CreatedMixin, IdMixin, OrgMixin, TimestampMixin
+from aegis_api.db.base import Base, CreatedMixin, IdMixin, OrgMixin, TimestampMixin, utcnow
 from aegis_api.models.enums import FindingStatus, RemediationStatus, RunStatus
 from aegis_api.models.systems import AISystem
 
@@ -21,6 +21,7 @@ class Finding(IdMixin, TimestampMixin, OrgMixin, Base):
         Index("ix_findings_org_status_severity", "organization_id", "status", "severity"),
         Index("ix_findings_org_category", "organization_id", "category"),
         Index("ix_findings_fingerprint", "organization_id", "fingerprint"),
+        Index("ix_findings_org_system_fingerprint", "organization_id", "system_id", "fingerprint"),
     )
 
     number: Mapped[int] = mapped_column(Integer)
@@ -33,9 +34,12 @@ class Finding(IdMixin, TimestampMixin, OrgMixin, Base):
     system_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_systems.id", ondelete="CASCADE"), index=True)
     system_version: Mapped[str | None] = mapped_column(String(40))
     model_version: Mapped[str | None] = mapped_column(String(160))
+    # The audit that first detected this finding (never reassigned; see FindingOccurrence for history).
     audit_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("audits.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    last_audit_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("audits.id", ondelete="SET NULL"), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(nullable=True)
     control_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("controls.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -65,7 +69,36 @@ class Finding(IdMixin, TimestampMixin, OrgMixin, Base):
     resolved_at: Mapped[datetime | None] = mapped_column(nullable=True)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    system: Mapped[AISystem] = relationship(lazy="joined")
+    system: Mapped[AISystem] = relationship(lazy="joined", foreign_keys=[system_id])
+
+
+class FindingOccurrence(IdMixin, Base):
+    """One observation of a finding by a specific audit, red-team run, regression run or runtime window.
+
+    Findings are deduplicated per (organization, system, fingerprint); occurrences keep each run's own view
+    so audit comparisons and per-audit finding lists stay correct after re-observation."""
+
+    __tablename__ = "finding_occurrences"
+    __table_args__ = (
+        UniqueConstraint("finding_id", "source_type", "source_id", name="uq_finding_occurrences_source"),
+        Index("ix_finding_occurrences_org", "organization_id"),
+        Index("ix_finding_occurrences_audit", "audit_id"),
+        Index("ix_finding_occurrences_finding", "finding_id", "observed_at"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"))
+    finding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("findings.id", ondelete="CASCADE"))
+    system_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_systems.id", ondelete="CASCADE"))
+    audit_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("audits.id", ondelete="CASCADE"), nullable=True)
+    source_type: Mapped[str] = mapped_column(String(24))  # audit | redteam | regression | runtime
+    source_id: Mapped[uuid.UUID] = mapped_column()
+    severity: Mapped[str] = mapped_column(String(16))
+    risk_level: Mapped[str | None] = mapped_column(String(16))
+    occurrences: Mapped[int] = mapped_column(Integer, default=1)
+    sample_size: Mapped[int] = mapped_column(Integer, default=1)
+    system_version: Mapped[str | None] = mapped_column(String(40))
+    observed_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class FindingEvent(IdMixin, CreatedMixin, OrgMixin, Base):
@@ -183,6 +216,7 @@ class RegressionRun(IdMixin, CreatedMixin, OrgMixin, Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(nullable=True)
     error: Mapped[str | None] = mapped_column(Text)
 
 
@@ -197,6 +231,7 @@ class RedTeamRun(IdMixin, TimestampMixin, OrgMixin, Base):
     summary: Mapped[dict[str, Any]] = mapped_column(default=dict)
     started_at: Mapped[datetime | None] = mapped_column(nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(nullable=True)
     error: Mapped[str | None] = mapped_column(Text)
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 

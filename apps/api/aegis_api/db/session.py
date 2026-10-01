@@ -84,6 +84,17 @@ def _run_after_commit(session: Session) -> None:
             structlog.get_logger("aegis.jobs").exception("dispatch_failed")
 
 
+@event.listens_for(Session, "after_rollback")
+def _discard_after_commit(session: Session) -> None:
+    """Jobs queued by a rolled-back transaction must never run."""
+    session.info.pop("after_commit", None)
+
+
+def rowcount(result: object) -> int:
+    """Rows affected by an UPDATE/DELETE result (typed helper for SQLAlchemy's CursorResult)."""
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
 def set_tenant(session: Session, org_id: uuid.UUID | None, user_id: uuid.UUID | None = None) -> None:
     """Bind tenant context to the session and apply it to the current transaction immediately."""
     session.info["org_id"] = org_id

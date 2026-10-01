@@ -36,6 +36,7 @@ class Audit(IdMixin, TimestampMixin, OrgMixin, Base):
     __table_args__ = (
         Index("ix_audits_org_status", "organization_id", "status"),
         Index("ix_audits_org_created", "organization_id", "created_at"),
+        Index("ix_audits_status_heartbeat", "status", "heartbeat_at"),
     )
 
     system_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_systems.id", ondelete="CASCADE"), index=True)
@@ -66,6 +67,10 @@ class Audit(IdMixin, TimestampMixin, OrgMixin, Base):
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
     evidence_head_hash: Mapped[str | None] = mapped_column(String(64))
+    # Execution lease: exactly one worker may hold a running audit; a stale heartbeat means it was lost.
+    lease_owner: Mapped[str | None] = mapped_column(String(160))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     system: Mapped[AISystem] = relationship(lazy="joined")

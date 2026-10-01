@@ -16,6 +16,21 @@ class SignupRequest(BaseModel):
     organization_name: str | None = Field(default=None, max_length=120)
 
 
+class InvitationAccept(BaseModel):
+    token: str = Field(min_length=16, max_length=200)
+    password: str | None = Field(default=None, max_length=256)
+    full_name: str | None = Field(default=None, max_length=160)
+
+
+class InviteCreated(BaseModel):
+    message: str
+    invitation_id: str
+    # Shown once to the inviter so the link can be shared out of band when email delivery is not configured.
+    invite_url: str
+    email_sent: bool
+    expires_at: datetime
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=256)

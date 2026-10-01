@@ -24,6 +24,8 @@ class FindingOut(ORMModel):
     system_version: str | None
     model_version: str | None
     audit_id: str | None
+    last_audit_id: str | None = None
+    last_seen_at: datetime | None = None
     control_ref: str | None
     policy_id: str | None
     test_type: str | None
@@ -60,7 +62,19 @@ class FindingSummary(ORMModel):
     confidence: float
     occurrences: int
     sample_size: int
+    audit_id: str | None = None
+    last_seen_at: datetime | None = None
     created_at: datetime
+
+
+class AuditFindingOut(FindingSummary):
+    """A finding as observed by one specific audit."""
+
+    observed_severity: str
+    observed_risk_level: str | None
+    observed_occurrences: int
+    observed_sample_size: int
+    first_detected_here: bool
 
 
 class FindingUpdate(BaseModel):

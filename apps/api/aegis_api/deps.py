@@ -19,7 +19,7 @@ from aegis_api.db.session import session_factory, set_tenant
 from aegis_api.errors import Forbidden, Unauthorized
 from aegis_api.models import Organization, User
 from aegis_api.models.enums import MembershipStatus
-from aegis_api.ratelimit import get_limiter
+from aegis_api.ratelimit import client_ip, get_limiter
 from aegis_api.security.context import Principal, build_permissions
 from aegis_api.services import api_key_service, auth_service
 
@@ -66,20 +66,35 @@ def _requested_org(request: Request) -> uuid.UUID | None:
         return None
 
 
-def get_current_principal(
-    request: Request,
-    db: Session = Depends(_raw_session),
-) -> Principal:
+def get_current_principal(request: Request) -> Principal:
+    """Resolve the caller. Uses a short-lived owner-connection session that is closed before the endpoint
+    runs, so long-lived responses (SSE) never pin an identity-pool connection."""
+    cached = getattr(request.state, "principal", None)
+    if isinstance(cached, Principal):
+        return cached
+    session = session_factory(admin=True)()
+    try:
+        principal = _resolve_principal(request, session)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+    request.state.principal = principal
+    return principal
+
+
+def _resolve_principal(request: Request, db: Session) -> Principal:
     settings = get_settings()
     api_key, session_token, supabase_token = _extract_credentials(request)
     request_id = getattr(request.state, "request_id", None)
-    identity = "ip:" + (request.client.host if request.client else "unknown")
+    identity = "ip:" + client_ip(request)
 
     principal: Principal | None = None
     if api_key:
         identity = "key:" + api_key[:12]
         record = api_key_service.verify_api_key(db, api_key)
-        db.commit()
         if record is None:
             _rate("public", identity)
             raise Unauthorized("Invalid or revoked API key", code="invalid_api_key")
@@ -97,16 +112,14 @@ def get_current_principal(
         user: User | None = None
         if session_token:
             user = auth_service.resolve_session(db, session_token)
-            db.commit()
         elif supabase_token and (settings.effective_supabase_url or settings.supabase_jwt_secret):
             user = auth_service.authenticate_supabase(db, supabase_token)
-            db.commit()
         if user is None:
             _rate("public", identity)
             raise Unauthorized("Authentication required")
         identity = f"user:{user.id}"
         membership = auth_service.membership_for(db, user, _requested_org(request))
-        if membership is None or membership.status == MembershipStatus.SUSPENDED:
+        if membership is None or membership.status != MembershipStatus.ACTIVE:
             raise Forbidden("You do not have access to this workspace")
         principal = Principal(
             user_id=user.id,
@@ -120,7 +133,6 @@ def get_current_principal(
             request_id=request_id,
         )
     _rate("authenticated", identity)
-    request.state.principal = principal
     return principal
 
 
@@ -168,4 +180,4 @@ def principal_identity(request: Request) -> str:
     principal = getattr(request.state, "principal", None)
     if principal is not None:
         return f"org:{principal.organization_id}"
-    return "ip:" + (request.client.host if request.client else "unknown")
+    return "ip:" + client_ip(request)

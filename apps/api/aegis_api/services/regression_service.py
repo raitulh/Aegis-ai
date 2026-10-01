@@ -5,14 +5,16 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from aegis_api.db.base import utcnow
+from aegis_api.db.session import rowcount
 from aegis_api.errors import NotFound
 from aegis_api.models import (
     AISystem,
     Finding,
+    FindingEvent,
     RegressionRun,
     RegressionTest,
     Remediation,
@@ -227,9 +229,19 @@ def execute_run(session: Session, run_id: uuid.UUID) -> RegressionRun:
     system = session.get(AISystem, run.system_id)
     if system is None:
         raise NotFound("System not found")
-    run.status = RunStatus.RUNNING
-    run.started_at = utcnow()
+    if run.status != RunStatus.QUEUED:
+        return run  # duplicate delivery / already processed
+    claimed = rowcount(
+        session.execute(
+            update(RegressionRun)
+            .where(RegressionRun.id == run.id, RegressionRun.status == RunStatus.QUEUED)
+            .values(status=RunStatus.RUNNING, started_at=utcnow(), heartbeat_at=utcnow())
+        )
+    )
+    if not claimed:
+        return run
     session.flush()
+    session.refresh(run)
     try:
         target = context_builder.build_target(session, system)
         ctx = context_builder.build_context(session, system, [], seed=99, use_judge=False)
@@ -243,9 +255,8 @@ def execute_run(session: Session, run_id: uuid.UUID) -> RegressionRun:
             verdict = RegressionVerdict.PASS if outcome["after_status"] != "failed" else RegressionVerdict.FAIL
             verdicts.append(verdict)
             finding = session.get(Finding, test.finding_id) if test.finding_id else None
-            if finding and improved:
-                finding.status = FindingStatus.RESOLVED
-                finding.resolved_at = utcnow()
+            if finding is not None:
+                _record_retest(session, finding, run, verdict, improved)
             results.append(
                 {
                     "regression_test_id": str(test.id),
@@ -274,6 +285,47 @@ def execute_run(session: Session, run_id: uuid.UUID) -> RegressionRun:
         run.verdict = RegressionVerdict.ERROR
     run.completed_at = utcnow()
     return run
+
+
+def _record_retest(session: Session, finding: Finding, run: RegressionRun, verdict: str, improved: bool) -> None:
+    """Retest outcome drives the finding lifecycle: a pass resolves it, a failure keeps (or reopens) it."""
+    from aegis_api.services import finding_service
+
+    before = finding.status
+    if verdict == RegressionVerdict.PASS and improved:
+        finding.status = FindingStatus.RESOLVED
+        finding.resolved_at = utcnow()
+        event_type = "retest_passed"
+    elif verdict == RegressionVerdict.FAIL:
+        if finding.status in finding_service.REOPENABLE_STATUSES or finding.status == "retesting":
+            finding.status = FindingStatus.OPEN if finding.status != "retesting" else "in_remediation"
+            finding.resolved_at = None
+        event_type = "retest_failed"
+    else:
+        event_type = "retest_completed"
+    finding.updated_at = utcnow()
+    session.add(
+        FindingEvent(
+            organization_id=finding.organization_id,
+            finding_id=finding.id,
+            type=event_type,
+            from_status=before,
+            to_status=finding.status,
+            note=f"Regression run {run.id}: {verdict}",
+            data={"regression_run_id": str(run.id), "verdict": verdict},
+        )
+    )
+    if verdict == RegressionVerdict.FAIL:
+        finding_service.record_occurrence(
+            session,
+            finding,
+            source_type="regression",
+            source_id=run.id,
+            audit_id=None,
+            occurrences=1,
+            sample_size=1,
+            system_version=run.system_version,
+        )
 
 
 def _select_tests(session: Session, system: AISystem, finding_id: str | None) -> list[RegressionTest]:
