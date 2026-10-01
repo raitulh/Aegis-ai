@@ -60,7 +60,7 @@ export function Panel({
               {description ? <div className="mt-0.5 text-xs leading-relaxed text-muted">{description}</div> : null}
             </div>
           </div>
-          {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
+          {action ? <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
         </div>
       ) : null}
       {children !== undefined && children !== null ? <div className={cn(flush ? "" : "px-4 py-4 @md:px-5 @md:py-5", bodyClassName)}>{children}</div> : null}
@@ -96,7 +96,7 @@ export function SectionHeader({
         </h3>
         {description ? <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-muted">{description}</p> : null}
       </div>
-      {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
+      {action ? <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
     </div>
   );
 }

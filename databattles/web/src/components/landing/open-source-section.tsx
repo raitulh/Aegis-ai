@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, CircleDot, GitMerge, GitPullRequest, MessageSquare, Sparkles } from "lucide-react";
 import Link from "next/link";
 
-import { osKeys } from "@/components/catalog/repo";
+import { osKeys } from "@/components/catalog/os-keys";
 import type { IssueRow, OpenSourceOverview } from "@/components/catalog/types";
 import { CountUp } from "@/components/motion/count-up";
 import { Reveal } from "@/components/motion/reveal";

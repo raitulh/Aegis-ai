@@ -106,6 +106,7 @@ export default function CompetitionLayout({ children }: { children: ReactNode })
     const signedOut = me.isSuccess && me.data === null;
     return (
       <Container className="py-12">
+        <h1 className="sr-only">Competition unavailable</h1>
         {e instanceof ApiError && e.status === 404 ? (
           <div className="space-y-4">
             <NotFoundState what="competition" />

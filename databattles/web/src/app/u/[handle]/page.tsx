@@ -86,7 +86,7 @@ function PortfolioSection({
             <h2 id={id} className="text-lg font-semibold tracking-[-0.02em] text-fg">{title}</h2>
             {description ? <p className="mt-1 text-sm text-muted">{description}</p> : null}
           </div>
-          {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
+          {action ? <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
         </div>
         {children}
       </section>

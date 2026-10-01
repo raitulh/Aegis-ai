@@ -141,7 +141,7 @@ export function ManageHeading({ title, description, actions, eyebrow, icon }: { 
         <h2 className="text-xl font-semibold tracking-[-0.025em] text-fg sm:text-[1.65rem] sm:leading-tight">{title}</h2>
         {description ? <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted">{description}</p> : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
   );
 }

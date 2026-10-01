@@ -111,7 +111,7 @@ export function BlockHeading({ id, title, count, description, action }: { id?: s
         </h2>
         {description ? <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-muted">{description}</p> : null}
       </div>
-      {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
+      {action ? <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
     </div>
   );
 }

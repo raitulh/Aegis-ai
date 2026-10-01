@@ -53,7 +53,7 @@ export function AdminHeader({
         {description ? <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted sm:text-[15px]">{description}</p> : null}
         {meta ? <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-subtle">{meta}</div> : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2 animate-rise [animation-delay:60ms]">{actions}</div> : null}
+      {actions ? <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2 animate-rise [animation-delay:60ms]">{actions}</div> : null}
     </header>
   );
 }
@@ -83,7 +83,7 @@ export function SectionHeading({
         </h2>
         {description ? <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">{description}</p> : null}
       </div>
-      {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
+      {action ? <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
     </div>
   );
 }
