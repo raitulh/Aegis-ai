@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Crown, ExternalLink, LogOut, Trash2, UserPlus } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, Crown, ExternalLink, ImagePlus, Images, LogOut, Pencil, Trash2, TriangleAlert, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
@@ -11,17 +11,18 @@ import { describeError, settle } from "@/components/catalog/errors";
 import { MemberRow } from "@/components/catalog/project-bits";
 import { ProjectForm, projectPayload, projectToForm, type ProjectFormValues } from "@/components/catalog/project-form";
 import type { OrgMembership, ProjectDetail, ProjectMedia, ProjectMember } from "@/components/catalog/types";
-import { DemoBadge } from "@/components/ui/badge";
+import { Badge, DemoBadge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/form";
 import { FileDrop } from "@/components/ui/misc";
 import { Container, PageHeader } from "@/components/ui/page";
-import { EmptyState, ErrorState, InlineNotice, NotFoundState, PermissionDenied, SkeletonRows } from "@/components/ui/states";
+import { EmptyState, ErrorState, InlineNotice, NotFoundState, PermissionDenied, Skeleton, SkeletonRows } from "@/components/ui/states";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { ApiError, del, get, patch, post, upload } from "@/lib/api";
 import { hasRole, useApiMutation, useConfig, useMe, useRequireAuth } from "@/lib/hooks";
+import { formatDateTime, relativeTime, titleCase } from "@/lib/format";
 import { qk } from "@/lib/query";
 
 const MAX_MEDIA = 8;
@@ -73,14 +74,16 @@ function MediaItem({ slug, m, index, count }: { slug: string; m: ProjectMedia; i
   });
   const remove = useApiMutation(() => del<{ message: string }>(`/projects/${slug}/media/${m.id}`), { success: (d) => d.message, invalidate });
   return (
-    <li className="flex flex-col gap-3 rounded-[var(--radius-lg)] border border-border bg-surface p-3 sm:flex-row sm:items-center">
-      { }
-      <img src={m.url} alt={m.alt_text || ""} className="h-24 w-full rounded-[var(--radius-md)] object-cover sm:w-40" />
+    <li className="flex flex-col gap-3 rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen p-3 shadow-card sm:flex-row sm:items-center">
+      <div className="relative shrink-0 overflow-hidden rounded-[var(--radius-md)] border border-border bg-bg-elevated sm:w-40">
+        <img src={m.url} alt={m.alt_text || ""} className="h-28 w-full object-cover sm:h-24" />
+        <span className="tabular absolute left-1.5 top-1.5 rounded bg-black/55 px-1.5 py-0.5 font-mono text-[10.5px] text-white backdrop-blur-md" aria-hidden>{index + 1}</span>
+      </div>
       <div className="min-w-0 flex-1 space-y-2">
-        <div className="flex items-center gap-2 text-xs text-subtle">
-          <span className="font-medium text-fg">#{index + 1}</span>
-          {index === 0 ? <span className="rounded bg-accent-soft px-1.5 py-0.5 text-accent-strong">Cover</span> : null}
-          <span>{m.width}×{m.height}</span>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-subtle">
+          <span className="font-medium text-fg">Image {index + 1}</span>
+          {index === 0 ? <Badge tone="accent">Cover</Badge> : null}
+          <span className="tabular font-mono text-[11px]">{m.width}×{m.height}</span>
         </div>
         <form
           className="flex gap-2"
@@ -90,7 +93,7 @@ function MediaItem({ slug, m, index, count }: { slug: string; m: ProjectMedia; i
           }}
         >
           <Input aria-label={`Alt text for image ${index + 1}`} value={alt} onChange={(e) => setAlt(e.target.value)} maxLength={200} placeholder="Describe the image for screen readers" className="h-9" />
-          <Button type="submit" size="sm" variant="secondary" disabled={alt.trim() === m.alt_text} loading={save.isPending && save.variables?.alt_text !== undefined}>
+          <Button type="submit" size="sm" className="max-sm:h-9" variant="secondary" disabled={alt.trim() === m.alt_text} loading={save.isPending && save.variables?.alt_text !== undefined}>
             Save
           </Button>
         </form>
@@ -146,7 +149,7 @@ function GalleryTab({ p }: { p: ProjectDetail }) {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader title="Add an image" description={`PNG, JPEG or WebP${maxMb ? ` up to ${maxMb} MB` : ""}. Images are re-encoded and metadata (EXIF/GPS) is stripped. Up to ${MAX_MEDIA} images.`} />
+        <CardHeader icon={<ImagePlus />} title="Add an image" description={`PNG, JPEG or WebP${maxMb ? ` up to ${maxMb} MB` : ""}. Images are re-encoded and metadata (EXIF/GPS) is stripped. Up to ${MAX_MEDIA} images.`} />
         <CardBody className="space-y-4">
           {full ? (
             <InlineNotice tone="info" title="Gallery is full">Delete an image to add another.</InlineNotice>
@@ -175,7 +178,7 @@ function GalleryTab({ p }: { p: ProjectDetail }) {
           {p.media.map((m, i) => <MediaItem key={`${m.id}:${m.alt_text}`} slug={p.slug} m={m} index={i} count={p.media.length} />)}
         </ol>
       ) : (
-        <EmptyState title="No images yet" description="Screenshots and diagrams make projects much easier to understand." />
+        <EmptyState icon={<Images />} title="No images yet" description="Screenshots and diagrams make projects much easier to understand." />
       )}
     </div>
   );
@@ -268,12 +271,12 @@ function MembersTab({ p, meId }: { p: ProjectDetail; meId: string }) {
     <div className="space-y-6">
       {isOwner ? (
         <Card>
-          <CardHeader title="Add a member" description="Maintainers can edit the project and gallery; contributors are credited on the project page. Up to 50 members." />
+          <CardHeader icon={<UserPlus />} title="Add a member" description="Maintainers can edit the project and gallery; contributors are credited on the project page. Up to 50 members." />
           <CardBody><AddMemberForm slug={p.slug} /></CardBody>
         </Card>
       ) : null}
       <Card>
-        <CardHeader title={`Members · ${p.members.length}`} description={isOwner ? "Change roles, remove members or transfer ownership." : "Only the owner can manage members."} />
+        <CardHeader icon={<Users />} title={`Members · ${p.members.length}`} description={isOwner ? "Change roles, remove members or transfer ownership." : "Only the owner can manage members."} />
         <CardBody className="py-2">
           <ul className="divide-y divide-border">
             {p.members.map((m) => (
@@ -286,7 +289,7 @@ function MembersTab({ p, meId }: { p: ProjectDetail; meId: string }) {
       </Card>
       {self ? (
         <Card>
-          <CardHeader title="Leave project" description="You'll no longer be listed or able to edit it." />
+          <CardHeader icon={<LogOut />} title="Leave project" description="You'll no longer be listed or able to edit it." />
           <CardBody>
             <LeaveButton slug={p.slug} m={self} onLeft={() => router.push(`/projects/${p.slug}`)} />
           </CardBody>
@@ -324,7 +327,7 @@ function DangerTab({ p }: { p: ProjectDetail }) {
   });
   return (
     <Card className="border-danger/40">
-      <CardHeader title="Delete project" description="Permanently deletes the project, its gallery, member list and the discussion threads attached to it. This cannot be undone." />
+      <CardHeader icon={<TriangleAlert />} title="Delete project" description="Permanently deletes the project, its gallery, member list and the discussion threads attached to it. This cannot be undone." />
       <CardBody>
         <ConfirmDialog
           trigger={<Button variant="danger" icon={<Trash2 className="h-4 w-4" aria-hidden />}>Delete project</Button>}
@@ -347,7 +350,18 @@ export default function EditProjectPage() {
   const q = useQuery({ queryKey: qk.project(slug), queryFn: () => get<ProjectDetail>(`/projects/${slug}`), enabled: Boolean(me.data) });
   const [tab, setTab] = useState("details");
 
-  if (me.isPending || !me.data || q.isPending) return <Container size="lg" className="py-8"><SkeletonRows rows={8} /></Container>;
+  if (me.isPending || !me.data || q.isPending) {
+    return (
+      <Container size="lg" className="pb-16">
+        <div className="pb-8 pt-12">
+          <Skeleton className="h-3 w-40" />
+          <Skeleton className="mt-4 h-9 w-80 max-w-full" />
+        </div>
+        <Skeleton className="mb-6 h-10 w-80 max-w-full" />
+        <SkeletonRows rows={8} />
+      </Container>
+    );
+  }
   if (q.isError) {
     return (
       <Container size="lg" className="py-10">
@@ -368,16 +382,27 @@ export default function EditProjectPage() {
   return (
     <Container size="lg" className="pb-16">
       <nav aria-label="Breadcrumb" className="pt-6 text-sm text-subtle">
-        <Link href="/projects" className="hover:text-fg">Projects</Link>
-        <span aria-hidden> / </span>
-        <Link href={`/projects/${p.slug}`} className="hover:text-fg">{p.title}</Link>
-        <span aria-hidden> / </span>
-        <span className="text-muted">Edit</span>
+        <ol className="flex min-w-0 items-center gap-1.5">
+          <li className="shrink-0"><Link href="/projects" className="transition-colors hover:text-fg">Projects</Link></li>
+          <li aria-hidden><ChevronRight className="h-3.5 w-3.5" /></li>
+          <li className="min-w-0 truncate"><Link href={`/projects/${p.slug}`} className="transition-colors hover:text-fg">{p.title}</Link></li>
+          <li aria-hidden><ChevronRight className="h-3.5 w-3.5" /></li>
+          <li className="shrink-0 text-muted" aria-current="page">Edit</li>
+        </ol>
       </nav>
       <PageHeader
         className="pt-4"
+        icon={<Pencil />}
         eyebrow={p.viewer.is_owner ? "You own this project" : "You maintain this project"}
         title={<span className="inline-flex flex-wrap items-center gap-3">Edit {p.title}{p.is_demo ? <DemoBadge /> : null}</span>}
+        meta={
+          <>
+            <span>{titleCase(p.status)} · {titleCase(p.visibility)}</span>
+            <span className="inline-flex items-center gap-1.5"><Images className="h-3.5 w-3.5" aria-hidden /><span className="tabular">{p.media.length}</span> {p.media.length === 1 ? "image" : "images"}</span>
+            <span className="inline-flex items-center gap-1.5"><Users className="h-3.5 w-3.5" aria-hidden /><span className="tabular">{p.members.length}</span> {p.members.length === 1 ? "member" : "members"}</span>
+            <span title={formatDateTime(p.updated_at)}>Updated {relativeTime(p.updated_at)}</span>
+          </>
+        }
         actions={<LinkButton href={`/projects/${p.slug}`} variant="secondary" icon={<ExternalLink className="h-4 w-4" aria-hidden />}>View project</LinkButton>}
       />
       {p.taken_down ? (

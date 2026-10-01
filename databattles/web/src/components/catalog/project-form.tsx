@@ -3,13 +3,13 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, FormError, Input, Select, Switch, TagInput, Textarea } from "@/components/ui/form";
 import { MarkdownEditor } from "@/components/ui/markdown";
 import { ApiError } from "@/lib/api";
 import { useUnsavedChangesWarning } from "@/lib/hooks";
 import type { OrgMini } from "@/lib/types";
 import { CoverPicker } from "./cover-picker";
+import { FormActionBar } from "./dataset-form";
 import { unplacedFieldErrors } from "./errors";
 import { CompetitionSlugInput, DatasetSlugsInput } from "./slug-picker";
 import type { OrgMembership, ProjectDetail } from "./types";
@@ -123,12 +123,17 @@ const URL_LABELS: Record<(typeof URL_KEYS)[number], { label: string; hint: strin
   docs_url: { label: "Documentation", hint: "Docs site or README." },
 };
 
-function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+/** Settings-style form section: label column (step, title, help) beside a calm panel of fields. */
+function Section({ step, title, description, children }: { step: string; title: string; description?: string; children: ReactNode }) {
   return (
-    <Card>
-      <CardHeader title={title} description={description} />
-      <CardBody className="space-y-5">{children}</CardBody>
-    </Card>
+    <section className="grid gap-4 border-t border-border pt-8 first:border-t-0 first:pt-0 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <div className="md:pt-1">
+        <p className="text-eyebrow text-accent-strong">{step}</p>
+        <h2 className="mt-1.5 text-[15px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
+        {description ? <p className="mt-1 text-[13px] leading-relaxed text-muted">{description}</p> : null}
+      </div>
+      <div className="min-w-0 space-y-5 rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen p-5 shadow-card sm:p-6">{children}</div>
+    </section>
   );
 }
 
@@ -194,8 +199,8 @@ export function ProjectForm({
   const general = error ? (Object.keys(error.fields).length ? unplacedFieldErrors(error, PLACED) : error.message) : null;
 
   return (
-    <form onSubmit={submit} className="space-y-6" noValidate>
-      <Section title="Basics" description="What you built and why it matters.">
+    <form onSubmit={submit} className="space-y-8" noValidate>
+      <Section step="Story" title="Basics" description="What you built and why it matters.">
         <Field label="Title" required error={fe("title")}>
           {(p) => <Input {...p} value={v.title} onChange={(e) => set("title", e.target.value)} maxLength={140} placeholder="e.g. Bangla sentiment classifier" />}
         </Field>
@@ -206,14 +211,14 @@ export function ProjectForm({
           {(p) => <MarkdownEditor {...p} value={v.description_md} onChange={(x) => set("description_md", x)} rows={12} maxLength={100_000} />}
         </Field>
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-fg" id="cover-style-label">Cover style</span>
+          <span className="text-[13px] font-medium tracking-[-0.005em] text-fg" id="cover-style-label">Cover style</span>
           <CoverPicker value={v.cover_style} onChange={(x) => set("cover_style", x)} />
           <p className="text-xs text-subtle">Used when the project has no gallery images. The first gallery image becomes the cover.</p>
           {fe("cover_style") ? <p role="alert" className="text-xs font-medium text-danger">{fe("cover_style")}</p> : null}
         </div>
       </Section>
 
-      <Section title="Stack & tags" description="Helps people find your project.">
+      <Section step="Discovery" title="Stack & tags" description="Helps people find your project.">
         <Field label="Technologies" hint="Frameworks, languages, models. Press Enter to add (up to 20)." error={fe("technologies")}>
           {(p) => <TagInput id={p.id} value={v.technologies} onChange={(x) => set("technologies", x)} max={20} placeholder="e.g. pytorch, fastapi" />}
         </Field>
@@ -228,8 +233,8 @@ export function ProjectForm({
         />
       </Section>
 
-      <Section title="Links" description="External links open in a new tab.">
-        <div className="grid gap-5 md:grid-cols-2">
+      <Section step="Elsewhere" title="Links" description="External links open in a new tab.">
+        <div className="grid gap-5 lg:grid-cols-2">
           {URL_KEYS.map((k) => (
             <Field key={k} label={URL_LABELS[k].label} hint={URL_LABELS[k].hint} error={fe(k)}>
               {(p) => <Input {...p} type="url" inputMode="url" value={v[k]} onChange={(e) => set(k, e.target.value)} maxLength={500} placeholder="https://" />}
@@ -238,7 +243,7 @@ export function ProjectForm({
         </div>
       </Section>
 
-      <Section title="Connections" description="Link the project to an organization, a competition and the datasets it uses.">
+      <Section step="Context" title="Connections" description="Link the project to an organization, a competition and the datasets it uses.">
         <Field label="Organization" hint="Only organizations you're an active member of." error={fe("org_id")}>
           {(p) => (
             <Select {...p} value={v.org_id} onChange={(e) => set("org_id", e.target.value)}>
@@ -255,8 +260,8 @@ export function ProjectForm({
         </Field>
       </Section>
 
-      <Section title="Publishing">
-        <div className="grid gap-5 md:grid-cols-2">
+      <Section step="Visibility" title="Publishing" description="Who can see the project and whether it is still maintained.">
+        <div className="grid gap-5 lg:grid-cols-2">
           <Field label="Visibility" error={fe("visibility")}>
             {(p) => (
               <Select {...p} value={v.visibility} onChange={(e) => set("visibility", e.target.value as ProjectFormValues["visibility"])}>
@@ -278,14 +283,17 @@ export function ProjectForm({
         </div>
       </Section>
 
-      {general ? <FormError message={general} /> : null}
-      {Object.keys(clientErrors).length ? <FormError message="Please fix the highlighted fields." /> : null}
+      {general || Object.keys(clientErrors).length ? (
+        <div className="space-y-2 md:pl-[calc(13rem+2rem)] lg:pl-[calc(15rem+2rem)]">
+          {general ? <FormError message={general} /> : null}
+          {Object.keys(clientErrors).length ? <FormError message="Please fix the highlighted fields." /> : null}
+        </div>
+      ) : null}
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {dirty ? <span className="mr-auto text-xs text-subtle" aria-live="polite">Unsaved changes</span> : null}
+      <FormActionBar dirty={dirty} hint={mode === "create" ? "You can edit everything later, and add images and members after creating it." : "No unsaved changes."}>
         {onCancel ? <Button variant="secondary" onClick={onCancel}>Cancel</Button> : null}
         <Button type="submit" loading={submitting} disabled={mode === "edit" && !dirty}>{submitLabel}</Button>
-      </div>
+      </FormActionBar>
     </form>
   );
 }

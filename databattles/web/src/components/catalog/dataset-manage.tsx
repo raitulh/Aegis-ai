@@ -87,13 +87,16 @@ export function DatasetUploader({ slug, version, onUploaded }: { slug: string; v
             maxBytes={maxMb ? maxMb * 1024 * 1024 : undefined}
             disabled={busy}
             progress={progress}
-            hint={`${DATASET_EXTENSIONS.join(" ")}${maxMb ? ` · up to ${maxMb} MB per file` : ""} · files are scanned for malware`}
+            hint={`${DATASET_EXTENSIONS.join(" ")}${maxMb ? ` · up to ${maxMb} MB per file` : ""} · malware-scanned where enabled`}
             onFile={(file) => start({ file, kind, key: idempotencyKey() })}
           />
           {busy ? (
-            <div className="mt-2 flex items-center justify-between text-xs text-muted" aria-live="polite">
-              <span>Uploading {pending?.file.name}… {Math.round((progress ?? 0) * 100)}%{progress !== null && progress >= 1 ? " · scanning and indexing" : ""}</span>
-              <Button size="sm" variant="ghost" onClick={() => abort.current?.abort()} icon={<X className="h-3.5 w-3.5" aria-hidden />}>Cancel</Button>
+            <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted" aria-live="polite">
+              <span className="min-w-0 truncate">
+                Uploading <span className="font-mono text-fg">{pending?.file.name}</span>… <span className="tabular">{Math.round((progress ?? 0) * 100)}%</span>
+                {progress !== null && progress >= 1 ? " · scanning and indexing" : ""}
+              </span>
+              <Button size="sm" className="max-sm:h-9" variant="ghost" onClick={() => abort.current?.abort()} icon={<X className="h-3.5 w-3.5" aria-hidden />}>Cancel</Button>
             </div>
           ) : null}
         </div>
@@ -105,9 +108,9 @@ export function DatasetUploader({ slug, version, onUploaded }: { slug: string; v
           action={
             <div className="flex gap-2">
               {retryable ? (
-                <Button size="sm" variant="secondary" onClick={() => pending && start(pending)} icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}>Retry</Button>
+                <Button size="sm" className="max-sm:h-9" variant="secondary" onClick={() => pending && start(pending)} icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}>Retry</Button>
               ) : null}
-              <Button size="sm" variant="ghost" onClick={() => { setError(null); setPending(null); setDropKey((k) => k + 1); }}>Dismiss</Button>
+              <Button size="sm" className="max-sm:h-9" variant="ghost" onClick={() => { setError(null); setPending(null); setDropKey((k) => k + 1); }}>Dismiss</Button>
             </div>
           }
         >
@@ -163,7 +166,7 @@ export function DataDictionaryEditor({
       {value.length ? (
         <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-border">
           <table className="w-full min-w-[36rem] border-collapse text-sm">
-            <thead className="bg-surface-2 text-left text-xs uppercase tracking-wide text-subtle">
+            <thead className="border-b border-border bg-bg-elevated/70 text-left font-mono text-[10.5px] uppercase tracking-[0.12em] text-subtle">
               <tr>
                 <th scope="col" className="px-3 py-2 font-medium">Column</th>
                 <th scope="col" className="w-36 px-3 py-2 font-medium">Type</th>
@@ -184,7 +187,7 @@ export function DataDictionaryEditor({
                     <Input aria-label={`Description, row ${i + 1}`} className="h-8 text-xs" value={row.description} maxLength={500} onChange={(e) => update(i, { description: e.target.value })} />
                   </td>
                   <td className="px-2 py-1.5 text-right">
-                    <Button size="icon" variant="ghost" className="h-8 w-8" aria-label={`Remove row ${i + 1}`} onClick={() => onChange(value.filter((_, j) => j !== i))}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 max-sm:h-9 max-sm:w-9" aria-label={`Remove row ${i + 1}`} onClick={() => onChange(value.filter((_, j) => j !== i))}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </td>
@@ -194,10 +197,12 @@ export function DataDictionaryEditor({
           </table>
         </div>
       ) : (
-        <p className="text-sm text-subtle">No columns documented yet. Add them manually or import the header row of an uploaded CSV/TSV.</p>
+        <p className="rounded-[var(--radius-lg)] border border-dashed border-border-strong bg-surface/40 px-4 py-5 text-sm text-subtle">
+          No columns documented yet. Add them manually or import the header row of an uploaded CSV/TSV.
+        </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="secondary" disabled={value.length >= 200} onClick={() => onChange([...value, { column: "", type: "", description: "" }])} icon={<Plus className="h-3.5 w-3.5" aria-hidden />}>
+        <Button size="sm" className="max-sm:h-9" variant="secondary" disabled={value.length >= 200} onClick={() => onChange([...value, { column: "", type: "", description: "" }])} icon={<Plus className="h-3.5 w-3.5" aria-hidden />}>
           Add column
         </Button>
         {previewable.length ? (
@@ -207,7 +212,7 @@ export function DataDictionaryEditor({
                 {previewable.map((f) => <option key={f.id} value={f.id}>{f.filename}</option>)}
               </Select>
             ) : null}
-            <Button size="sm" variant="ghost" loading={importing} onClick={importColumns} icon={<Columns3 className="h-3.5 w-3.5" aria-hidden />}>
+            <Button size="sm" className="max-sm:h-9" variant="ghost" loading={importing} onClick={importColumns} icon={<Columns3 className="h-3.5 w-3.5" aria-hidden />}>
               Import columns{previewable.length === 1 ? ` from ${previewable[0].filename}` : ""}
             </Button>
           </div>

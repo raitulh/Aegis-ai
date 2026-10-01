@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { Database, Plus, X } from "lucide-react";
 import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -80,10 +80,16 @@ export function DatasetSlugsInput({
       {value.length ? (
         <ul className="flex flex-wrap gap-1.5" aria-label="Linked datasets">
           {value.map((slug) => (
-            <li key={slug} className="inline-flex items-center gap-1 rounded-md bg-surface-3 px-2 py-1 text-xs">
-              <span className="font-medium text-fg">{titles.get(slug) ?? slug}</span>
-              {titles.get(slug) ? <span className="font-mono text-subtle">{slug}</span> : null}
-              <button type="button" className="ml-0.5 text-subtle hover:text-fg" aria-label={`Remove ${slug}`} onClick={() => onChange(value.filter((x) => x !== slug))}>
+            <li key={slug} className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-surface-2 py-1 pl-2 pr-1 text-xs animate-pop max-sm:py-0">
+              <Database className="h-3 w-3 shrink-0 text-cyan" aria-hidden />
+              <span className="truncate font-medium text-fg">{titles.get(slug) ?? slug}</span>
+              {titles.get(slug) ? <span className="hidden truncate font-mono text-[11px] text-subtle sm:inline">{slug}</span> : null}
+              <button
+                type="button"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-subtle max-sm:h-9 max-sm:w-9 transition-colors hover:bg-surface-3 hover:text-fg focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
+                aria-label={`Remove ${slug}`}
+                onClick={() => onChange(value.filter((x) => x !== slug))}
+              >
                 <X className="h-3 w-3" />
               </button>
             </li>

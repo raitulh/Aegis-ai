@@ -3,7 +3,6 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, FormError, Input, Select, Switch, TagInput, Textarea } from "@/components/ui/form";
 import { MarkdownEditor, Prose } from "@/components/ui/markdown";
 import { ApiError } from "@/lib/api";
@@ -62,12 +61,34 @@ export function datasetPayload(v: DatasetFormValues, mode: "create" | "edit"): R
   return body;
 }
 
-function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+/** Settings-style form section: label column (step, title, help) beside a calm panel of fields. */
+function Section({ step, title, description, children }: { step: string; title: string; description?: string; children: ReactNode }) {
   return (
-    <Card>
-      <CardHeader title={title} description={description} />
-      <CardBody className="space-y-5">{children}</CardBody>
-    </Card>
+    <section className="grid gap-4 border-t border-border pt-8 first:border-t-0 first:pt-0 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <div className="md:pt-1">
+        <p className="text-eyebrow text-accent-strong">{step}</p>
+        <h2 className="mt-1.5 text-[15px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
+        {description ? <p className="mt-1 text-[13px] leading-relaxed text-muted">{description}</p> : null}
+      </div>
+      <div className="min-w-0 space-y-5 rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen p-5 shadow-card sm:p-6">{children}</div>
+    </section>
+  );
+}
+
+/** Sticky footer that keeps the form's primary action in reach on long forms. */
+export function FormActionBar({ dirty, hint, children }: { dirty: boolean; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="sticky bottom-3 z-20 flex flex-wrap items-center justify-end gap-2 rounded-[var(--radius-lg)] border border-border bg-[var(--glass-strong)] px-3 py-2.5 shadow-elevated backdrop-blur-xl sm:px-4">
+      {dirty ? (
+        <span className="mr-auto inline-flex items-center gap-2 text-xs text-subtle" aria-live="polite">
+          <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-hidden />
+          Unsaved changes
+        </span>
+      ) : hint ? (
+        <span className="mr-auto hidden text-xs text-subtle sm:inline">{hint}</span>
+      ) : null}
+      {children}
+    </div>
   );
 }
 
@@ -131,8 +152,8 @@ export function DatasetMetaForm({
   const general = error ? (Object.keys(error.fields).length ? unplacedFieldErrors(error, PLACED) : error.message) : null;
 
   return (
-    <form onSubmit={submit} className="space-y-6" noValidate>
-      <Section title="Basics" description="How the dataset appears in listings and search.">
+    <form onSubmit={submit} className="space-y-8" noValidate>
+      <Section step="Listing" title="Basics" description="How the dataset appears in listings and search.">
         <Field label="Title" required error={fe("title")}>
           {(p) => <Input {...p} value={v.title} onChange={(e) => set("title", e.target.value)} maxLength={140} placeholder="e.g. Campus air quality 2024" />}
         </Field>
@@ -147,7 +168,7 @@ export function DatasetMetaForm({
         </Field>
       </Section>
 
-      <Section title="License & attribution" description="Tell people how they may use the data and how to credit it.">
+      <Section step="Rights" title="License & attribution" description="Tell people how they may use the data and how to credit it.">
         <Field label="License" required error={fe("license")}>
           {(p) => (
             <Select {...p} value={v.license} onChange={(e) => set("license", e.target.value)} disabled={!licenses}>
@@ -168,7 +189,7 @@ export function DatasetMetaForm({
         </Field>
       </Section>
 
-      <Section title="Access" description="Who can find and download the dataset.">
+      <Section step="Visibility" title="Access" description="Who can find and download the dataset.">
         {mode === "create" ? (
           <Field
             label="Owner"
@@ -208,8 +229,8 @@ export function DatasetMetaForm({
         {v.requires_terms ? (
           <div className="space-y-3">
             {mode === "edit" && existingTermsHtml ? (
-              <div className="rounded-[var(--radius-md)] border border-border bg-surface-2 px-4 py-3">
-                <p className="mb-2 text-xs font-medium text-subtle">Current terms</p>
+              <div className="rounded-[var(--radius-md)] border border-border bg-bg-elevated px-4 py-3">
+                <p className="mb-2 text-eyebrow text-subtle">Current terms</p>
                 <Prose html={existingTermsHtml} className="max-h-48 overflow-y-auto text-sm" />
               </div>
             ) : null}
@@ -225,14 +246,17 @@ export function DatasetMetaForm({
         ) : null}
       </Section>
 
-      {general ? <FormError message={general} /> : null}
-      {Object.keys(clientErrors).length ? <FormError message="Please fix the highlighted fields." /> : null}
+      {general || Object.keys(clientErrors).length ? (
+        <div className="space-y-2 md:pl-[calc(13rem+2rem)] lg:pl-[calc(15rem+2rem)]">
+          {general ? <FormError message={general} /> : null}
+          {Object.keys(clientErrors).length ? <FormError message="Please fix the highlighted fields." /> : null}
+        </div>
+      ) : null}
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {dirty ? <span className="mr-auto text-xs text-subtle" aria-live="polite">Unsaved changes</span> : null}
+      <FormActionBar dirty={dirty} hint={mode === "create" ? "You can edit these details later from Manage." : "No unsaved changes."}>
         {onCancel ? <Button variant="secondary" onClick={onCancel}>Cancel</Button> : null}
         <Button type="submit" loading={submitting}>{submitLabel}</Button>
-      </div>
+      </FormActionBar>
     </form>
   );
 }

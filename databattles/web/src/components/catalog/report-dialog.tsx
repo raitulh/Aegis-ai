@@ -56,7 +56,7 @@ export function ReportDialog({
       description="Moderators review every report. Reports are confidential."
       size="sm"
       trigger={
-        <Button variant="ghost" size="sm" icon={<Flag className="h-4 w-4" aria-hidden />}>
+        <Button variant="ghost" size="sm" className="max-sm:h-9" icon={<Flag className="h-4 w-4" aria-hidden />}>
           Report
         </Button>
       }
