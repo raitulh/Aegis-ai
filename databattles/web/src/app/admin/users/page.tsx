@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Search, ShieldCheck, UserCog, Users } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 
-import { AdminHeader, UserStatusBadge } from "@/components/admin/admin-ui";
+import { AdminHeader, EmailText, FilterBar, ResultCount, TableSkeleton, UserStatusBadge } from "@/components/admin/admin-ui";
 import type { AdminUserRow } from "@/components/admin/types";
 import { UserLink } from "@/components/domain/cards";
 import { Badge, DemoBadge } from "@/components/ui/badge";
@@ -12,10 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { Pagination } from "@/components/ui/pagination";
-import { EmptyState, ErrorState, InlineNotice, NoResults, SkeletonRows } from "@/components/ui/states";
+import { EmptyState, ErrorState, InlineNotice, NoResults } from "@/components/ui/states";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { get, put } from "@/lib/api";
-import { formatDate, formatDateTime, formatNumber, relativeTime, titleCase } from "@/lib/format";
+import { formatDate, formatDateTime, relativeTime, titleCase } from "@/lib/format";
 import { useApiMutation, useDebounced, useMe } from "@/lib/hooks";
 import type { Page } from "@/lib/types";
 import { useUrlState } from "@/lib/url-state";
@@ -61,11 +61,11 @@ function ManageUser({ row, isAdmin, isSelf }: { row: AdminUserRow; isAdmin: bool
     >
       <div className="space-y-6">
         <section aria-labelledby={`status-${row.user.id}`} className="space-y-3">
-          <h3 id={`status-${row.user.id}`} className="text-sm font-semibold text-fg">Account status</h3>
-          <p className="text-xs text-muted">
-            Current: <UserStatusBadge status={row.status} />
-            {row.status_reason ? <span className="ml-1">— “{row.status_reason}”</span> : null}
-          </p>
+          <h3 id={`status-${row.user.id}`} className="text-eyebrow text-subtle">Account status</h3>
+          <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated px-3 py-2.5 text-xs text-muted">
+            <span>Current</span> <UserStatusBadge status={row.status} />
+            {row.status_reason ? <span className="min-w-0 break-words">— “{row.status_reason}”</span> : null}
+          </div>
           {isSelf ? (
             <InlineNotice tone="info">You can’t change your own account status.</InlineNotice>
           ) : !canChangeStatus ? (
@@ -100,18 +100,18 @@ function ManageUser({ row, isAdmin, isSelf }: { row: AdminUserRow; isAdmin: bool
 
         {isAdmin ? (
           <section aria-labelledby={`roles-${row.user.id}`} className="space-y-3 border-t border-border pt-5">
-            <h3 id={`roles-${row.user.id}`} className="text-sm font-semibold text-fg">Platform roles</h3>
+            <h3 id={`roles-${row.user.id}`} className="text-eyebrow text-subtle">Platform roles</h3>
             <Field label="Reason for role change" required hint="At least 3 characters.">
               {(p) => <Textarea {...p} value={roleReason} onChange={(e) => setRoleReason(e.target.value)} maxLength={500} rows={2} />}
             </Field>
-            <ul className="space-y-2">
+            <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border">
               {ROLES.map((r) => {
                 const has = row.roles.includes(r.key);
                 return (
-                  <li key={r.key} className="flex items-start justify-between gap-3 rounded-[var(--radius-md)] border border-border p-3">
-                    <div>
-                      <p className="text-sm font-medium text-fg">{r.label} {has ? <Badge tone="accent" className="ml-1">Granted</Badge> : null}</p>
-                      <p className="text-xs text-muted">{r.description}</p>
+                  <li key={r.key} className="flex items-start justify-between gap-3 bg-bg-elevated/50 p-3">
+                    <div className="min-w-0">
+                      <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-fg">{r.label} {has ? <Badge tone="accent" icon={<ShieldCheck className="h-3 w-3" aria-hidden />}>Granted</Badge> : null}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted">{r.description}</p>
                     </div>
                     <Button
                       size="sm"
@@ -150,31 +150,38 @@ function UsersList() {
 
   return (
     <div>
-      <AdminHeader title="Users" description={isAdmin ? "Search by handle, name or email." : "Search by handle or name. Email lookup is limited to platform admins."} />
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row" role="search">
-        <div className="relative flex-1">
+      <AdminHeader
+        eyebrow="People"
+        icon={<Users />}
+        title="Users"
+        description={isAdmin ? "Search by handle, name or email." : "Search by handle or name. Email lookup is limited to platform admins."}
+      />
+      <FilterBar role="search">
+        <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle" aria-hidden />
           <Input aria-label="Search users" placeholder={isAdmin ? "Handle, name or email" : "Handle or name"} className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} maxLength={80} />
         </div>
-        <Select aria-label="Account status" className="sm:w-40" value={state.status ?? ""} onChange={(e) => setState({ status: e.target.value })}>
-          <option value="">Any status</option>
-          {["active", "suspended", "banned", "deleted"].map((s) => <option key={s} value={s}>{titleCase(s)}</option>)}
-        </Select>
-        <Select aria-label="Platform role" className="sm:w-44" value={state.role ?? ""} onChange={(e) => setState({ role: e.target.value })}>
-          <option value="">Any role</option>
-          {ROLES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-        </Select>
-      </div>
+        <div className="grid grid-cols-2 gap-2.5 sm:flex">
+          <Select aria-label="Account status" className="sm:w-40" value={state.status ?? ""} onChange={(e) => setState({ status: e.target.value })}>
+            <option value="">Any status</option>
+            {["active", "suspended", "banned", "deleted"].map((s) => <option key={s} value={s}>{titleCase(s)}</option>)}
+          </Select>
+          <Select aria-label="Platform role" className="sm:w-44" value={state.role ?? ""} onChange={(e) => setState({ role: e.target.value })}>
+            <option value="">Any role</option>
+            {ROLES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+          </Select>
+        </div>
+      </FilterBar>
 
       {users.isPending ? (
-        <SkeletonRows rows={8} />
+        <TableSkeleton rows={8} cols={6} />
       ) : users.isError ? (
         <ErrorState error={users.error} onRetry={() => users.refetch()} />
       ) : users.data.items.length === 0 ? (
         filtered ? <NoResults onReset={() => { setQ(""); reset(); }} /> : <EmptyState icon={<Users className="h-5 w-5" />} title="No users yet" />
       ) : (
         <>
-          <p className="mb-2 text-sm text-muted" aria-live="polite">{formatNumber(users.data.total)} users</p>
+          <ResultCount total={users.data.total} noun="users" />
           <Table>
             <THead>
               <tr>
@@ -182,24 +189,25 @@ function UsersList() {
                 {isAdmin ? <TH>Email</TH> : null}
                 <TH>Status</TH>
                 <TH>Roles</TH>
-                <TH>Joined</TH>
-                <TH>Last sign-in</TH>
-                <TH><span className="sr-only">Actions</span></TH>
+                <TH className="leading-relaxed"><span className="block">Joined</span><span className="block">Last sign-in</span></TH>
+                <TH className="relative"><span className="sr-only">Actions</span></TH>
               </tr>
             </THead>
             <TBody>
               {users.data.items.map((row) => (
                 <TR key={row.user.id}>
-                  <TD>
-                    <div className="flex flex-col gap-1">
-                      {row.status === "deleted" ? <span className="text-sm text-subtle">Deleted user</span> : <UserLink user={row.user} />}
-                      <span className="text-xs text-subtle">@{row.user.handle}</span>
-                      {row.is_demo ? <DemoBadge className="w-fit" /> : null}
+                  <TD className="min-w-44">
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      {row.status === "deleted" ? <span className="text-sm text-subtle">Deleted user</span> : <UserLink user={row.user} className="font-medium" />}
+                      <span className={`flex flex-wrap items-center gap-1.5 ${row.status === "deleted" ? "" : "pl-8"}`}>
+                        <span className="font-mono text-[11px] text-subtle">@{row.user.handle}</span>
+                        {row.is_demo ? <DemoBadge className="w-fit" /> : null}
+                      </span>
                     </div>
                   </TD>
                   {isAdmin ? (
-                    <TD className="text-xs">
-                      <span className="break-all text-fg">{row.email ?? "—"}</span>
+                    <TD className="min-w-48 text-xs">
+                      {row.email ? <EmailText email={row.email} className="text-fg" /> : <span className="text-fg">—</span>}
                       {!row.email_verified ? <Badge tone="warning" className="ml-1.5">Unverified</Badge> : null}
                     </TD>
                   ) : null}
@@ -209,9 +217,13 @@ function UsersList() {
                       {row.roles.length ? row.roles.map((r) => <Badge key={r} tone="accent" icon={<ShieldCheck className="h-3 w-3" aria-hidden />}>{titleCase(r)}</Badge>) : <span className="text-xs text-subtle">—</span>}
                     </div>
                   </TD>
-                  <TD className="whitespace-nowrap text-muted">{formatDate(row.created_at)}</TD>
-                  <TD className="whitespace-nowrap text-muted" title={formatDateTime(row.last_login_at)}>{row.last_login_at ? relativeTime(row.last_login_at) : "Never"}</TD>
-                  <TD className="text-right">
+                  <TD className="tabular relative whitespace-nowrap text-xs">
+                    <span className="block text-fg"><span className="sr-only">Joined </span>{formatDate(row.created_at)}</span>
+                    <span className="mt-0.5 block text-subtle" title={formatDateTime(row.last_login_at)}>
+                      <span className="sr-only">Last sign-in: </span>{row.last_login_at ? relativeTime(row.last_login_at) : "Never"}
+                    </span>
+                  </TD>
+                  <TD className="pl-1 pr-3 text-right">
                     {row.status !== "deleted" ? <ManageUser row={row} isAdmin={isAdmin} isSelf={me?.id === row.user.id} /> : null}
                   </TD>
                 </TR>
@@ -227,7 +239,7 @@ function UsersList() {
 
 export default function AdminUsersPage() {
   return (
-    <Suspense fallback={<SkeletonRows rows={8} />}>
+    <Suspense fallback={<TableSkeleton rows={8} cols={6} />}>
       <UsersList />
     </Suspense>
   );

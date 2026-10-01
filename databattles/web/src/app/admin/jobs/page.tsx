@@ -1,19 +1,19 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Bug, ListChecks, RotateCcw } from "lucide-react";
+import { Bug, ListChecks, RotateCcw, Search } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 
-import { AdminHeader, JsonDisclosure } from "@/components/admin/admin-ui";
+import { AdminHeader, ChoiceFilter, DotBadge, FilterBar, JsonDisclosure, ResultCount, SectionHeading, TableSkeleton } from "@/components/admin/admin-ui";
 import type { ErrorRow, JobRow } from "@/components/admin/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/form";
+import { Input } from "@/components/ui/form";
 import { Pagination } from "@/components/ui/pagination";
-import { EmptyState, ErrorState, NoResults, SkeletonRows } from "@/components/ui/states";
+import { EmptyState, ErrorState, NoResults } from "@/components/ui/states";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { get, post } from "@/lib/api";
-import { formatDateTime, formatNumber, relativeTime, titleCase } from "@/lib/format";
+import { formatDateTime, relativeTime, titleCase } from "@/lib/format";
 import { useApiMutation, useDebounced } from "@/lib/hooks";
 import type { Page } from "@/lib/types";
 import { useUrlState } from "@/lib/url-state";
@@ -47,44 +47,49 @@ function Jobs() {
 
   return (
     <section aria-labelledby="jobs-heading">
-      <h2 id="jobs-heading" className="sr-only">Background jobs</h2>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row" role="search">
-        <Select aria-label="Job status" className="sm:w-44" value={state.status ?? ""} onChange={(e) => setState({ status: e.target.value })}>
-          <option value="">Any status</option>
-          {JOB_STATUSES.map((s) => <option key={s} value={s}>{titleCase(s)}</option>)}
-        </Select>
-        <Input aria-label="Job kind" placeholder="Kind, e.g. score_submission" className="sm:max-w-xs" value={kind} maxLength={48} onChange={(e) => setKind(e.target.value)} />
-      </div>
+      <SectionHeading id="jobs-heading" eyebrow="Queue" title="Background jobs" />
+      <FilterBar role="search">
+        <ChoiceFilter
+          label="Job status"
+          value={state.status ?? ""}
+          onChange={(v) => setState({ status: v })}
+          options={[{ value: "", label: "Any status" }, ...JOB_STATUSES.map((s) => ({ value: s, label: titleCase(s) }))]}
+        />
+        <div className="relative min-w-0 flex-1 sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle" aria-hidden />
+          <Input aria-label="Job kind" placeholder="Kind, e.g. score_submission" className="pl-9 font-mono text-[13px]" value={kind} maxLength={48} onChange={(e) => setKind(e.target.value)} />
+        </div>
+      </FilterBar>
       {jobs.isPending ? (
-        <SkeletonRows rows={6} />
+        <TableSkeleton rows={6} cols={6} />
       ) : jobs.isError ? (
         <ErrorState error={jobs.error} onRetry={() => jobs.refetch()} />
       ) : jobs.data.items.length === 0 ? (
         filtered ? <NoResults onReset={() => { setKind(""); reset(); }} /> : <EmptyState icon={<ListChecks className="h-5 w-5" />} title="No jobs yet" />
       ) : (
         <>
-          <p className="mb-2 text-sm text-muted" aria-live="polite">{formatNumber(jobs.data.total)} jobs</p>
+          <ResultCount total={jobs.data.total} noun="jobs" />
           <Table>
             <THead>
               <tr>
                 <TH>Kind</TH>
                 <TH>Status</TH>
-                <TH>Attempts</TH>
+                <TH className="text-right">Attempts</TH>
                 <TH>Created</TH>
                 <TH>Finished</TH>
                 <TH>Last error</TH>
-                <TH><span className="sr-only">Actions</span></TH>
+                <TH className="relative"><span className="sr-only">Actions</span></TH>
               </tr>
             </THead>
             <TBody>
               {jobs.data.items.map((j) => (
                 <TR key={j.id} className="align-top">
-                  <TD className="font-mono text-xs text-fg">{j.kind}</TD>
-                  <TD><Badge tone={JOB_TONE[j.status] ?? "neutral"}>{titleCase(j.status)}</Badge></TD>
-                  <TD className="tabular-nums text-muted">{j.attempts} / {j.max_attempts}</TD>
-                  <TD className="whitespace-nowrap text-xs text-muted" title={formatDateTime(j.created_at)}>{relativeTime(j.created_at)}</TD>
-                  <TD className="whitespace-nowrap text-xs text-muted" title={formatDateTime(j.finished_at)}>{j.finished_at ? relativeTime(j.finished_at) : j.run_after && j.status === "queued" ? `runs ${relativeTime(j.run_after)}` : "—"}</TD>
-                  <TD className="max-w-sm">
+                  <TD className="whitespace-nowrap font-mono text-xs text-fg">{j.kind}</TD>
+                  <TD><DotBadge tone={JOB_TONE[j.status] ?? "neutral"}>{titleCase(j.status)}</DotBadge></TD>
+                  <TD className="tabular whitespace-nowrap text-right text-xs text-muted">{j.attempts} / {j.max_attempts}</TD>
+                  <TD className="tabular whitespace-nowrap text-xs text-muted" title={formatDateTime(j.created_at)}>{relativeTime(j.created_at)}</TD>
+                  <TD className="tabular whitespace-nowrap text-xs text-muted" title={formatDateTime(j.finished_at)}>{j.finished_at ? relativeTime(j.finished_at) : j.run_after && j.status === "queued" ? `runs ${relativeTime(j.run_after)}` : "—"}</TD>
+                  <TD className="min-w-48 max-w-sm">
                     {j.last_error ? <JsonDisclosure value={j.last_error} label={j.last_error.slice(0, 60) + (j.last_error.length > 60 ? "…" : "")} /> : <span className="text-xs text-subtle">—</span>}
                   </TD>
                   <TD className="text-right">
@@ -111,26 +116,30 @@ function Errors() {
   const filters = { source: source || undefined, page, page_size: PAGE_SIZE };
   const errors = useQuery({ queryKey: ["admin", "errors", filters], queryFn: () => get<Page<ErrorRow>>("/admin/errors", filters) });
   return (
-    <section id="errors" aria-labelledby="errors-heading" className="mt-10 scroll-mt-24">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 id="errors-heading" className="text-base font-semibold text-fg">Recent errors</h2>
-          <p className="mt-1 text-sm text-muted">Unhandled exceptions from the API and worker. Match a user’s “Reference” to the request id.</p>
-        </div>
-        <Select aria-label="Error source" className="sm:w-40" value={source} onChange={(e) => { setSource(e.target.value); setPage(1); }}>
-          <option value="">All sources</option>
-          <option value="api">API</option>
-          <option value="worker">Worker</option>
-        </Select>
-      </div>
+    <section id="errors" aria-labelledby="errors-heading" className="mt-14 scroll-mt-28">
+      <SectionHeading
+        id="errors-heading"
+        eyebrow="Exceptions"
+        title="Recent errors"
+        description="Unhandled exceptions from the API and worker. Match a user’s “Reference” to the request id."
+      />
+      <FilterBar>
+        <ChoiceFilter
+          label="Error source"
+          value={source}
+          onChange={(v) => { setSource(v); setPage(1); }}
+          options={[{ value: "", label: "All sources" }, { value: "api", label: "API" }, { value: "worker", label: "Worker" }]}
+        />
+      </FilterBar>
       {errors.isPending ? (
-        <SkeletonRows rows={4} />
+        <TableSkeleton rows={4} cols={4} />
       ) : errors.isError ? (
         <ErrorState error={errors.error} onRetry={() => errors.refetch()} />
       ) : errors.data.items.length === 0 ? (
         <EmptyState icon={<Bug className="h-5 w-5" />} title="No errors recorded" description={source ? "Nothing from this source." : "Nice."} />
       ) : (
         <>
+          <ResultCount total={errors.data.total} noun="errors" />
           <Table>
             <THead>
               <tr>
@@ -143,13 +152,13 @@ function Errors() {
             <TBody>
               {errors.data.items.map((e) => (
                 <TR key={e.id} className="align-top">
-                  <TD className="whitespace-nowrap text-xs text-muted" title={formatDateTime(e.created_at)}>{relativeTime(e.created_at)}</TD>
+                  <TD className="tabular whitespace-nowrap text-xs text-muted" title={formatDateTime(e.created_at)}>{relativeTime(e.created_at)}</TD>
                   <TD><Badge tone={e.source === "worker" ? "info" : "neutral"}>{titleCase(e.source)}</Badge></TD>
                   <TD className="text-xs">
-                    {e.method || e.path ? <span className="block font-mono text-fg">{e.method} {e.path}</span> : null}
+                    {e.method || e.path ? <span className="block whitespace-nowrap font-mono text-fg">{e.method} {e.path}</span> : null}
                     {e.request_id ? <span className="block font-mono text-[11px] text-subtle">{e.request_id}</span> : null}
                   </TD>
-                  <TD className="max-w-md text-xs">
+                  <TD className="min-w-56 max-w-md text-xs">
                     <span className="block font-medium text-danger">{e.error_type}</span>
                     <span className="line-clamp-3 break-words text-muted">{e.message}</span>
                   </TD>
@@ -167,8 +176,13 @@ function Errors() {
 export default function AdminJobsPage() {
   return (
     <div>
-      <AdminHeader title="Jobs & errors" description="Background queue state (auto-refreshes every 30 seconds). Failed and dead jobs can be re-queued." />
-      <Suspense fallback={<SkeletonRows rows={6} />}>
+      <AdminHeader
+        eyebrow="Monitor"
+        icon={<ListChecks />}
+        title="Jobs & errors"
+        description="Background queue state (auto-refreshes every 30 seconds). Failed and dead jobs can be re-queued."
+      />
+      <Suspense fallback={<TableSkeleton rows={6} cols={6} />}>
         <Jobs />
       </Suspense>
       <Errors />

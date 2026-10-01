@@ -4,15 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Mail } from "lucide-react";
 import { Suspense } from "react";
 
-import { AdminHeader, JsonDisclosure } from "@/components/admin/admin-ui";
+import { AdminHeader, ChoiceFilter, DotBadge, EmailText, FilterBar, JsonDisclosure, ResultCount, TableSkeleton } from "@/components/admin/admin-ui";
 import type { EmailRow } from "@/components/admin/types";
-import { Badge } from "@/components/ui/badge";
-import { Select } from "@/components/ui/form";
 import { Pagination } from "@/components/ui/pagination";
-import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/states";
+import { EmptyState, ErrorState } from "@/components/ui/states";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { get } from "@/lib/api";
-import { formatDateTime, formatNumber, relativeTime, titleCase } from "@/lib/format";
+import { formatDateTime, relativeTime, titleCase } from "@/lib/format";
 import type { Page } from "@/lib/types";
 import { useUrlState } from "@/lib/url-state";
 
@@ -28,26 +26,34 @@ function Emails() {
   return (
     <div>
       <AdminHeader
+        eyebrow="Monitor"
+        icon={<Mail />}
         title="Email outbox"
         description="Transactional emails queued by the platform. Failed messages are retried by the worker; the error shows the last attempt."
-        actions={
-          <Select aria-label="Email status" className="w-40" value={state.status ?? ""} onChange={(e) => setState({ status: e.target.value })}>
-            <option value="">All statuses</option>
-            <option value="queued">Queued</option>
-            <option value="sent">Sent</option>
-            <option value="failed">Failed</option>
-          </Select>
-        }
       />
+      <FilterBar>
+        <ChoiceFilter
+          label="Email status"
+          value={state.status ?? ""}
+          onChange={(v) => setState({ status: v })}
+          options={[
+            { value: "", label: "All statuses" },
+            { value: "queued", label: "Queued" },
+            { value: "sent", label: "Sent" },
+            { value: "failed", label: "Failed" },
+          ]}
+        />
+        <p className="text-xs text-subtle sm:ml-auto sm:pr-1.5">Refreshes every 30 seconds</p>
+      </FilterBar>
       {emails.isPending ? (
-        <SkeletonRows rows={8} />
+        <TableSkeleton rows={8} cols={6} />
       ) : emails.isError ? (
         <ErrorState error={emails.error} onRetry={() => emails.refetch()} />
       ) : emails.data.items.length === 0 ? (
         <EmptyState icon={<Mail className="h-5 w-5" />} title={state.status ? `No ${state.status} emails` : "No emails yet"} />
       ) : (
         <>
-          <p className="mb-2 text-sm text-muted" aria-live="polite">{formatNumber(emails.data.total)} emails</p>
+          <ResultCount total={emails.data.total} noun="emails" />
           <Table>
             <THead>
               <tr>
@@ -56,23 +62,27 @@ function Emails() {
                 <TH>Template</TH>
                 <TH>Subject</TH>
                 <TH>Status</TH>
-                <TH>Attempts</TH>
+                <TH className="text-right">Attempts</TH>
               </tr>
             </THead>
             <TBody>
               {emails.data.items.map((e) => (
                 <TR key={e.id} className="align-top">
-                  <TD className="whitespace-nowrap text-xs text-muted" title={formatDateTime(e.created_at)}>{relativeTime(e.created_at)}</TD>
-                  <TD className="max-w-48 break-all text-xs text-fg">{e.to}</TD>
-                  <TD className="font-mono text-xs text-muted">{e.template}{e.template_version ? ` v${e.template_version}` : ""}</TD>
-                  <TD className="max-w-xs text-xs text-fg"><span className="line-clamp-2">{e.subject ?? "—"}</span></TD>
-                  <TD>
-                    <Badge tone={TONE[e.status] ?? "neutral"}>{titleCase(e.status)}</Badge>
-                    {e.sent_at ? <span className="mt-1 block text-[11px] text-subtle" title={formatDateTime(e.sent_at)}>{relativeTime(e.sent_at)}</span> : null}
+                  <TD className="tabular whitespace-nowrap text-xs text-muted" title={formatDateTime(e.created_at)}>{relativeTime(e.created_at)}</TD>
+                  <TD className="min-w-44 max-w-56 text-xs text-fg"><EmailText email={e.to} /></TD>
+                  <TD className="whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-1.5 py-0.5 font-mono text-[11px] text-muted">
+                      {e.template}{e.template_version ? <span className="text-subtle">v{e.template_version}</span> : null}
+                    </span>
                   </TD>
-                  <TD className="text-xs">
-                    <span className="tabular-nums text-muted">{e.attempts}</span>
-                    {e.error ? <div className="mt-1"><JsonDisclosure value={e.error} label="Error" /></div> : null}
+                  <TD className="min-w-56 max-w-xs text-xs text-fg"><span className="line-clamp-2">{e.subject ?? "—"}</span></TD>
+                  <TD className="whitespace-nowrap">
+                    <DotBadge tone={TONE[e.status] ?? "neutral"}>{titleCase(e.status)}</DotBadge>
+                    {e.sent_at ? <span className="tabular mt-1 block text-[11px] text-subtle" title={formatDateTime(e.sent_at)}>{relativeTime(e.sent_at)}</span> : null}
+                  </TD>
+                  <TD className="text-right text-xs">
+                    <span className="tabular text-muted">{e.attempts}</span>
+                    {e.error ? <div className="mt-1 flex justify-end text-left"><JsonDisclosure value={e.error} label="Error" /></div> : null}
                   </TD>
                 </TR>
               ))}
@@ -87,7 +97,7 @@ function Emails() {
 
 export default function AdminEmailsPage() {
   return (
-    <Suspense fallback={<SkeletonRows rows={8} />}>
+    <Suspense fallback={<TableSkeleton rows={8} cols={6} />}>
       <Emails />
     </Suspense>
   );
