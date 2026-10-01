@@ -1,100 +1,101 @@
 # Architecture
 
-Aegis is a monorepo that ships a web console, a REST API, a set of pure evaluation engines, a job queue, and an immutable evidence store on top of PostgreSQL. This document explains how the pieces fit together and how a single audit flows through the system.
+Aegis is a monorepo: a Next.js console and website, a FastAPI service, pure evaluation engines, a job system with a ledger, and PostgreSQL as the system of record (with Row-Level Security and append-only evidence).
 
 ## System overview
 
 ```
-                             ┌────────────────────────────────────────────────┐
-   Browser ────────────────▶ │  WEB — Next.js 16 / React 19 (App Router)       │
-                             │  · marketing + dashboard (35 pages)             │
-                             │  · TanStack Query for server state              │
-                             │  · BFF route handler: /bff/[...path]            │
-                             └───────────────────────────┬────────────────────┘
-                                 cookies + SSE, per-req   │  API_INTERNAL_URL
-                                                          ▼
-   Python SDK ───┐          ┌────────────────────────────────────────────────┐
-   MCP server ───┼────────▶ │  API — FastAPI (96 endpoints)                   │
-   curl / CI ────┘          │  ┌──────────────┬───────────────┬────────────┐  │
-                             │  │ auth + RBAC  │ ASGI middleware│ error      │  │
-                             │  │ sessions,    │ req-id, secure │ envelope   │  │
-                             │  │ API keys     │ headers, limits│            │  │
-                             │  └──────────────┴───────────────┴────────────┘  │
-                             │  services · orchestrator (AuditRunner)          │
-                             └───┬───────────────────┬───────────────────┬─────┘
-                                 │ enqueue           │ read/write         │ append
-                     ┌───────────▼─────────┐ ┌───────▼────────┐ ┌─────────▼────────┐
-                     │ QUEUE               │ │ ENGINES        │ │ EVIDENCE         │
-                     │ Celery + Redis      │ │ deterministic  │ │ hash-chain +     │
-                     │  · after_commit     │ │ evaluators     │ │ DB triggers      │
-                     │    dispatch         │ │ (pure Python)  │ │ (append-only)    │
-                     │ or inline threadpool│ │                │ │                  │
-                     └───────────┬─────────┘ └───────┬────────┘ └─────────┬────────┘
-                                 │                    │                    │
-                                 └────────────────────▼────────────────────┘
-                             ┌────────────────────────────────────────────────┐
-                             │  DATABASE — PostgreSQL 16 + pgvector            │
-                             │  · Row-Level Security (per-org isolation)       │
-                             │  · 60 tables · HNSW vector + GIN FTS indexes    │
-                             │  · immutability triggers on evidence/audit log  │
-                             └────────────────────────────────────────────────┘
-
-   PROVIDERS (optional, via ModelRouter): Ollama · Gemini · OpenAI · Anthropic
-   Embeddings: local hash (default) · Ollama · Gemini · OpenAI
+                         ┌───────────────────────────────────────────────────────────┐
+  Browser ─────────────▶ │ WEB  Next.js 16 / React 19 (App Router)                    │
+                         │  · website (static) + dashboard (dynamic, session-seeded)  │
+                         │  · TanStack Query; resumable SSE hook with polling fallback │
+                         │  · BFF route handler /bff/api/v1/* (cookies, SSE, origin)   │
+                         └──────────────────────────────┬────────────────────────────┘
+                                                        │ API_INTERNAL_URL
+  Python SDK · MCP · CI ───────────────────────────────▶▼
+                         ┌───────────────────────────────────────────────────────────┐
+                         │ API  FastAPI /api/v1                                       │
+                         │  middleware: request id + traceparent, metrics, secure     │
+                         │  headers, Origin guard, body limits, CORS                  │
+                         │  auth (cookie / bearer / API key) → RBAC → RLS session     │
+                         │  services: audits (orchestrator), findings, evidence,      │
+                         │  runtime guard, policy studio, assurance, entitlements …   │
+                         └──────┬───────────────────┬──────────────────┬─────────────┘
+                                │                   │                  │
+                ┌───────────────▼──────┐ ┌──────────▼─────────┐ ┌──────▼──────────────┐
+                │ JOBS                 │ │ ENGINES (pure)     │ │ REAL-TIME           │
+                │ ledger (job_runs)    │ │ fairness, safety,  │ │ audit events → Redis│
+                │ → Celery workers     │ │ privacy, security, │ │ pub/sub → SSE (any  │
+                │   (or inline pool)   │ │ agent, redteam,    │ │ replica), resumable │
+                │ maintenance tick     │ │ policy, runtime,   │ │ by Last-Event-ID    │
+                │ (beat / in-process)  │ │ evidence, risk …   │ └─────────────────────┘
+                └───────────────┬──────┘ └──────────┬─────────┘
+                                └─────────┬─────────┘
+                ┌─────────────────────────▼────────────────────────────────────────┐
+                │ PostgreSQL 16 + pgvector — RLS on every tenant table;            │
+                │ append-only triggers on evidence, audit log, usage ledger,       │
+                │ published policy versions                                         │
+                └──────────────────────────────────────────────────────────────────┘
+  Model providers (optional, SSRF-guarded): Ollama · Gemini · OpenAI · Anthropic · simulators (demo)
 ```
 
 ## Components
 
-### Web (`apps/web`)
-Next.js 16 App Router. The browser never talks to the API origin directly; every request goes through a **runtime BFF proxy** (`src/app/bff/[...path]/route.ts`) that reads `API_INTERNAL_URL` per request and forwards cookies and streamed bodies. This keeps auth cookies first-party and lets Server-Sent Events (live audit progress) pass through unbuffered. Server state is managed by TanStack Query; the API client (`src/lib/api.ts`) targets `/bff/api/v1`.
+**Web (`apps/web`).** The website is statically rendered; the dashboard is dynamic. The dashboard layout fetches the session on the server for the auth guard and seeds it into the query cache, so permission-gated UI renders identically on server and client. All API calls go through the BFF route handler, which keeps cookies first-party, streams request and response bodies (including SSE), and enforces same-origin writes. Shared primitives live in `src/components/ui` (forms, dialogs with focus management, data tables with link rows, plan-limit and DEMO notices).
 
-### API (`apps/api/aegis_api`)
-FastAPI, assembled in `app.py`. Routers group the surface (auth, systems, audits, policies, findings, evidence, operations, workspace, demo, health). Cross-cutting concerns are pure-ASGI middleware: request IDs, secure headers, and body-size limits. Every error is returned as a consistent envelope. Services hold business logic; the **orchestrator** (`services/orchestrator.py`, `AuditRunner`) drives an audit through its stages.
+**API (`apps/api/aegis_api`).** Routers group the surface: auth, systems, audits, policies, findings, evidence, runtime, runtime policies, assurance, billing/usage, webhooks, graph, workspace, public, health. Errors use one envelope (`{"error": {code, message, request_id, details}}`). Mutating endpoints accept `Idempotency-Key`; replays return the stored response.
 
-### Engines (`engines/`)
-Seventeen domains of **pure** Python — no database, no FastAPI, no app imports. Each takes plain inputs and returns plain results, which makes them independently unit-testable and reusable by the API, the worker, and monitoring. Domains include `fairness`, `hallucination`, `safety`, `privacy`, `security`, `agent` (trace auditing), `policy` (compiler), `compliance` (framework mapping), `evidence`, `risk`, `generation` (test generation), `monitoring`, and `providers`. A `ModelRouter` offers optional model-assisted judgments; these augment but never replace deterministic signals.
+**Engines (`engines/`).** Pure Python with no database or web imports: evaluators (fairness, hallucination/grounding, safety, privacy, security, agent actions), red team (imported corpus only), policy compiler and compliance mappings, **runtime** (event schema, signals, redaction, policy DSL compiler and evaluator, templates), **evidence** (canonical hashing, chain and package verification — the same file is shipped as `verify.py`), risk scoring, test generation, monitoring, and model providers behind a router. A model may assist a judgment but never replaces the deterministic signal.
 
-### Queue (`aegis_api/jobs`)
-Audits and other long-running work run out-of-band. With `REDIS_URL` set, jobs run on **Celery**; otherwise an **inline thread-pool** backend runs them in-process (used in tests and single-container setups). Dispatch happens on a SQLAlchemy `after_commit` event, so a job never starts before its owning transaction is durable.
+**Jobs (`aegis_api/jobs`).** Every async job is recorded in `job_runs` with an idempotency key before dispatch (after the owning transaction commits). Workers claim jobs atomically; failures are classified as transient (retried with backoff, then dead-lettered) or permanent. A maintenance tick (Celery beat, or an in-process scheduler with the inline backend) runs under a PostgreSQL advisory lock. Operators use `python -m aegis_api.ops`.
 
-### Evidence store
-Every judgment produces an evidence record linked into a per-scope **hash chain** (`ChainState`). Database triggers (`aegis.protect_evidence`) make evidence and the audit log **append-only** — updates and deletes are rejected at the database, not just in application code. This is what lets a finding cite tamper-evident proof.
+**Evidence.** Each evidence record is content-hashed and chained per audit; Runtime Guard decisions are chained per system. Signed export packages and verification are described in [evidence.md](evidence.md).
 
-### Database
-PostgreSQL 16 with pgvector. 60 tables under Row-Level Security for tenant isolation, HNSW indexes for vector similarity (grounding/retrieval), and GIN full-text indexes for search. See [`security.md`](security.md) for the tenancy model.
-
-## Multi-tenancy in one paragraph
-
-Every tenant row carries an `org_id`. The application connects as a non-owner role (`aegis`, a member of the `aegis_app` group) for which RLS policies are enforced. On each request the session sets `app.current_org_id` / `app.current_user_id` (via `set_config(..., true)` so it is transaction-local), and RLS policies compare rows against those settings. The **identity layer** (signup, session lookup) and **migrations/seeding** use the owner role, which bypasses RLS by design — because they must operate before or across tenants.
-
-## The audit lifecycle
-
-`AuditRunner` moves an audit through explicit stages, emitting SSE progress after each:
+## Audit execution
 
 ```
-setup ─▶ test_generation ─▶ inference ─▶ evaluation ─▶ evidence
-   ─▶ policy_mapping ─▶ risk_scoring ─▶ report_generation
+queued ──claim (UPDATE … WHERE status='queued' RETURNING, lease)──▶ running
+  setup → test_generation → inference → evaluation → evidence → risk_scoring → policy_mapping → report_generation
+  ── conditional terminal update (only if still running and not cancelled) ──▶ completed | partially_completed | failed | cancelled
 ```
 
-1. **setup** — resolve the target system, its version, and the controls/tests in scope.
-2. **test_generation** — generate test cases for each in-scope control (deterministic, seeded).
-3. **inference** — run the system under test over the cases (parallelised with a thread pool; agent systems also record traces).
-4. **evaluation** — run the relevant engines over each result to decide pass/fail with a confidence.
-5. **evidence** — capture inputs, outputs, and engine reasoning as hash-chained evidence.
-6. **policy_mapping** — attach failing results to the controls and framework references they touch.
-7. **risk_scoring** — aggregate into risk-scored findings.
-8. **report_generation** — assemble the audit report.
+- **Progress** is written through a separate, immediately committed channel and published to Redis, so the SSE stream is live and resumable while results stay in one transaction.
+- **Heartbeats** extend the lease; a reaper re-queues runs whose heartbeat stopped (bounded attempts).
+- **Cancellation** is cooperative: the runner checks between stages; the terminal write never overwrites `cancelled`.
+- **Findings** are deduplicated per `(organization, system, fingerprint)`; each audit that observes a finding records an occurrence (so per-audit finding lists and comparisons are exact); a re-detected resolved finding re-opens as a regression. Finding numbers are allocated atomically.
+- **After completion**: usage is recorded, the regression report against the previous audit and the known-good baseline is computed, notifications and webhooks are queued.
 
-## Remediation & re-test loop
-
-A finding carries recommended remediations; some create a **regression test**. Applying a remediation (e.g. tightening a guardrail on a simulated system) triggers `regression_service.run_regression`, which re-runs the failing cases and records a **measured before/after delta** — the fail→pass (or not) is evidence, not an assertion. Monitoring samples live traffic and evaluates it continuously, raising alerts on drift or threshold breaches that can open new findings, closing the loop back to the top of the lifecycle.
-
-## Request path (end to end)
+## Runtime Guard
 
 ```
-Browser → /bff/api/v1/... (Next route handler)
-        → API_INTERNAL_URL → FastAPI middleware (req-id, headers, size)
-        → auth (cookie / bearer / API key) → RBAC (require(*perms))
-        → RLS-scoped session (org/user set) → service → engines / DB
-        → response envelope (+ Set-Cookie / SSE relayed back through the BFF)
+agent ─▶ POST /runtime/check | /runtime/events
+          normalize + derive signals + redact (engines.runtime.schema)
+          resolve published policies assigned to org / environment / system
+          evaluate (engines.runtime.policy): most restrictive matching action wins
+          mode: observe → allow · audit → allow + finding/evidence · enforce → verdict (+ approval)
+          store event, append evidence (advisory-locked chain), record usage, metrics
+```
+
+See [runtime-guard.md](runtime-guard.md) and [policy-studio.md](policy-studio.md).
+
+## Continuous assurance
+
+Schedules (interval and/or change events) and change triggers from CI/CD create audits with risk-based category selection for the change type. Every completed audit is compared with the previous audit and the system's baseline; regressions (new high/critical findings or a score drop > 5 points) raise notifications and the `regression.detected` webhook.
+
+## Entitlements
+
+Plans are configuration (`billing/plans.py`, `PLANS_JSON`, subscription overrides). Quotas are checked at the point of use from the append-only usage ledger and live counts; see [billing.md](billing.md).
+
+## Multi-tenancy
+
+Every tenant row carries `organization_id`; the app role is subject to RLS keyed on `app.current_org_id`, set per transaction. The identity layer, onboarding, migrations, seeding and maintenance use the owner role. See [security.md](security.md).
+
+## Request path
+
+```
+Browser → /bff/api/v1/… (same-origin check, header allow-list)
+        → FastAPI middleware (request id, traceparent, metrics, Origin guard, size limit)
+        → authenticate (short-lived identity session) → require(permission)
+        → RLS-scoped session → service → engines / database
+        → response envelope (Set-Cookie and SSE relayed through the BFF)
 ```

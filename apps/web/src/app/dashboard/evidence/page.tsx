@@ -315,8 +315,8 @@ function VerifyTab() {
             <CardTitle>Verify offline</CardTitle>
           </CardHeader>
           <CardBody>
-            <CodeBlock language="shell" code={"unzip aegis-evidence-*.zip -d pkg && cd pkg\npython3 verify.py --public-key <base64-key>"} />
-            <p className="mt-2 text-xs text-[var(--color-text-subtle)]">Requires Python 3.10+; signature checks also need the <code className="font-mono">cryptography</code> package.</p>
+            <CodeBlock language="shell" code={"unzip -j aegis-evidence-<audit>.zip '*/verify.py'\npython3 verify.py aegis-evidence-<audit>.zip --public-key <base64-key>"} />
+            <p className="mt-2 text-xs text-[var(--color-text-subtle)]">Prints a JSON report and exits 0 only when the status is VERIFIED. Requires Python 3.10+; signature checks also need the <code className="font-mono">cryptography</code> package.</p>
           </CardBody>
         </Card>
       </div>

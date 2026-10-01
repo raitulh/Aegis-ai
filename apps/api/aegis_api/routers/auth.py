@@ -107,6 +107,14 @@ def login(body: LoginRequest, response: Response, db: Session = Depends(_raw_ses
         result = auth_service.login(db, email=body.email, password=body.password)
     except Unauthorized:
         throttle.record_failure(body.email)
+        # Security log (no password, email pseudonymised): visible to operators, not tied to a tenant.
+        import hashlib
+
+        import structlog
+
+        structlog.get_logger("aegis.auth").warning(
+            "login_failed", account=hashlib.sha256(body.email.strip().lower().encode()).hexdigest()[:16]
+        )
         raise
     throttle.reset(body.email)
     _audit_auth_event(db, result, "auth.login")

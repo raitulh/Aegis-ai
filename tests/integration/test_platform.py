@@ -630,3 +630,22 @@ def test_guest_sandbox_is_seeded_with_real_results_and_marked_demo(client):
     assert any(f["source"] == "runtime" for f in findings)
     # Every surface reports the same plan for the sandbox.
     assert session["organization"]["plan"] == client.get("/api/v1/usage").json()["plan_key"]
+
+
+def test_evidence_export_quota_is_enforced(demo_provider_and_system):
+    ws, _pid, sid = demo_provider_and_system
+    audit = _audit(ws, sid)
+    from aegis_api.db.session import session_factory, set_tenant
+    from aegis_api.services import usage_service
+
+    s = session_factory()()
+    s.begin()
+    set_tenant(s, uuid.UUID(ws.org_id), None)
+    for _ in range(10):  # the free plan includes 10 exports per period
+        usage_service.record(s, uuid.UUID(ws.org_id), "evidence_export", source_type="test", source_id=uuid.uuid4())
+    s.commit()
+    s.close()
+    r = ws.post(f"/api/v1/audits/{audit['id']}/evidence/export")
+    assert r.status_code == 403, r.text
+    details = r.json()["error"]["details"]
+    assert details["metric"] == "evidence_export" and details["used"] == 10 and details["limit"] == 10

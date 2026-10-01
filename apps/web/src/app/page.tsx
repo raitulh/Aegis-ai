@@ -144,12 +144,14 @@ export default function LandingPage() {
               </div>
               <p className="mb-4 text-sm text-[var(--color-text-muted)]">Export an audit as a signed package: manifest, artifacts, hash chain and an Ed25519 signature. The verifier ships inside the package — no Aegis account needed.</p>
               <pre className="overflow-x-auto rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-bg)] p-4 font-mono text-xs text-[var(--color-text-muted)]">
-                {`$ python3 verify.py --public-key <key>
-files ............ ok (148)
-hash chain ....... ok (143 records)
-root hash ........ ok
-signature ........ valid (Ed25519)
-status: VERIFIED`}
+                {`$ unzip -j aegis-evidence-audit.zip '*/verify.py'
+$ python3 verify.py aegis-evidence-audit.zip --public-key <key>
+{
+  "status": "VERIFIED",
+  "chain": { "status": "VERIFIED", "records": 22, ... },
+  "signature": { "algorithm": "Ed25519", "valid": true, ... },
+  "problems": []
+}`}
               </pre>
               <p className="mt-3 text-xs text-[var(--color-text-subtle)]">Verification shows the records are unchanged since capture. It is integrity evidence, not a legal attestation.</p>
             </div>

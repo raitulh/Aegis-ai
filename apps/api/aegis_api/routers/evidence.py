@@ -216,6 +216,7 @@ def export_audit_evidence(
 
         raise Conflict("Evidence can be exported once the audit has completed")
     entitlements.require_feature(db, principal.organization_id, "evidence_export")
+    entitlements.check_quota(db, principal.organization_id, "evidence_export")
     data, manifest, export = evidence_service.build_package(db, audit, principal)
     filename = evidence_service.package_filename(audit)
     return StreamingResponse(

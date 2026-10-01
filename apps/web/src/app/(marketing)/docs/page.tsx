@@ -19,7 +19,7 @@ export default function Page() {
         <h2 id="quickstart" className="text-xl font-semibold text-[var(--color-text)]">
           Quickstart (local)
         </h2>
-        <pre className="overflow-x-auto rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4 font-mono text-xs">{`cp .env.example .env          # set SECRET_KEY, ENCRYPTION_KEY, API_KEY_PEPPER
+        <pre className="overflow-x-auto rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4 font-mono text-xs">{`cp .env.example .env          # production: set SECRETS_ENCRYPTION_KEY, API_KEY_PEPPER, EVIDENCE_SIGNING_KEY
 docker compose up --build      # postgres, redis, api, worker, scheduler, web
 open http://localhost:3000     # create a workspace, or try the sandbox`}</pre>
         <ol className="list-decimal space-y-1 pl-5 text-sm">

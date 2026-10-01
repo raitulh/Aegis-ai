@@ -26,6 +26,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        # `KEY=` (in .env or as `${KEY:-}` from Compose) means "not set": use the default.
+        env_ignore_empty=True,
     )
 
     # --- runtime -----------------------------------------------------------------------------

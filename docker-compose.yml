@@ -1,5 +1,5 @@
 # ==============================================================================
-# Aegis AI — full local stack: web · api · worker · postgres(pgvector) · redis
+# Aegis AI — full local stack: web · api · worker · scheduler · postgres(pgvector) · redis
 #
 #   cp .env.example .env        # optional; generate real secrets for production
 #   docker compose up --build   # web → http://localhost:3000, api → :8000
@@ -19,7 +19,19 @@ x-api-env: &api-env
   JOB_BACKEND: ${JOB_BACKEND:-celery}
   SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
   API_KEY_PEPPER: ${API_KEY_PEPPER:-}
+  EVIDENCE_SIGNING_KEY: ${EVIDENCE_SIGNING_KEY:-}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
   CORS_ORIGINS: ${WEB_ORIGIN:-http://localhost:3000}
+  WEB_BASE_URL: ${WEB_ORIGIN:-http://localhost:3000}
+  TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
+  BILLING_PROVIDER: ${BILLING_PROVIDER:-none}
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  PLANS_JSON: ${PLANS_JSON:-{}}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SALES_INBOX: ${SALES_INBOX:-}
   STORAGE_LOCAL_DIR: /app/var/storage
   # AI providers (optional — blank falls back to the local hash embedder / deterministic engines).
   OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
@@ -97,9 +109,35 @@ services:
       ["celery", "-A", "aegis_api.jobs.tasks:celery_app", "worker",
        "--loglevel=info", "--concurrency=${WORKER_CONCURRENCY:-2}"]
     environment: *api-env
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A aegis_api.jobs.tasks:celery_app inspect ping -d celery@$$HOSTNAME --timeout 5 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      start_period: 30s
+      retries: 3
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Periodic maintenance (webhook delivery, stale-run recovery, retries, retention, risk-acceptance
+  # expiry, scheduled audits, usage alerts). Each tick takes a Postgres advisory lock, so running more
+  # than one scheduler is safe (only one tick executes at a time).
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    command:
+      ["celery", "-A", "aegis_api.jobs.tasks:celery_app", "beat",
+       "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+    environment: *api-env
+    healthcheck:
+      disable: true
+    depends_on:
       redis:
         condition: service_healthy
       migrate:

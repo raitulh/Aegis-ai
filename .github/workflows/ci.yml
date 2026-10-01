@@ -83,6 +83,14 @@ jobs:
       - name: Apply migrations
         run: uv run alembic upgrade head
 
+      - name: Migrations match the models (no drift)
+        run: uv run alembic check
+
+      - name: Migrations round-trip (downgrade one step and back)
+        run: |
+          uv run alembic downgrade -1
+          uv run alembic upgrade head
+
       - name: Pytest (unit, integration, evaluation)
         run: uv run pytest --cov --cov-report=term-missing
 
@@ -186,6 +194,30 @@ jobs:
 
       - name: Run E2E
         run: pnpm --filter @aegis/web test:e2e
+
+  # ---------------------------------------------------------------------------
+  # Supply chain: known-vulnerability audit of locked dependencies.
+  # ---------------------------------------------------------------------------
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: pip-audit (Python, production dependencies)
+        run: |
+          uv export --frozen --no-dev --no-emit-project --no-hashes > requirements.audit.txt
+          uvx pip-audit -r requirements.audit.txt --disable-pip --no-deps
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: pnpm audit (JavaScript, production dependencies)
+        run: pnpm audit --prod --audit-level=high
 
   # ---------------------------------------------------------------------------
   # Docker: verify both images build (no push).

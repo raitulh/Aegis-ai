@@ -1,304 +1,170 @@
-<div align="center">
+# Aegis AI
 
-# 🛡️ Aegis AI
+**Continuous AI assurance: test AI systems and agents before release, guard their actions in production, and keep verifiable evidence of every result.**
 
-### The Open-Source AI Assurance, Red-Teaming & Governance Platform
+Aegis is a self-hostable platform for teams that need to know — and show — how their models and agents behave. It runs evaluation audits (fairness, grounding, safety, privacy, prompt-injection resistance, agent actions), checks agent actions at runtime against versioned policies, turns problems into tracked findings, and records everything as hash-chained evidence that can be exported as a signed package and verified offline.
 
-**Continuous, automated evaluations for LLMs & AI Agents — backed by cryptographic proof.**
+> **Deterministic where possible, model-assisted where useful, evidence-backed everywhere.**
+> A model may assist a judgment but is never the sole basis for a finding.
 
-[![CI Status](https://img.shields.io/badge/CI-Passing-3ecf8e?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Next.js 16](https://img.shields.io/badge/Next.js-16.3-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
-[![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16_%2B_pgvector-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
-[![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue?style=for-the-badge)](LICENSE)
-
-<br />
-
-[**Explore Live Console**](http://localhost:3000) • [**Interactive API Docs**](http://localhost:8000/docs) • [**Architecture**](docs/architecture.md) • [**Python SDK**](packages/sdk/python) • [**MCP Server**](packages/mcp)
-
-<br /><br />
-
-<a href="http://localhost:3000">
-  <img src="assets/3d-assurance-hologram.svg" width="100%" alt="Aegis 3D Neural Assurance Hologram" />
-</a>
-
-<p align="center">
-  <sub>✦ <b>Live 3D Neural Assurance Hologram</b>: Gyroscopic multi-domain evaluators with real-time cryptographic proof chain telemetry ✦</sub>
-</p>
-
-</div>
+Aegis produces *assessments* and *readiness* signals. It does not certify compliance with any law or standard, and its framework mappings are reference data, not legal advice.
 
 ---
 
-> 💡 **The Golden Rule:** *Deterministic where possible, model-assisted where useful, evidence-backed everywhere.* Engine verdicts must be reproducible. A model may assist judgment, but is never the sole basis for a finding.
+## What it does
+
+| Area | What you get |
+| --- | --- |
+| **Audits** | Deterministic, seeded evaluation runs across fairness (counterfactual treatment tests with significance testing), grounding (claim verification against sources), safety, privacy (PII / secret detection), injection and jailbreak resistance (from a corpus *you* import) and agent-action authorization. Live progress over a resumable event stream. |
+| **Runtime Guard** | Agents report events (`aegis.runtime.v1`) and ask for decisions before acting. Per system: **observe** (record), **audit** (record + findings) or **enforce** (block, or hold for human approval). Payloads are redacted before storage. |
+| **Policy Studio** | Runtime policies in a small YAML DSL: validate, version, diff, test against a sample event, **simulate on your recorded events**, publish, roll back and assign to the workspace, an environment or a system. A library of starter templates is included. |
+| **Policy compiler** | Written policies (PDF, DOCX, text) compiled into testable controls with provenance back to the source section and page. Controls map to NIST AI RMF, the NIST Generative AI Profile, OWASP Top 10 for LLM Applications and ISO/IEC 42001 as reference data. |
+| **Findings** | Deduplicated per system, observed per audit, risk-scored with explained factors. Lifecycle with SLAs, comments, bulk triage, risk acceptance with justification and expiry, verified re-tests, and regression re-opening. |
+| **Evidence** | Append-only (database triggers reject edits), SHA-256 hash-chained per audit and per runtime system, Ed25519-signed export packages with a standalone `verify.py`. |
+| **Continuous assurance** | Schedules and change triggers from CI/CD (deployment, prompt, model, tool, policy changes) with risk-based test selection, known-good baselines and regression detection. |
+| **Platform** | Multi-tenant with PostgreSQL Row-Level Security, nine roles, scoped API keys, signed webhooks, usage ledger and plan entitlements, audit log, Prometheus metrics, Python SDK and an MCP server. |
 
 ---
 
-## ⚡ Why Aegis AI?
-
-Most AI governance exists only as static paperwork, spreadsheets, and manual questionnaires. Meanwhile, production LLMs hallucinate, leak confidential data, exhibit demographic bias, and remain vulnerable to prompt injection attacks.
-
-**Aegis closes the loop between governing an AI system on paper and proving how it actually behaves in production.**
+## Architecture
 
 ```
-                     ┌─────────────────────────────────────────────────────────────┐
-                     │                     THE ASSURANCE LOOP                      │
-                     └─────────────────────────────────────────────────────────────┘
-
-    AI System / Agent ──▶ Observe Traces ──▶ Generate Probes ──▶ Execute Inference
-            ▲                                                          │
-            │                                                          ▼
-    Continuous Drift  ◀── Remediate &     ◀── Cryptographic   ◀── Evaluate Multi-Domain
-       Monitoring            Re-Test            Evidence Vault        Assurance Engines
+Browser ──▶ Next.js 16 web (dashboard + site) ──▶ same-origin BFF /bff/api/v1 ──┐
+                                                                                 ▼
+SDK · MCP · CI ───────────────────────────────────────────────────────▶ FastAPI /api/v1
+                                                                   auth · RBAC · RLS session
+                                                                   services · orchestrator
+                                     ┌──────────────────────────────┬───────────┴──────────┐
+                                     ▼                              ▼                      ▼
+                               pure engines/               job ledger → Celery         evidence
+                          (no DB, no web framework)        (or inline pool)        hash chains +
+                                                           + maintenance ticks     append-only triggers
+                                     └──────────────────────────────┴──────────────────────┘
+                                                  PostgreSQL 16 + pgvector (RLS)  ·  Redis
 ```
+
+Details: [docs/architecture.md](docs/architecture.md).
 
 ---
 
-## ✨ Key Features
+## Quick start
 
-| Capability | What it Delivers |
-| :--- | :--- |
-| 🎯 **Pure Assurance Engines** | 6 dedicated evaluators covering **Fairness** (Counterfactual parity, EEOC 4/5ths rule), **Grounding** (RAG claim NLI entailment), **Safety** (Harm & refusal probes), **Privacy** (Automated PII redaction & leak checks), **Security** (Prompt injection & jailbreak detection), and **Autonomous Agent Auditing** (Unauthorized tool calls & boundary violations). |
-| 🔐 **Cryptographic Evidence Vault** | Every test result is sealed into an append-only **SHA-256 hash chain**. Database triggers reject any `UPDATE` or `DELETE` on evidence rows, delivering court-admissible, tamper-evident audit trails. |
-| 📜 **Policy-as-Code Compiler** | Ingest any legal, compliance, or company standard (PDF, DOCX, Markdown). Aegis compiles natural language requirements into executable test controls linked to **NIST AI RMF**, **ISO/IEC 42001**, **EU AI Act**, and **OWASP LLM Top 10**. |
-| 🦙 **100% Offline & Local-First** | Native zero-cost evaluations via local **Ollama** (`Qwen3:1.7B`, `Llama 3`, `Mistral`) with automatic chain-of-thought suppression (`think: False`). Data never leaves your machine. Also supports OpenAI, Anthropic, Gemini, or custom HTTP endpoints. |
-| 🤖 **Agent Tool Call Interception** | Full observability into autonomous multi-agent pipelines. Detects unauthorized API invocations, parameters exceeding safety thresholds, and plan-execution divergence. |
-| 🔌 **Model Context Protocol (MCP)** | Built-in Anthropic MCP server (`packages/mcp`). Enables **Claude Desktop**, **Cursor**, and external IDE agents to directly inspect audit health, run evaluations, and retrieve compliance status. |
-| 📊 **World-Class 3D Holographic UI** | Built with Next.js 16, React 19, Tailwind CSS 4, and Three.js / React Three Fiber. Features an interactive 3D Neural Assurance Hologram, real-time SSE audit telemetry, and auto-generated PDF/CSV compliance dossiers. |
-
----
-
-## 🏗️ Architecture
-
-```
-                            ┌─────────────────────────────────────────────┐
-   Browser Client ────────▶ │  WEB  ·  Next.js 16 / React 19 (App Router) │
-                            │  BFF Runtime Proxy (Cookies + SSE streaming)│
-                            └───────────────────────┬─────────────────────┘
-                                                    │  /bff/api/v1 (Streaming)
-                            ┌───────────────────────▼─────────────────────┐
-   Python SDK / MCP / CLI ─▶│  API  ·  FastAPI (Async High-Throughput)    │
-                            │  Auth · RBAC · PostgreSQL RLS Multi-Tenancy │
-                            └───┬───────────────┬───────────────┬─────────┘
-                                │               │               │
-                     ┌──────────▼───┐   ┌───────▼───────┐  ┌────▼─────────┐
-                     │ PURE ENGINES │   │ ASYNC WORKERS │  │ EVIDENCE     │
-                     │ Fairness     │   │ Celery/Redis  │  │ Append-only  │
-                     │ Grounding    │   │ Solo-Pool     │  │ SHA-256 Hash │
-                     │ Safety · PII │   │ Task Runners  │  │ Trigger Lock │
-                     │ Agent Audits │   └───────┬───────┘  └────┬─────────┘
-                     └──────┬───────┘           │               │
-                            └───────────────────▼───────────────▼─────────┐
-                            │  DATABASE  ·  PostgreSQL 16 + pgvector      │
-                            │  Row-Level Security (RLS) · 61 Schemas      │
-                            └─────────────────────────────────────────────┘
-```
-
----
-
-## 🚀 Quick Start in 60 Seconds
-
-### Option A: Complete Stack via Docker Compose (Recommended)
-
-Get the complete platform running (Next.js web console, FastAPI backend, Celery worker, PostgreSQL with `pgvector`, and Redis) with a pre-seeded workspace in one command:
+### Docker Compose
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/aegis-ai.git
-cd aegis-ai
+cp .env.example .env          # development defaults work as-is; see docs/deployment.md for production
+docker compose up --build     # db, redis, migrate (one-shot), api, worker, scheduler, web
+```
 
-# Copy environment variables & start
+- Console: <http://localhost:3000> — create a workspace, or click **Try the sandbox** for a temporary, clearly marked DEMO workspace with a simulated hiring agent.
+- API reference (OpenAPI): <http://localhost:8000/docs>
+
+### Local development
+
+Prerequisites: Python 3.12 with [uv](https://docs.astral.sh/uv/), Node.js ≥ 20.19 with pnpm 10, PostgreSQL 16 with pgvector, Redis (optional — without it jobs run in-process).
+
+```bash
+uv sync && pnpm install
 cp .env.example .env
-docker compose up --build
+pnpm db:migrate               # alembic upgrade head (create the app role first — see docs/deployment.md)
+pnpm db:seed                  # optional: demo reference workspace
+pnpm dev                      # web :3000, api :8000, worker
 ```
 
-- **Web Console:** [http://localhost:3000](http://localhost:3000)
-- **FastAPI Interactive Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Pre-Audited Demo:** Click **"Explore"** on the login page for an instant simulated hiring & support agent audit.
+### Testing a local model with Ollama
+
+```bash
+ollama pull qwen3:1.7b
+python scripts/register_ollama_qwen.py   # registers an Ollama provider and system
+python scripts/test_audit_qwen.py        # runs an audit and prints the posture
+```
+
+Or add the provider under **Integrations** and launch an audit from **Audits → New audit**.
 
 ---
 
-### Option B: Local Development Setup
-
-**Prerequisites:** Python 3.12, Node.js ≥ 20.19, `pnpm` 10, PostgreSQL 16 + `pgvector`, and Redis.
+## Python SDK
 
 ```bash
-# 1. Install dependencies
-uv sync
-pnpm install
-
-# 2. Configure environment
-cp .env.example .env
-
-# 3. Apply database migrations & seed reference frameworks
-pnpm db:migrate
-pnpm db:seed
-
-# 4. Start all services concurrently (Web, API, Celery Worker)
-pnpm dev
-```
-
----
-
-## 🧪 Testing a Local Model (e.g. Ollama Qwen3:1.7B)
-
-Aegis AI provides first-class support for local, offline LLMs via Ollama. 
-
-```bash
-# 1. Start Ollama and pull your preferred model
-ollama run Qwen3:1.7B
-
-# 2. Register Ollama in Aegis database
-python scripts/register_ollama_qwen.py
-
-# 3. Execute a live safety & privacy audit
-python scripts/test_audit_qwen.py
-```
-
-Or simply navigate to **[`http://localhost:3000/dashboard/audits/new`](http://localhost:3000/dashboard/audits/new)**, select **`Qwen3-1.7B`**, choose your desired categories, and hit **Launch Audit**!
-
-<br />
-
-<div align="center">
-  <img src="assets/live-audit-terminal.svg" width="100%" alt="Live Audit Execution on Ollama Qwen3:1.7B" />
-  <p align="center">
-    <sub>✦ <b>Automated Evaluation Flow</b>: Generating probes, executing on local Ollama, verifying pure engines, and sealing hash evidence ✦</sub>
-  </p>
-</div>
-
----
-
-## 📦 Python SDK Quickstart
-
-Instrument your production AI applications in just 3 lines of code:
-
-```bash
-pip install aegis-ai
+pip install ./packages/sdk/python        # published name: aegis-ai
 ```
 
 ```python
-from aegis_ai import AegisClient
+import os
+from aegis_ai import Aegis
 
-client = AegisClient(
-    api_key="your_aegis_api_key",  # Generated from Settings → API Keys
-    base_url="http://localhost:8000",
-)
+aegis = Aegis(os.environ["AEGIS_API_KEY"], base_url="http://localhost:8000")
 
-# Stream inference traces into the assurance pipeline
-client.traces.create(
-    system_id="38bdf801-a123-4567-89ab-cdef01234567",
-    prompt="Evaluate this candidate for Senior Systems Engineer: ...",
-    response="Candidate score: 92/100. Recommendation: Proceed to technical round.",
-    metadata={"department": "Engineering", "model": "qwen3:1.7b"},
-)
+audit = aegis.audit(system_id, ["fairness", "privacy", "safety"])  # waits for the result
+print(audit["status"], audit["findings_count"])
+print(aegis.evidence.verify(audit["id"])["status"])  # VERIFIED / TAMPERED / ...
+
+# Runtime Guard: ask before acting
+with aegis.runtime.trace(system_id, agent="support-agent") as trace:
+    decision = trace.check("tool.call", tool="send_email", payload={"destination": "external"})
+    if decision.requires_approval:
+        approved = aegis.runtime.wait_for_approval(decision.approval_id)
+    elif decision.allowed:
+        send_email(...)
+
+# CI/CD: report a change; Aegis selects and runs the relevant tests
+aegis.assurance.trigger(system_id=system_id, event_type="prompt_change", ref=git_sha)
 ```
 
----
+Create API keys under **API & SDK → API keys**. See [packages/sdk/python/README.md](packages/sdk/python/README.md).
 
-## 🔌 Anthropic Model Context Protocol (MCP) Integration
-
-Connect Aegis directly to **Claude Desktop**, **Cursor**, or custom AI agent loops:
-
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "aegis": {
-      "command": "python",
-      "args": ["-m", "packages.mcp"],
-      "env": {
-        "AEGIS_BASE_URL": "http://localhost:8000",
-        "AEGIS_API_KEY": "aegis_live_your_api_key"
-      }
-    }
-  }
-}
-```
-
-Now Claude or Cursor can autonomously execute tool calls like:
-- `get_assurance_score(system_id="...")`
-- `run_compliance_check(framework="ISO_42001")`
-- `list_active_findings(severity="critical")`
-
----
-
-## 📊 Aegis vs. Traditional Approaches
-
-| Feature | Manual Audits & Spreadsheets | Generic LLM Evals | **Aegis AI Platform** |
-| :--- | :---: | :---: | :---: |
-| **Reproducibility** | ❌ Subjective & Biased | ⚠️ Prompt Drift Dependent | ✅ **100% Deterministic & Seeded** |
-| **Evidence Tamper-Resistance** | ❌ Vulnerable to Edits | ❌ Ephemeral Logs | ✅ **SHA-256 Cryptographic Hash Chain** |
-| **Multi-Tenancy Isolation** | ❌ N/A | ⚠️ App-Level Filters | ✅ **PostgreSQL Row-Level Security (RLS)** |
-| **Regulatory Alignment** | ⚠️ Static Checklists | ❌ None | ✅ **Live Mapping (NIST, ISO 42001, EU AI Act)** |
-| **Local / Offline Privacy** | ❌ Manual Overhead | ⚠️ Often Requires Cloud APIs | ✅ **Native Local Ollama Zero-Cost Support** |
-| **Autonomous Agent Auditing** | ❌ Impossible | ⚠️ Basic Output Scoring | ✅ **Deep Tool-Call & Parameter Boundary Interception** |
-
----
-
-## 🛠️ Monorepo Structure
-
-```
-aegis-ai/
-├── apps/
-│   ├── api/                   # FastAPI backend: 96+ endpoints, SSE, RLS middleware, Celery dispatch
-│   └── web/                   # Next.js 16 Web console: React 19, Tailwind 4, Three.js 3D hologram
-├── engines/                   # Pure-Python evaluators (Zero DB coupling, 100% unit-testable)
-│   ├── fairness/              # Disparate impact (4/5ths rule), counterfactual parity, bootstrap tests
-│   ├── grounding/             # NLI entailment scoring, RAG citation & claim verification
-│   ├── safety/                # Toxicity, refusal heuristics, probe classification
-│   ├── privacy/               # Regex + NER PII scanners, automated redaction verification
-│   ├── security/              # Prompt injection, indirect injection, and canary leakage detection
-│   ├── agent/                 # Tool-use validation, unauthorized action prevention
-│   └── policy/                # Natural language compiler (PDF/DOCX → executable controls)
-├── packages/
-│   ├── sdk/python/            # Official Python SDK (`aegis-ai`)
-│   └── mcp/                   # Anthropic Model Context Protocol server (`aegis-mcp`)
-├── database/
-│   └── migrations/            # Alembic migrations (61 tables, RLS policies, vector indexes, hash triggers)
-└── docs/                      # Comprehensive technical architecture & security documentation
-```
-
----
-
-## 🛡️ Enterprise Security & Integrity Guarantees
-
-1. **Pure Engine Isolation:** Code under `engines/` never touches the database, FastAPI, or app services. Engines receive plain data and return plain mathematical outputs.
-2. **PostgreSQL Row-Level Security (RLS):** All tenant data queries execute through RLS-scoped sessions (`get_db`). Tenant data cross-contamination is prevented at the database engine level.
-3. **Immutable Evidence:** Database triggers prevent any `UPDATE` or `DELETE` on the `evidence` table. Every run produces a cryptographically sealed hash trail.
-4. **Responsible Red-Teaming:** The red-team engine runs solely against *imported* probe corpuses. It contains no built-in attack payloads, malicious strings, or zero-day mutation scripts.
-5. **No False Legal Guarantees:** Aegis provides *compliance readiness and assessment signals*. It produces evidence for qualified human compliance officers, never claiming "certified legal compliance".
-
----
-
-## 🤝 Contributing
-
-We welcome contributions from AI safety researchers, security engineers, and full-stack developers!
-
-Before submitting a Pull Request, ensure all quality gates pass:
+## MCP server
 
 ```bash
-pnpm lint          # Ruff + ESLint
-pnpm typecheck     # mypy + tsc --noEmit
-pnpm test          # pytest + vitest
-pnpm build         # Next.js production build
+pip install ./packages/mcp
+AEGIS_API_KEY=aeg_live_... AEGIS_BASE_URL=http://localhost:8000 aegis-mcp
 ```
 
-Please see our [**Contribution Guide**](CONTRIBUTING.md) and [**Security Policy**](docs/security.md) for details.
+```json
+{ "mcpServers": { "aegis": { "command": "aegis-mcp", "env": { "AEGIS_API_KEY": "aeg_live_...", "AEGIS_BASE_URL": "http://localhost:8000" } } } }
+```
+
+Tools include `aegis_runtime_check`, `aegis_get_risk_posture`, `aegis_get_findings`, `aegis_verify_evidence`, `aegis_report_change` and `aegis_simulate_policy`. The server holds no privileges of its own; every call uses the key's role and scopes. See [packages/mcp/README.md](packages/mcp/README.md).
 
 ---
 
-## 📜 License & Legal Notice
+## Repository layout
 
-Distributed under the **Apache 2.0 License**. See [`LICENSE`](LICENSE) for more information.
+```
+apps/api            FastAPI application (routers, services, jobs, security, observability)
+apps/web            Next.js 16 / React 19 console and website (BFF proxy, TanStack Query, Tailwind 4)
+engines/            Pure evaluators and libraries: fairness, hallucination, safety, privacy, security,
+                    agent, redteam, policy, compliance, runtime (schema + policy DSL), evidence (package
+                    + verifier), risk, generation, monitoring, providers
+packages/sdk/python Python SDK (aegis-ai)
+packages/mcp        MCP server (aegis-mcp)
+database/           Alembic environment and migrations
+docker/             Dockerfiles and init scripts
+tests/              unit · integration (real Postgres, RLS) · evaluation (engine correctness)
+docs/               architecture, security, deployment, operations, feature guides, readiness
+```
 
-*Disclaimer: Aegis AI produces continuous assurance assessments, risk scores, and readiness signals to guide governance decisions. Its outputs do not constitute formal legal advice.*
+## Documentation
 
-<div align="center">
+- [Architecture](docs/architecture.md) · [Security](docs/security.md) · [Deployment](docs/deployment.md) · [Operations & recovery](docs/operations.md)
+- [Runtime Guard](docs/runtime-guard.md) · [Policy Studio](docs/policy-studio.md) · [Policy compiler](docs/policy-engine.md) · [Evidence verification](docs/evidence.md)
+- [Plans, usage & billing](docs/billing.md) · [API conventions](docs/api.md) · [Evaluation methodology](docs/evaluation.md) · [Testing](docs/testing.md)
+- [Production readiness](docs/production-readiness.md) · [Repository audit (Oct 2026)](docs/audit-2026-10.md)
 
-**Built with rigor for teams deploying consequential AI.**
+## Quality gates
 
-⭐ **Star this repository if you find it valuable!** ⭐
+```bash
+pnpm lint          # ruff check + ruff format --check + eslint
+pnpm typecheck     # mypy + tsc
+pnpm test          # pytest (needs PostgreSQL) + vitest
+pnpm build         # Next.js production build
+pnpm --filter @aegis/web test:e2e   # Playwright against a real API + database
+```
 
-</div>
+## Ground rules for contributors
+
+Read [AGENTS.md](AGENTS.md). In short: engines stay pure; tenant data goes through the RLS-scoped session; evidence is immutable; the red-team engine ships no attack payloads; never claim legal compliance. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).
