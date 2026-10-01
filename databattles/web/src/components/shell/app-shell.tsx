@@ -211,7 +211,7 @@ function DesktopNav({ pathname }: { pathname: string }) {
   }, [measure]);
 
   return (
-    <nav className="ml-3 hidden lg:block" aria-label="Main">
+    <nav className="ml-1 hidden min-w-0 lg:block xl:ml-3" aria-label="Main">
       <div ref={listRef} className="relative flex items-center gap-0.5" onPointerLeave={() => setHover(null)}>
         <span
           aria-hidden
@@ -235,7 +235,7 @@ function DesktopNav({ pathname }: { pathname: string }) {
               onFocus={() => setHover(i)}
               onBlur={() => setHover(null)}
               className={cn(
-                "relative z-10 rounded-[9px] px-3 py-1.5 text-[13.5px] font-medium transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)] xl:px-3.5",
+                "relative z-10 whitespace-nowrap rounded-[9px] px-2.5 py-1.5 text-[13.5px] font-medium transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)] xl:px-3.5",
                 active ? "text-fg" : "text-muted hover:text-fg",
               )}
             >
@@ -387,13 +387,13 @@ function TopNav({ onSearch }: { onSearch: () => void }) {
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={onSearch}
-            className="group hidden h-9 items-center gap-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated/70 pl-3 pr-1.5 text-[13px] text-subtle transition-colors hover:border-border-strong hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] md:flex"
+            className="group hidden h-9 items-center gap-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated/70 pl-3 pr-1.5 text-[13px] text-subtle transition-colors hover:border-border-strong hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] md:flex lg:hidden xl:flex"
             aria-label="Search (Ctrl K)"
           >
             <Search className="h-3.5 w-3.5" /> <span className="pr-6">Search…</span>
             <kbd className="flex h-6 items-center rounded-md border border-border bg-surface-2 px-1.5 font-mono text-[10.5px] text-muted">⌘K</kbd>
           </button>
-          <Button variant="ghost" size="icon" className="md:hidden" aria-label="Search" onClick={onSearch}>
+          <Button variant="ghost" size="icon" className="md:hidden lg:inline-flex xl:hidden" aria-label="Search (Ctrl K)" onClick={onSearch}>
             <Search className="h-4 w-4" />
           </Button>
           <span className="hidden lg:inline-flex"><ThemeMenu /></span>
