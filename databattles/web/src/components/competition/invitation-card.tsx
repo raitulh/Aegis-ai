@@ -1,12 +1,13 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Mail, X } from "lucide-react";
+import { Check, Clock, Mail, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { UserLink } from "@/components/domain/cards";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox, FormError } from "@/components/ui/form";
 import { ApiError, post } from "@/lib/api";
@@ -53,32 +54,44 @@ export function InvitationCard({
   const err = respond.error;
 
   return (
-    <article className={cn("rounded-[var(--radius-lg)] border border-border bg-surface p-4", className)} aria-labelledby={`inv-${invitation.id}`}>
-      <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
+    <article
+      className={cn("relative overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen shadow-card", expired && "opacity-80", className)}
+      aria-labelledby={`inv-${invitation.id}`}
+    >
+      <div aria-hidden className="pointer-events-none absolute -left-12 -top-16 h-36 w-56 rounded-full" style={{ background: "radial-gradient(closest-side, var(--ambient-a), transparent)" }} />
+      <div className="relative flex items-start gap-3.5 px-4 py-4 sm:px-5">
+        <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color-mix(in_oklab,var(--accent)_30%,var(--border))] bg-accent-soft text-accent-strong shadow-[inset_0_1px_0_var(--hairline-highlight)]">
           <Mail className="h-4 w-4" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 id={`inv-${invitation.id}`} className="font-semibold text-fg">
-            Join team <span className="text-accent-strong">{invitation.team_name}</span>
-          </h3>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <h3 id={`inv-${invitation.id}`} className="font-semibold tracking-[-0.01em] text-fg">
+              Join team <span className="text-accent-strong">{invitation.team_name}</span>
+            </h3>
+            {expired ? (
+              <Badge tone="danger" icon={<Clock className="h-3 w-3" aria-hidden />}>Expired</Badge>
+            ) : (
+              <Badge tone="outline" icon={<Clock className="h-3 w-3" aria-hidden />} title={formatDateTime(invitation.expires_at)}>
+                Expires {relativeTime(invitation.expires_at)}
+              </Badge>
+            )}
+          </div>
           {showCompetition ? (
-            <p className="text-sm text-muted">
-              in <Link href={`/competitions/${slug}`} className="font-medium text-fg hover:text-accent-strong">{invitation.competition_title}</Link>
+            <p className="mt-0.5 text-sm text-muted">
+              in <Link href={`/competitions/${slug}`} className="font-medium text-fg transition-colors hover:text-accent-strong">{invitation.competition_title}</Link>
             </p>
           ) : null}
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-subtle">
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-subtle">
             {invitation.inviter ? (
               <span className="inline-flex items-center gap-1">Invited by <UserLink user={invitation.inviter} size={16} className="text-xs" /></span>
             ) : null}
             <span>· sent {relativeTime(invitation.created_at)}</span>
-            <span title={formatDateTime(invitation.expires_at)}>· {expired ? "expired" : `expires ${relativeTime(invitation.expires_at)}`}</span>
           </div>
         </div>
       </div>
 
       {!alreadyParticipant ? (
-        <div className="mt-4">
+        <div className="relative border-t border-border px-4 py-3.5 sm:px-5">
           <Checkbox
             label={
               <>
@@ -95,9 +108,9 @@ export function InvitationCard({
         </div>
       ) : null}
 
-      {err ? <div className="mt-3"><FormError message={err.message} /></div> : null}
+      {err ? <div className="relative px-4 pb-1 pt-3 sm:px-5"><FormError message={err.message} /></div> : null}
 
-      <div className="mt-4 flex flex-wrap justify-end gap-2">
+      <div className="relative flex flex-wrap justify-end gap-2 border-t border-border bg-bg-elevated/40 px-4 py-3 sm:px-5">
         <Button
           variant="secondary"
           size="sm"

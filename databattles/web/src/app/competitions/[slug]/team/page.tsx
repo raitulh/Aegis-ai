@@ -2,16 +2,20 @@
 
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BookOpen,
   Crown,
   ExternalLink,
   Lock,
   LogOut,
+  Mail,
   MailPlus,
   MessagesSquare,
   Save,
   Search,
+  Settings2,
   Trash2,
   UserMinus,
+  UserPlus,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -19,13 +23,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { Sparkline } from "@/components/charts/charts";
+import { Block, PanelLabel } from "@/components/competition/block";
 import { ck, useCompetition } from "@/components/competition/context";
 import { DateTime } from "@/components/competition/datetime";
 import { InvitationCard } from "@/components/competition/invitation-card";
 import { JoinAction, useRefreshParticipation } from "@/components/competition/join";
 import type { Invitation, ScorePoint, TeamListItem } from "@/components/competition/types";
 import { UserLink } from "@/components/domain/cards";
-import { AvatarStack } from "@/components/ui/avatar";
+import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
 import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/card";
@@ -113,24 +118,26 @@ function MyInvitations({ comp, highlightId, onResponded }: { comp: CompetitionDe
   const mine = (query.data ?? []).filter((i) => i.competition_slug === comp.slug);
   if (!me || !mine.length) return null;
   return (
-    <section aria-labelledby="my-invites-heading" className="space-y-3">
-      <h2 id="my-invites-heading" className="text-lg font-semibold text-fg">
-        Your invitations <Badge tone="accent">{mine.length}</Badge>
-      </h2>
-      {comp.viewer.team && !comp.viewer.team.is_solo ? (
-        <p className="text-sm text-muted">You&apos;re already on a team. To accept, leave your current team first.</p>
-      ) : null}
-      {mine.map((inv) => (
-        <InvitationCard
-          key={inv.id}
-          invitation={inv}
-          showCompetition={false}
-          alreadyParticipant={comp.viewer.is_participant}
-          onResponded={onResponded}
-          className={cn(inv.id === highlightId && "ring-2 ring-accent")}
-        />
-      ))}
-    </section>
+    <Block
+      id="my-invites"
+      eyebrow="Waiting on you"
+      icon={<Mail />}
+      title={<>Your invitations <Badge tone="accent" className="tabular">{mine.length}</Badge></>}
+      description={comp.viewer.team && !comp.viewer.team.is_solo ? "You're already on a team. To accept, leave your current team first." : undefined}
+    >
+      <div className="space-y-3">
+        {mine.map((inv) => (
+          <InvitationCard
+            key={inv.id}
+            invitation={inv}
+            showCompetition={false}
+            alreadyParticipant={comp.viewer.is_participant}
+            onResponded={onResponded}
+            className={cn(inv.id === highlightId && "ring-2 ring-accent")}
+          />
+        ))}
+      </div>
+    </Block>
   );
 }
 
@@ -146,8 +153,8 @@ function CreateTeam({ comp }: { comp: CompetitionDetail }) {
     onSuccess: (t) => qc.setQueryData(qk.team(slug), t),
   });
   return (
-    <Card>
-      <CardHeader title="Create a team" description={`Teams have ${comp.team_min_size}–${comp.team_max_size} members. You'll be the captain and can invite others.`} />
+    <Card className="overflow-hidden">
+      <CardHeader icon={<UserPlus />} title="Create a team" description={`Teams have ${comp.team_min_size}–${comp.team_max_size} members. You'll be the captain and can invite others.`} />
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -186,7 +193,11 @@ function InviteForm({ comp, team }: { comp: CompetitionDetail; team: TeamOut }) 
   );
   const slots = team.max_size - team.members.length - team.pending_invitations.length;
   if (slots <= 0) {
-    return <p className="text-sm text-muted">Your team is full ({team.max_size} members including pending invitations).</p>;
+    return (
+      <p className="rounded-[var(--radius-md)] border border-border bg-bg-elevated px-3 py-2.5 text-sm text-muted">
+        Your team is full (<span className="tabular">{team.max_size}</span> members including pending invitations).
+      </p>
+    );
   }
   return (
     <form
@@ -296,33 +307,44 @@ function TeamCard({ comp, team, meId }: { comp: CompetitionDetail; team: TeamOut
         : undefined;
 
   return (
-    <Card>
-      <CardHeader
-        title={
-          <span className="flex flex-wrap items-center gap-2 text-base">
-            {team.is_solo ? "Your entry" : team.name}
-            {team.is_solo ? <Badge tone="outline">Individual</Badge> : null}
-            {isCaptain && !team.is_solo ? <Badge tone="accent" icon={<Crown className="h-3 w-3" aria-hidden />}>You&apos;re captain</Badge> : null}
-            {team.locked ? <Badge tone="warning" icon={<Lock className="h-3 w-3" aria-hidden />}>Locked</Badge> : null}
-          </span>
-        }
-        description={`Created ${relativeTime(team.created_at)} · ${formatNumber(team.submission_count)} ${team.submission_count === 1 ? "submission" : "submissions"}`}
-        action={
-          points.length >= 2 ? (
-            <div className="text-right">
-              <Sparkline data={points} label="Public score trend" width={110} height={28} />
-              <p className="text-[11px] text-subtle">latest {formatScore(points[points.length - 1], 4)}</p>
-            </div>
-          ) : null
-        }
-      />
-      <CardBody className="space-y-6">
+    <section aria-labelledby="team-heading" className="overflow-hidden rounded-[var(--radius-xl)] border border-border bg-surface surface-sheen shadow-card">
+      {/* Identity */}
+      <div className="relative flex flex-col gap-4 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-28 dot-grid opacity-40 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
+        <div className="relative flex min-w-0 items-center gap-4">
+          {team.members.length > 1 ? (
+            <AvatarStack people={team.members.map((m) => m.user)} max={4} size={40} />
+          ) : team.members[0] ? (
+            <Avatar name={team.members[0].user.display_name} src={team.members[0].user.avatar_url} size={44} />
+          ) : null}
+          <div className="min-w-0">
+            <PanelLabel>{team.is_solo ? "Individual entry" : "Your team"}</PanelLabel>
+            <h2 id="team-heading" className="mt-1 flex flex-wrap items-center gap-2 text-lg font-semibold tracking-[-0.02em] text-fg sm:text-xl">
+              {team.is_solo ? "Your entry" : team.name}
+              {team.is_solo ? <Badge tone="outline">Individual</Badge> : null}
+              {isCaptain && !team.is_solo ? <Badge tone="accent" icon={<Crown className="h-3 w-3" aria-hidden />}>You&apos;re captain</Badge> : null}
+              {team.locked ? <Badge tone="warning" icon={<Lock className="h-3 w-3" aria-hidden />}>Locked</Badge> : null}
+            </h2>
+            <p className="mt-0.5 text-xs text-subtle">
+              Created {relativeTime(team.created_at)} · <span className="tabular">{formatNumber(team.submission_count)}</span> {team.submission_count === 1 ? "submission" : "submissions"}
+            </p>
+          </div>
+        </div>
+        {points.length >= 2 ? (
+          <div className="relative shrink-0 self-start rounded-[var(--radius-md)] border border-border bg-bg-elevated/70 px-3 py-2 sm:self-auto sm:text-right">
+            <Sparkline data={points} label="Public score trend" width={120} height={30} />
+            <p className="mt-0.5 text-[11px] text-subtle">latest <span className="tabular font-mono text-muted">{formatScore(points[points.length - 1], 4)}</span></p>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="divide-y divide-border">
         {team.max_size > 1 ? (
-          <div>
-            <div className="mb-1.5 flex justify-between text-xs text-muted">
-              <span>Team size</span>
+          <div className="px-5 py-4">
+            <div className="mb-2 flex items-baseline justify-between text-xs text-muted">
+              <span className="text-eyebrow text-subtle">Team size</span>
               <span>
-                {size} of {team.max_size} {team.min_size > 1 ? `· minimum ${team.min_size}` : ""}
+                <span className="tabular text-sm font-semibold text-fg">{size}</span> of <span className="tabular">{team.max_size}</span> {team.min_size > 1 ? <>· minimum <span className="tabular">{team.min_size}</span></> : ""}
               </span>
             </div>
             <ProgressBar value={(size / team.max_size) * 100} label="Team size" />
@@ -331,26 +353,34 @@ function TeamCard({ comp, team, meId }: { comp: CompetitionDetail; team: TeamOut
                 Your team needs at least {team.min_size} members before it can submit — invite {team.min_size - size} more.
               </p>
             ) : null}
+            {team.workspace_url ? (
+              <a href={team.workspace_url} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline">
+                Team workspace <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                <span className="sr-only">(opens in a new tab)</span>
+              </a>
+            ) : null}
+          </div>
+        ) : team.workspace_url ? (
+          <div className="px-5 py-4">
+            <a href={team.workspace_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline">
+              Team workspace <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              <span className="sr-only">(opens in a new tab)</span>
+            </a>
           </div>
         ) : null}
 
-        {team.workspace_url ? (
-          <a href={team.workspace_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline">
-            Team workspace <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-            <span className="sr-only">(opens in a new tab)</span>
-          </a>
-        ) : null}
-
-        <section aria-labelledby="members-heading">
-          <h3 id="members-heading" className="mb-2 text-sm font-semibold text-fg">Members</h3>
-          <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+        <section aria-labelledby="members-heading" className="px-5 py-4">
+          <h3 id="members-heading" className="mb-3 flex items-center gap-1.5 text-eyebrow text-subtle">
+            <Users className="h-3.5 w-3.5" aria-hidden /> Members
+          </h3>
+          <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-bg-elevated/50">
             {team.members.map((m) => {
               const self = m.user.id === meId;
               const captain = m.user.id === team.captain_id;
               return (
-                <li key={m.user.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <UserLink user={m.user} size={28} />
+                <li key={m.user.id} className={cn("flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", self && "bg-accent-soft/50")}>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <UserLink user={m.user} size={28} className="font-medium" />
                     {captain ? <Badge tone="accent" icon={<Crown className="h-3 w-3" aria-hidden />}>Captain</Badge> : null}
                     {self ? <Badge tone="outline">You</Badge> : null}
                     <span className="hidden text-xs text-subtle sm:inline">joined {relativeTime(m.joined_at)}</span>
@@ -385,13 +415,15 @@ function TeamCard({ comp, team, meId }: { comp: CompetitionDetail; team: TeamOut
         </section>
 
         {isCaptain && team.pending_invitations.length ? (
-          <section aria-labelledby="pending-heading">
-            <h3 id="pending-heading" className="mb-2 text-sm font-semibold text-fg">Pending invitations</h3>
-            <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+          <section aria-labelledby="pending-heading" className="px-5 py-4">
+            <h3 id="pending-heading" className="mb-3 flex items-center gap-1.5 text-eyebrow text-subtle">
+              <Mail className="h-3.5 w-3.5" aria-hidden /> Pending invitations
+            </h3>
+            <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-dashed border-border-strong">
               {team.pending_invitations.map((inv) => (
                 <li key={inv.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    {inv.invitee ? <UserLink user={inv.invitee} size={24} /> : <span className="font-mono text-sm text-fg">{inv.invitee_email ?? "Email invitation"}</span>}
+                    {inv.invitee ? <UserLink user={inv.invitee} size={24} /> : <span className="break-all font-mono text-sm text-fg">{inv.invitee_email ?? "Email invitation"}</span>}
                     <p className="text-xs text-subtle">Sent {relativeTime(inv.created_at)} · expires {relativeTime(inv.expires_at)}</p>
                   </div>
                   {!team.locked ? (
@@ -410,24 +442,31 @@ function TeamCard({ comp, team, meId }: { comp: CompetitionDetail; team: TeamOut
         ) : null}
 
         {isCaptain && !team.locked && team.max_size > 1 ? (
-          <section aria-labelledby="invite-heading">
-            <h3 id="invite-heading" className="mb-2 text-sm font-semibold text-fg">{team.is_solo ? "Invite teammates" : "Invite members"}</h3>
+          <section aria-labelledby="invite-heading" className="px-5 py-4">
+            <h3 id="invite-heading" className="mb-1 flex items-center gap-1.5 text-eyebrow text-subtle">
+              <MailPlus className="h-3.5 w-3.5" aria-hidden /> {team.is_solo ? "Invite teammates" : "Invite members"}
+            </h3>
             {team.is_solo ? (
               <p className="mb-3 text-sm text-muted">You&apos;re competing individually. Invite others to turn your entry into a team.</p>
-            ) : null}
+            ) : (
+              <div className="mb-3" />
+            )}
             <InviteForm comp={comp} team={team} />
           </section>
         ) : null}
 
         {isCaptain ? (
-          <section aria-labelledby="settings-heading">
-            <h3 id="settings-heading" className="mb-2 text-sm font-semibold text-fg">Team settings</h3>
+          <section aria-labelledby="settings-heading" className="px-5 py-4">
+            <h3 id="settings-heading" className="mb-3 flex items-center gap-1.5 text-eyebrow text-subtle">
+              <Settings2 className="h-3.5 w-3.5" aria-hidden /> Team settings
+            </h3>
             <TeamSettings comp={comp} team={team} />
           </section>
         ) : null}
-      </CardBody>
+      </div>
+
       {!team.is_solo ? (
-        <CardFooter className="flex-wrap justify-between">
+        <div className="flex flex-col gap-3 border-t border-border bg-bg-elevated/40 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-xs text-subtle">{leaveHint}</span>
           <div className="flex flex-wrap gap-2">
             {isCaptain && !team.locked && team.submission_count === 0 ? (
@@ -451,9 +490,9 @@ function TeamCard({ comp, team, meId }: { comp: CompetitionDetail; team: TeamOut
               onConfirm={() => settle(leave.mutateAsync(undefined))}
             />
           </div>
-        </CardFooter>
+        </div>
       ) : null}
-    </Card>
+    </section>
   );
 }
 
@@ -469,18 +508,20 @@ function Withdraw({ comp }: { comp: CompetitionDetail }) {
   });
   if (!comp.viewer.is_participant || comp.lifecycle !== "published") return null;
   return (
-    <Card>
-      <CardHeader title="Leave competition" description="Withdraw your registration. Individual entries that already submitted stay on record and can't be withdrawn." />
-      <CardFooter className="justify-start border-t-0 pt-0">
-        <ConfirmDialog
-          trigger={<Button size="sm" variant="outline" className="text-danger">Withdraw from competition</Button>}
-          title={`Withdraw from ${comp.title}?`}
-          description="You'll leave your team and lose access to participant-only pages. You can re-join later while registration is open."
-          confirmLabel="Withdraw"
-          onConfirm={() => settle(withdraw.mutateAsync(undefined))}
-        />
-      </CardFooter>
-    </Card>
+    <section aria-labelledby="withdraw-heading" className="flex flex-col gap-4 rounded-[var(--radius-lg)] border border-danger/25 bg-danger-soft/40 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <PanelLabel className="text-danger">Danger zone</PanelLabel>
+        <h2 id="withdraw-heading" className="mt-1 text-sm font-semibold text-fg">Leave competition</h2>
+        <p className="mt-0.5 max-w-xl text-xs leading-relaxed text-muted">Withdraw your registration. Individual entries that already submitted stay on record and can&apos;t be withdrawn.</p>
+      </div>
+      <ConfirmDialog
+        trigger={<Button size="sm" variant="outline" className="shrink-0 text-danger">Withdraw from competition</Button>}
+        title={`Withdraw from ${comp.title}?`}
+        description="You'll leave your team and lose access to participant-only pages. You can re-join later while registration is open."
+        confirmLabel="Withdraw"
+        onConfirm={() => settle(withdraw.mutateAsync(undefined))}
+      />
+    </section>
   );
 }
 
@@ -488,34 +529,40 @@ function Withdraw({ comp }: { comp: CompetitionDetail }) {
 
 function TeamRulesCard({ comp }: { comp: CompetitionDetail }) {
   return (
-    <Card>
-      <CardHeader title="Team rules" />
-      <CardBody className="space-y-3 text-sm text-muted">
-        <p>
+    <section aria-labelledby="team-rules-heading" className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen shadow-card">
+      <div className="px-5 pb-4 pt-5">
+        <PanelLabel><BookOpen aria-hidden /> Team rules</PanelLabel>
+        <h2 id="team-rules-heading" className="mt-2 text-base font-semibold tracking-[-0.01em] text-fg">
           {comp.team_max_size === 1 ? (
-            <>This competition is <strong className="text-fg">individual only</strong>.</>
+            <>This competition is individual only.</>
           ) : (
-            <>Teams of <strong className="text-fg">{comp.team_min_size}–{comp.team_max_size}</strong> members.</>
+            <>Teams of <span className="tabular">{comp.team_min_size}–{comp.team_max_size}</span> members.</>
           )}
-        </p>
+        </h2>
+      </div>
+      <div className="space-y-3 border-t border-border px-5 py-4 text-sm text-muted">
         {comp.team_lock_at ? (
           <div>
-            <p className="text-xs text-subtle">Team changes lock</p>
-            <DateTime value={comp.team_lock_at} eventTimeZone={comp.timezone} relative className="text-fg" />
+            <p className="text-eyebrow text-subtle">Team changes lock</p>
+            <DateTime value={comp.team_lock_at} eventTimeZone={comp.timezone} relative className="mt-1 text-fg" />
           </div>
         ) : (
           <p>Team changes lock when the competition ends.</p>
         )}
         {comp.team_max_size > 1 ? (
-          <ul className="list-disc space-y-1 pl-5 text-xs">
-            <li>Pending invitations count toward the size limit.</li>
-            <li>Captains must transfer captaincy before leaving.</li>
-            <li>Teams with submissions can&apos;t be deleted; submissions always stay with the team.</li>
-            <li>You can merge an individual entry into a team only before it has submissions.</li>
+          <ul className="space-y-1.5 text-xs leading-relaxed">
+            {[
+              "Pending invitations count toward the size limit.",
+              "Captains must transfer captaincy before leaving.",
+              "Teams with submissions can't be deleted; submissions always stay with the team.",
+              "You can merge an individual entry into a team only before it has submissions.",
+            ].map((t) => (
+              <li key={t} className="flex gap-2"><span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-cyan" />{t}</li>
+            ))}
           </ul>
         ) : null}
-      </CardBody>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -534,8 +581,8 @@ function BrowseTeams({ comp }: { comp: CompetitionDetail }) {
   });
   if (comp.team_max_size === 1) return null;
   return (
-    <Card>
-      <CardHeader title="Teams" description={`${formatNumber(comp.team_count)} teams and individual entries`} />
+    <Card className="overflow-hidden">
+      <CardHeader icon={<Users />} title="Teams" description={`${formatNumber(comp.team_count)} teams and individual entries`} />
       <CardBody className="space-y-3">
         <div className="relative">
           <label htmlFor="team-search" className="sr-only">Search teams</label>
@@ -547,24 +594,29 @@ function BrowseTeams({ comp }: { comp: CompetitionDetail }) {
         ) : query.isError ? (
           <ErrorState error={query.error} onRetry={() => query.refetch()} />
         ) : query.data.items.length === 0 ? (
-          <p className="py-4 text-center text-sm text-subtle">{debounced ? "No teams match that name." : "No teams yet — be the first."}</p>
+          <p className="rounded-[var(--radius-md)] border border-dashed border-border-strong py-5 text-center text-sm text-subtle">{debounced ? "No teams match that name." : "No teams yet — be the first."}</p>
         ) : (
           <ul className={cn("divide-y divide-border", query.isPlaceholderData && "opacity-60")}>
             {query.data.items.map((t) => (
-              <li key={t.id} className="flex items-center justify-between gap-3 py-2.5">
+              <li key={t.id} className={cn("-mx-2 flex items-center justify-between gap-3 rounded-[var(--radius-sm)] px-2 py-2.5", comp.viewer.team?.id === t.id && "bg-accent-soft")}>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-fg">
-                    {t.is_solo && t.members[0] ? t.members[0].display_name : t.name}
-                    {comp.viewer.team?.id === t.id ? <Badge tone="accent" className="ml-2">Yours</Badge> : null}
+                  <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-fg">
+                    <span className="truncate">{t.is_solo && t.members[0] ? t.members[0].display_name : t.name}</span>
+                    {comp.viewer.team?.id === t.id ? <Badge tone="accent" className="shrink-0">Yours</Badge> : null}
                   </p>
-                  <p className="text-xs text-subtle">{t.is_solo ? "Individual" : `${t.member_count} ${t.member_count === 1 ? "member" : "members"}`}</p>
+                  <p className="text-xs text-subtle">{t.is_solo ? "Individual" : <><span className="tabular">{t.member_count}</span> {t.member_count === 1 ? "member" : "members"}</>}</p>
                 </div>
                 <AvatarStack people={t.members} max={4} size={22} />
               </li>
             ))}
           </ul>
         )}
-        {query.data ? <Pagination page={page} pageSize={10} total={query.data.total} onPage={setPage} /> : null}
+        {query.data ? (
+          // The shared pagination lays out in a row from `sm`; stack it in this narrow aside.
+          <div className="[&>nav]:mt-3 [&>nav]:flex-col [&>nav]:gap-2">
+            <Pagination page={page} pageSize={10} total={query.data.total} onPage={setPage} />
+          </div>
+        ) : null}
         <p className="border-t border-border pt-3 text-xs text-muted">
           Looking for teammates?{" "}
           <Link href={`/competitions/${slug}/discussion`} className="inline-flex items-center gap-1 font-medium text-accent-strong hover:underline">
@@ -590,11 +642,10 @@ function MyTeamSection({ comp }: { comp: CompetitionDetail }) {
   if (me.isPending) return <SkeletonRows rows={4} />;
   if (!me.data) {
     return (
-      <Card>
-        <CardBody className="py-8 text-center">
-          <SignInPrompt text="Sign in to manage your team." />
-        </CardBody>
-      </Card>
+      <section aria-labelledby="team-status-heading">
+        <h2 id="team-status-heading" className="sr-only">Your team</h2>
+        <EmptyState icon={<Users />} title="Sign in to manage your team" description={<SignInPrompt text="You need an account to create or join a team." />} />
+      </section>
     );
   }
   if (team.isPending) return <SkeletonRows rows={4} />;
@@ -604,12 +655,15 @@ function MyTeamSection({ comp }: { comp: CompetitionDetail }) {
 
   if (!comp.viewer.is_participant) {
     return (
-      <EmptyState
-        icon={<Users className="h-5 w-5" />}
-        title="You're not registered yet"
-        description="Join the competition to create a team — or accept an invitation above, which registers you automatically."
-        action={<JoinAction comp={comp} />}
-      />
+      <section aria-labelledby="team-status-heading">
+        <h2 id="team-status-heading" className="sr-only">Your team</h2>
+        <EmptyState
+          icon={<Users />}
+          title="You're not registered yet"
+          description="Join the competition to create a team — or accept an invitation above, which registers you automatically."
+          action={<JoinAction comp={comp} />}
+        />
+      </section>
     );
   }
   const locked = Boolean(comp.team_lock_at && new Date(comp.team_lock_at).getTime() <= Date.now()) || comp.status === "ended" || comp.status === "completed";
@@ -632,8 +686,8 @@ function TeamPageInner() {
   const pathname = usePathname();
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="min-w-0 space-y-6">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">
+      <div className="min-w-0 space-y-8">
         {token ? <ClaimNotice token={token} /> : null}
         <MyInvitations
           comp={comp}
@@ -645,7 +699,7 @@ function TeamPageInner() {
         <MyTeamSection comp={comp} />
         <Withdraw comp={comp} />
       </div>
-      <aside className="space-y-4" aria-label="Team information">
+      <aside className="min-w-0 space-y-4" aria-label="Team information">
         <TeamRulesCard comp={comp} />
         <BrowseTeams comp={comp} />
       </aside>

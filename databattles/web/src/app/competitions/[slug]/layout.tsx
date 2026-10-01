@@ -1,42 +1,24 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { CompetitionProvider, ck, useCompetitionQuery, useSlug } from "@/components/competition/context";
-import { CompetitionHero } from "@/components/competition/hero";
+import { CompetitionHero, CompetitionHeroSkeleton } from "@/components/competition/hero";
 import type { Announcement } from "@/components/competition/types";
 import { Container } from "@/components/ui/page";
-import { ErrorState, NotFoundState, PermissionDenied, SignInPrompt, Skeleton } from "@/components/ui/states";
+import { ErrorState, NotFoundState, PermissionDenied, SignInPrompt } from "@/components/ui/states";
 import { NavTabs } from "@/components/ui/tabs";
 import { ApiError, get } from "@/lib/api";
 import { useMe } from "@/lib/hooks";
 import type { CompetitionDetail } from "@/lib/types";
 
-function HeroSkeleton() {
-  return (
-    <div role="status" aria-label="Loading competition">
-      <Skeleton className="h-32 w-full rounded-none sm:h-44" />
-      <Container className="relative -mt-20 sm:-mt-24">
-        <div className="rounded-[var(--radius-xl)] border border-border bg-surface p-5 sm:p-7">
-          <Skeleton className="h-5 w-40" />
-          <Skeleton className="mt-4 h-8 w-2/3" />
-          <Skeleton className="mt-3 h-4 w-1/2" />
-          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10" />)}
-          </div>
-        </div>
-        <Skeleton className="mt-6 h-10 w-full" />
-      </Container>
-    </div>
-  );
-}
-
 function CountPill({ n, label }: { n: number; label: string }) {
   if (!n) return null;
   return (
     <>
-      <span className="ml-1.5 rounded-full bg-accent-soft px-1.5 text-xs font-semibold text-accent-strong" aria-hidden>
+      <span className="tabular ml-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent-soft px-1 text-[11px] font-semibold text-accent-strong ring-1 ring-inset ring-[color-mix(in_oklab,var(--accent)_28%,transparent)]" aria-hidden>
         {n}
       </span>
       <span className="sr-only">, {label}</span>
@@ -56,23 +38,41 @@ function CompetitionTabs({ comp }: { comp: CompetitionDetail }) {
   });
   const unread = announcements.data?.filter((a) => !a.is_read && a.status === "published").length ?? 0;
   const showData = Boolean(comp.dataset) || comp.starter_assets.length > 0 || comp.scoring_mode === "automatic";
+
+  // On narrow screens the tab strip scrolls sideways: keep the active tab in view (horizontal only, never the page).
+  const pathname = usePathname();
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const nav = wrap.current?.querySelector("nav");
+    const active = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !active || nav.scrollWidth <= nav.clientWidth) return;
+    const left = active.offsetLeft - nav.offsetLeft;
+    if (left < nav.scrollLeft || left + active.offsetWidth > nav.scrollLeft + nav.clientWidth) {
+      nav.scrollLeft = Math.max(0, left - 16);
+    }
+  }, [pathname]);
+
   return (
-    <NavTabs
-      className="mt-6"
-      items={[
-        { href: base, label: <>Overview<CountPill n={unread} label={`${unread} unread announcements`} /></>, exact: true },
-        { href: `${base}/data`, label: "Data", hidden: !showData },
-        { href: `${base}/leaderboard`, label: comp.status === "completed" ? "Results" : "Leaderboard", hidden: comp.scoring_mode === "none" },
-        { href: `${base}/submissions`, label: "Submissions", hidden: !v.is_participant || comp.scoring_mode === "none" },
-        {
-          href: `${base}/team`,
-          label: <>Team<CountPill n={v.pending_invitations} label={`${v.pending_invitations} pending invitations`} /></>,
-          hidden: !v.is_participant && v.pending_invitations === 0,
-        },
-        { href: `${base}/discussion`, label: "Discussion" },
-        { href: `${base}/manage`, label: "Manage", hidden: !v.roles.includes("organizer") },
-      ]}
-    />
+    // `contents` keeps the sticky tab bar's containing block the page container.
+    <div ref={wrap} className="contents">
+      <NavTabs
+        sticky
+        className="mt-8"
+        items={[
+          { href: base, label: <>Overview<CountPill n={unread} label={`${unread} unread announcements`} /></>, exact: true },
+          { href: `${base}/data`, label: "Data", hidden: !showData },
+          { href: `${base}/leaderboard`, label: comp.status === "completed" ? "Results" : "Leaderboard", hidden: comp.scoring_mode === "none" },
+          { href: `${base}/submissions`, label: "Submissions", hidden: !v.is_participant || comp.scoring_mode === "none" },
+          {
+            href: `${base}/team`,
+            label: <>Team<CountPill n={v.pending_invitations} label={`${v.pending_invitations} pending invitations`} /></>,
+            hidden: !v.is_participant && v.pending_invitations === 0,
+          },
+          { href: `${base}/discussion`, label: "Discussion" },
+          { href: `${base}/manage`, label: "Manage", hidden: !v.roles.includes("organizer") },
+        ]}
+      />
+    </div>
   );
 }
 
@@ -99,7 +99,7 @@ export default function CompetitionLayout({ children }: { children: ReactNode })
     void refetch();
   }, [viewerAuthed, meAuthed, slug, refetch]);
 
-  if (query.isPending) return <HeroSkeleton />;
+  if (query.isPending) return <CompetitionHeroSkeleton />;
 
   if (query.isError) {
     const e = query.error;
@@ -130,7 +130,7 @@ export default function CompetitionLayout({ children }: { children: ReactNode })
       <CompetitionHero comp={comp} />
       <Container className="pb-16">
         <CompetitionTabs comp={comp} />
-        <div className="pt-6">{children}</div>
+        <div className="pt-8">{children}</div>
       </Container>
     </CompetitionProvider>
   );

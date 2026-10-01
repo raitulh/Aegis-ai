@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CalendarClock, ExternalLink, Save, Video } from "lucide-react";
+import { CalendarClock, ExternalLink, FileText, Link2, Presentation, Save, Video } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -39,12 +39,12 @@ function Slots({ comp }: { comp: CompetitionDetail }) {
   const mine = (query.data ?? []).filter((s) => teamId && s.team_id === teamId);
   if (query.isPending || query.isError || !mine.length) return null;
   return (
-    <Card>
-      <CardHeader title={<span className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-accent-strong" aria-hidden /> Your presentation</span>} />
+    <Card variant="elevated" className="border-gradient overflow-hidden">
+      <CardHeader icon={<CalendarClock />} title="Your presentation" />
       <CardBody>
-        <ul className="space-y-3 text-sm">
+        <ul className="divide-y divide-border text-sm">
           {mine.map((s) => (
-            <li key={s.id}>
+            <li key={s.id} className="py-3 first:pt-0 last:pb-0">
               <DateTime value={s.starts_at} eventTimeZone={comp.timezone} relative className="font-medium text-fg" />
               <p className="text-xs text-muted">Until {formatDateTime(s.ends_at)}{s.location ? ` · ${s.location}` : ""}</p>
               {s.meeting_url ? (
@@ -120,8 +120,9 @@ export function ProjectSubmissionCard({ comp }: { comp: CompetitionDetail }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader
+          icon={<Presentation />}
           title="Project submission"
           description="Judges review your write-up and links. You can update it until the submission window closes; the latest version is judged."
         />
@@ -143,8 +144,9 @@ export function ProjectSubmissionCard({ comp }: { comp: CompetitionDetail }) {
             ) : (
               <>
                 {existing ? (
-                  <p className="text-xs text-subtle">
-                    Last saved {relativeTime(existing.updated_at)} · first submitted {formatDateTime(existing.submitted_at)}
+                  <p className="inline-flex flex-wrap items-center gap-1.5 rounded-full border border-[color-mix(in_oklab,var(--success)_30%,transparent)] bg-success-soft px-2.5 py-1 text-xs text-success">
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+                    Submitted · last saved {relativeTime(existing.updated_at)} · first submitted {formatDateTime(existing.submitted_at)}
                   </p>
                 ) : null}
                 <Field label="Project title" required error={fields.title}>
@@ -164,6 +166,7 @@ export function ProjectSubmissionCard({ comp }: { comp: CompetitionDetail }) {
                 >
                   {(p) => <MarkdownEditor {...p} value={form.description_md} onChange={(v) => update({ description_md: v })} rows={10} maxLength={50_000} />}
                 </Field>
+                <p className="flex items-center gap-1.5 pt-1 text-eyebrow text-subtle"><Link2 className="h-3.5 w-3.5" aria-hidden /> Links</p>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <Field label="Repository URL" error={fields.repo_url}>
                     {(p) => <Input {...p} type="url" inputMode="url" placeholder="https://github.com/…" value={form.repo_url} onChange={(e) => update({ repo_url: e.target.value })} disabled={disabled} />}
@@ -194,7 +197,7 @@ export function ProjectSubmissionCard({ comp }: { comp: CompetitionDetail }) {
         <Slots comp={comp} />
         {existing?.description_html ? (
           <Card>
-            <CardHeader title="Current write-up" description="As judges will see it." />
+            <CardHeader icon={<FileText />} title="Current write-up" description="As judges will see it." />
             <CardBody><Prose html={existing.description_html} className="text-sm" /></CardBody>
           </Card>
         ) : null}
