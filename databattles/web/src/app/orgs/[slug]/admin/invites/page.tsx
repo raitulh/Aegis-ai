@@ -1,11 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { KeyRound, Link2, Mail, Plus } from "lucide-react";
+import { Check, KeyRound, Link2, Mail, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { useAdminOrg, viewerIsOwnerLevel } from "@/components/orgs/org-admin-context";
 import { ROLE_LABELS, RoleBadge } from "@/components/orgs/org-ui";
+import { AdminPageHeader } from "@/components/orgs/org-visuals";
 import type { Invite, InviteCreated, OrgRole } from "@/components/orgs/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input, Select } from "@/components/ui/form";
 import { CopyButton } from "@/components/ui/misc";
-import { EmptyState, InlineNotice, QueryState, SkeletonRows } from "@/components/ui/states";
+import { EmptyState, QueryState, SkeletonRows } from "@/components/ui/states";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { ApiError, del, get, post } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -60,7 +61,7 @@ function CreateInvite({ slug, roles, onCreated }: { slug: string; roles: OrgRole
   const fields = error?.fields ?? {};
   return (
     <Card>
-      <CardHeader title="Create an invite" description="Invited people join as verified members with the chosen role." />
+      <CardHeader title="Create an invite" description="Invited people join as verified members with the chosen role." icon={<Plus />} />
       <form onSubmit={submit} noValidate>
         <CardBody className="space-y-5">
           <fieldset>
@@ -73,14 +74,16 @@ function CreateInvite({ slug, roles, onCreated }: { slug: string; roles: OrgRole
                 <label
                   key={o.v}
                   className={cn(
-                    "flex cursor-pointer gap-3 rounded-[var(--radius-md)] border p-3 focus-within:ring-2 focus-within:ring-[var(--ring)]",
-                    mode === o.v ? "border-accent bg-accent-soft" : "border-border hover:bg-surface-2",
+                    "flex cursor-pointer gap-3 rounded-[var(--radius-md)] border p-3.5 transition-[background-color,border-color] duration-200 focus-within:ring-2 focus-within:ring-[var(--ring)]",
+                    mode === o.v
+                      ? "border-[color-mix(in_oklab,var(--accent)_55%,var(--border))] bg-accent-soft shadow-[inset_0_1px_0_var(--hairline-highlight)]"
+                      : "border-border bg-bg-elevated/40 hover:border-border-strong hover:bg-surface-2",
                   )}
                 >
                   <input type="radio" name="invite-mode" value={o.v} checked={mode === o.v} onChange={() => setMode(o.v)} className="mt-1 h-4 w-4 accent-[var(--accent)]" />
                   <span>
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-fg"><o.icon className="h-4 w-4" aria-hidden />{o.title}</span>
-                    <span className="mt-0.5 block text-xs text-muted">{o.text}</span>
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-fg"><o.icon className={cn("h-4 w-4", mode === o.v ? "text-accent-strong" : "text-subtle")} aria-hidden />{o.title}</span>
+                    <span className="mt-1 block text-xs leading-relaxed text-muted">{o.text}</span>
                   </span>
                 </label>
               ))}
@@ -110,6 +113,9 @@ function CreateInvite({ slug, roles, onCreated }: { slug: string; roles: OrgRole
           <FormError message={error && !Object.keys(fields).length ? error.message : null} />
         </CardBody>
         <CardFooter>
+          <p className="mr-auto hidden text-xs text-subtle sm:block">
+            {mode === "email" ? "Single use · emailed to the recipient" : `Up to ${usesN} uses`} · expires in {daysN} day{daysN === 1 ? "" : "s"}
+          </p>
           <Button type="submit" loading={create.isPending} disabled={!valid} icon={<Plus className="h-4 w-4" />}>
             {mode === "email" ? "Send invite" : "Create link"}
           </Button>
@@ -133,39 +139,59 @@ export default function OrgInvitesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-fg">Invites</h1>
-        <p className="mt-1 text-sm text-muted">Invite links verify membership. Treat them like passwords — anyone holding an open link can join.</p>
-      </div>
+      <AdminPageHeader
+        eyebrow="People"
+        title="Invites"
+        description="Invite links verify membership. Treat them like passwords — anyone holding an open link can join."
+      />
 
       {created ? (
-        <InlineNotice tone="success" title="Copy this link now — it won’t be shown again">
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <code className="block min-w-0 flex-1 break-all rounded-md border border-border bg-bg-elevated px-2 py-1.5 font-mono text-xs text-fg">{created.link}</code>
-            <div className="flex shrink-0 gap-2">
-              <CopyButton value={created.link} label="Copy link" />
-              <Button size="sm" variant="ghost" onClick={() => setCreated(null)}>Done</Button>
+        <section
+          role="status"
+          aria-label="Invite created"
+          className="relative overflow-hidden rounded-[var(--radius-xl)] border border-[color-mix(in_oklab,var(--success)_35%,var(--border))] bg-surface surface-sheen p-5 shadow-card animate-scale-in"
+        >
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--success),transparent)] opacity-70" />
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-success-soft text-success animate-pop" aria-hidden>
+              <Check className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-fg">Copy this link now — it won’t be shown again</p>
+              <p className="mt-0.5 text-xs text-muted">
+                {created.email ? `We also emailed it to ${created.email}. ` : ""}
+                {ROLE_LABELS[created.role]} · {created.max_uses === 1 ? "single use" : `up to ${created.max_uses} uses`} · expires {formatDateTime(created.expires_at)}
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <code className="block min-w-0 flex-1 break-all rounded-[var(--radius-md)] border border-border bg-bg-elevated px-3 py-2 font-mono text-xs text-fg">{created.link}</code>
+                <div className="flex shrink-0 gap-2">
+                  <CopyButton value={created.link} label="Copy link" className="h-8 px-2.5" />
+                  <Button size="sm" variant="ghost" onClick={() => setCreated(null)}>Done</Button>
+                </div>
+              </div>
             </div>
           </div>
-          <p className="mt-2 text-xs">
-            {created.email ? `We also emailed it to ${created.email}. ` : ""}
-            {ROLE_LABELS[created.role]} · {created.max_uses === 1 ? "single use" : `up to ${created.max_uses} uses`} · expires {formatDateTime(created.expires_at)}
-          </p>
-        </InlineNotice>
+        </section>
       ) : null}
 
       <CreateInvite slug={org.slug} roles={roles} onCreated={setCreated} />
 
       <section aria-labelledby="invites-heading">
-        <h2 id="invites-heading" className="mb-3 text-base font-semibold text-fg">Invites</h2>
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <h2 id="invites-heading" className="text-base font-semibold tracking-[-0.015em] text-fg">Invites</h2>
+            <p className="mt-0.5 text-xs text-muted">Email invites and shareable links, with their usage and status.</p>
+          </div>
+          {invites.data?.length ? <span className="tabular shrink-0 text-xs text-subtle">{invites.data.length} total</span> : null}
+        </div>
         <QueryState
           query={invites}
           loading={<SkeletonRows rows={4} />}
           isEmpty={(d) => d.length === 0}
-          empty={<EmptyState icon={<KeyRound className="h-5 w-5" />} title="No invites yet" description="Create an email invite or a shareable link above." />}
+          empty={<EmptyState icon={<KeyRound />} title="No invites yet" description="Create an email invite or a shareable link above." />}
         >
           {(rows) => (
-            <Table>
+            <Table className="relative">
               <THead>
                 <tr>
                   <TH>Recipient</TH>
@@ -182,12 +208,23 @@ export default function OrgInvitesPage() {
                   const st = inviteState(inv);
                   return (
                     <TR key={inv.id}>
-                      <TD>{inv.email ? <span className="text-fg">{inv.email}</span> : <span className="inline-flex items-center gap-1.5 text-muted"><Link2 className="h-3.5 w-3.5" aria-hidden />Open link</span>}</TD>
+                      <TD className="min-w-48">
+                        {inv.email ? (
+                          <span className="inline-flex min-w-0 items-center gap-2 text-fg">
+                            <Mail className="h-3.5 w-3.5 shrink-0 text-subtle" aria-hidden />
+                            <span className="truncate">{inv.email}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-2 text-muted"><Link2 className="h-3.5 w-3.5 text-subtle" aria-hidden />Open link</span>
+                        )}
+                      </TD>
                       <TD><RoleBadge role={inv.role} /></TD>
-                      <TD className="tabular-nums text-muted">{inv.uses} / {inv.max_uses}</TD>
+                      <TD className="tabular whitespace-nowrap text-muted">
+                        <span className="text-fg">{inv.uses}</span> / {inv.max_uses}
+                      </TD>
                       <TD className="whitespace-nowrap text-muted" title={formatDateTime(inv.expires_at)}>{relativeTime(inv.expires_at)}</TD>
                       <TD><Badge tone={st.tone}>{st.label}</Badge></TD>
-                      <TD className="whitespace-nowrap text-muted">{formatDate(inv.created_at)}</TD>
+                      <TD className="tabular whitespace-nowrap text-muted">{formatDate(inv.created_at)}</TD>
                       <TD className="text-right">
                         {st.label === "Active" ? (
                           <ConfirmDialog

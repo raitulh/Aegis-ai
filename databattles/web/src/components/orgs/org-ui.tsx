@@ -48,7 +48,17 @@ export function isAdminRole(role: string | null | undefined): boolean {
   return role === "owner" || role === "admin";
 }
 
-/** Organization logo, or its initial on the accent color. */
+const HEX6 = /^#[0-9a-fA-F]{6}$/;
+
+/** The org's own accent colour when it is a valid hex, otherwise the brand accent. */
+export function orgAccent(color: string | null | undefined): string {
+  return color && HEX6.test(color) ? color : "var(--accent)";
+}
+
+/**
+ * Organization logo, or its initial on the accent color (a soft accent gradient with a top highlight).
+ * Props are unchanged; corner radius scales with `size` and can still be overridden with `className`.
+ */
 export function OrgLogo({
   name,
   logoUrl,
@@ -63,15 +73,25 @@ export function OrgLogo({
   className?: string;
 }) {
   const style = { width: size, height: size };
+  const radius = size >= 64 ? "rounded-2xl" : size >= 40 ? "rounded-xl" : "rounded-lg";
   if (logoUrl) {
-     
-    return <img src={logoUrl} alt="" width={size} height={size} style={style} className={cn("shrink-0 rounded-lg object-cover ring-1 ring-border", className)} />;
+    return <img src={logoUrl} alt="" width={size} height={size} style={style} className={cn("shrink-0 object-cover ring-1 ring-border", radius, className)} />;
   }
+  const accent = orgAccent(accentColor);
   return (
     <span
       aria-hidden
-      style={{ ...style, background: accentColor ?? "var(--accent)", fontSize: Math.max(12, size * 0.42) }}
-      className={cn("flex shrink-0 items-center justify-center rounded-lg font-bold text-white", className)}
+      style={{
+        ...style,
+        background: `linear-gradient(135deg, color-mix(in oklab, ${accent} 92%, white), ${accent} 45%, color-mix(in oklab, ${accent} 58%, black))`,
+        fontSize: Math.max(12, size * 0.42),
+      }}
+      className={cn(
+        "flex shrink-0 select-none items-center justify-center font-bold tracking-[-0.02em] text-white",
+        "shadow-[inset_0_1px_0_rgb(255_255_255/0.28),inset_0_0_0_1px_rgb(255_255_255/0.08),0_8px_24px_-12px_rgb(0_0_0/0.6)]",
+        radius,
+        className,
+      )}
     >
       {name.trim()[0]?.toUpperCase() ?? "?"}
     </span>
@@ -104,13 +124,44 @@ const ENTITLEMENT_LABELS: Record<string, string> = {
   talent_discovery: "Consent-based talent discovery",
 };
 
+export function entitlementLabel(key: string): string {
+  return ENTITLEMENT_LABELS[key] ?? titleCase(key);
+}
+
+/** Union of entitlement keys across plans, in first-seen order (for comparison tables). */
+export function entitlementKeys(plans: { entitlements: Record<string, unknown> }[]): string[] {
+  const keys: string[] = [];
+  for (const p of plans) for (const k of Object.keys(p.entitlements ?? {})) if (!keys.includes(k)) keys.push(k);
+  return keys;
+}
+
+/** One entitlement value as a compact cell: check / dash for booleans, the number, or "Unlimited" for null. */
+export function EntitlementValue({ value }: { value: unknown }) {
+  if (typeof value === "boolean" || value === undefined) {
+    return value ? (
+      <span className="inline-flex items-center gap-1.5 text-success">
+        <Check className="h-4 w-4" aria-hidden />
+        <span className="sr-only">Included</span>
+      </span>
+    ) : (
+      <span className="inline-flex items-center text-subtle">
+        <Minus className="h-4 w-4" aria-hidden />
+        <span className="sr-only">Not included</span>
+      </span>
+    );
+  }
+  if (typeof value === "number") return <span className="tabular font-medium text-fg">{formatNumber(value)}</span>;
+  if (value === null) return <span className="font-medium text-fg">Unlimited</span>;
+  return <span className="font-medium text-fg">{String(value)}</span>;
+}
+
 export function EntitlementList({ entitlements, className }: { entitlements: Record<string, unknown>; className?: string }) {
   const entries = Object.entries(entitlements ?? {});
   if (!entries.length) return <p className="text-sm text-subtle">No entitlements configured.</p>;
   return (
-    <ul className={cn("space-y-2 text-sm", className)}>
+    <ul className={cn("space-y-2.5 text-sm", className)}>
       {entries.map(([key, value]) => {
-        const label = ENTITLEMENT_LABELS[key] ?? titleCase(key);
+        const label = entitlementLabel(key);
         let content: ReactNode;
         let on = true;
         if (typeof value === "boolean") {
@@ -128,8 +179,16 @@ export function EntitlementList({ entitlements, className }: { entitlements: Rec
           content = <>{label}: <span className="font-medium text-fg">{String(value)}</span></>;
         }
         return (
-          <li key={key} className={cn("flex items-start gap-2", on ? "text-fg" : "text-subtle")}>
-            {on ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden /> : <Minus className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />}
+          <li key={key} className={cn("flex items-start gap-2.5", on ? "text-fg" : "text-subtle")}>
+            {on ? (
+              <span className="mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-success-soft text-success">
+                <Check className="h-3 w-3" aria-hidden />
+              </span>
+            ) : (
+              <span className="mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-surface-3 text-subtle">
+                <Minus className="h-3 w-3" aria-hidden />
+              </span>
+            )}
             <span>
               {content}
               {!on ? <span className="sr-only"> (not included)</span> : null}
@@ -141,12 +200,13 @@ export function EntitlementList({ entitlements, className }: { entitlements: Rec
   );
 }
 
-export function PlanPrice({ cents }: { cents: number }) {
-  if (!cents) return <span className="text-2xl font-semibold text-fg">Free</span>;
+export function PlanPrice({ cents, size = "md" }: { cents: number; size?: "md" | "lg" }) {
+  const big = size === "lg" ? "text-[2.5rem] leading-none tracking-[-0.04em]" : "text-2xl tracking-[-0.02em]";
+  // Zero-price plans show the amount too: the plan name (usually "Free") is already the heading right above it.
   return (
-    <span>
-      <span className="text-2xl font-semibold tabular-nums text-fg">{formatMoney(cents)}</span>
-      <span className="text-sm text-muted"> / month</span>
+    <span className="inline-flex items-baseline gap-1">
+      <span className={cn("font-semibold tabular-nums text-fg", big)}>{formatMoney(cents)}</span>
+      <span className="text-sm text-muted">/ month</span>
     </span>
   );
 }

@@ -2,12 +2,13 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, Clock, ShieldQuestion } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { useAdminOrg } from "@/components/orgs/org-admin-context";
 import { OrgProfileFields, isHexColor, orgProfilePayload, type OrgProfileValues } from "@/components/orgs/org-form";
 import { OrgLogo, OrgVerificationBadge } from "@/components/orgs/org-ui";
+import { AdminPageHeader, DomainChips } from "@/components/orgs/org-visuals";
 import type { OrgDetail } from "@/components/orgs/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/card";
@@ -15,8 +16,8 @@ import { Field, FormError, Switch, Textarea } from "@/components/ui/form";
 import { FileDrop } from "@/components/ui/misc";
 import { InlineNotice } from "@/components/ui/states";
 import { ApiError, errorMessage, patch, post, upload } from "@/lib/api";
+import { titleCase } from "@/lib/format";
 import { useApiMutation, useConfig, useUnsavedChangesWarning } from "@/lib/hooks";
-
 
 function toValues(o: OrgDetail): OrgProfileValues & { allow_membership_requests: boolean } {
   return {
@@ -29,6 +30,19 @@ function toValues(o: OrgDetail): OrgProfileValues & { allow_membership_requests:
     accent_color: o.accent_color ?? "",
     allow_membership_requests: o.allow_membership_requests,
   };
+}
+
+/** Settings row: heading and explanation on the left (wide screens), the control surface on the right. */
+function SettingsSection({ id, title, description, children }: { id: string; title: string; description: ReactNode; children: ReactNode }) {
+  return (
+    <section aria-labelledby={id} className="grid grid-cols-1 gap-4 border-t border-border pt-8 first:border-t-0 first:pt-0 xl:grid-cols-[14rem_minmax(0,1fr)] xl:gap-10">
+      <div className="xl:sticky xl:top-24 xl:self-start">
+        <h2 id={id} className="text-base font-semibold tracking-[-0.015em] text-fg">{title}</h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">{description}</p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
+  );
 }
 
 function ProfileForm({ org }: { org: OrgDetail }) {
@@ -66,8 +80,7 @@ function ProfileForm({ org }: { org: OrgDetail }) {
   return (
     <form onSubmit={submit} noValidate>
       <Card>
-        <CardHeader title="Profile" description="Shown on your public organization page and in search." />
-        <CardBody className="space-y-6">
+        <CardBody className="space-y-6 py-5 sm:px-6">
           <OrgProfileFields value={values} onChange={(v) => setValues({ ...values, ...v })} errors={fields} />
           <div className="border-t border-border pt-5">
             <Switch
@@ -79,8 +92,13 @@ function ProfileForm({ org }: { org: OrgDetail }) {
           </div>
           <FormError message={error && !Object.keys(fields).length ? error.message : null} />
         </CardBody>
-        <CardFooter>
-          {dirty ? <span className="mr-auto text-xs text-warning">Unsaved changes</span> : null}
+        <CardFooter className="sticky bottom-0 z-10 rounded-b-[var(--radius-lg)] bg-[var(--glass-strong)] backdrop-blur-xl sm:px-6">
+          {dirty ? (
+            <span className="mr-auto inline-flex items-center gap-1.5 text-xs font-medium text-warning">
+              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+              Unsaved changes
+            </span>
+          ) : null}
           <Button variant="ghost" disabled={!dirty || save.isPending} onClick={() => { setValues(initial); setError(null); }}>Discard</Button>
           <Button type="submit" loading={save.isPending} disabled={!dirty || !valid}>Save changes</Button>
         </CardFooter>
@@ -114,10 +132,12 @@ function LogoCard({ org }: { org: OrgDetail }) {
 
   return (
     <Card>
-      <CardHeader title="Logo" description="Square images work best. It’s cropped to a square and resized to 512 px." />
-      <CardBody className="flex flex-col gap-5 sm:flex-row sm:items-center">
-        <OrgLogo name={org.name} logoUrl={org.logo_url} accentColor={org.accent_color} size={88} className="rounded-xl" />
-        <div className="flex-1">
+      <CardBody className="flex flex-col gap-5 py-5 sm:flex-row sm:items-center sm:px-6">
+        <div className="flex shrink-0 flex-col items-center gap-2">
+          <OrgLogo name={org.name} logoUrl={org.logo_url} accentColor={org.accent_color} size={88} />
+          <span className="text-eyebrow text-subtle">{org.logo_url ? "Current" : "Initial"}</span>
+        </div>
+        <div className="min-w-0 flex-1">
           <FileDrop accept=".png,.jpg,.jpeg,.webp" maxBytes={maxMb * 1024 * 1024} onFile={onFile} disabled={progress !== null} progress={progress} hint={`PNG, JPEG or WebP · up to ${maxMb} MB`} />
           {error ? <p role="alert" className="mt-2 text-xs font-medium text-danger">{error}</p> : null}
         </div>
@@ -142,8 +162,8 @@ function VerificationCard({ org }: { org: OrgDetail }) {
 
   return (
     <Card>
-      <CardHeader title="Verification" action={<OrgVerificationBadge status={status} />} />
-      <CardBody className="space-y-4 text-sm">
+      <CardHeader title="Status" action={<OrgVerificationBadge status={status} />} icon={<BadgeCheck />} />
+      <CardBody className="space-y-5 py-5 text-sm sm:px-6">
         {status === "verified" ? (
           <InlineNotice tone="success" title="Verified by the platform team">
             Your organization shows a verified badge.
@@ -163,9 +183,7 @@ function VerificationCard({ org }: { org: OrgDetail }) {
         <div>
           <p className="font-medium text-fg">Institutional email domains</p>
           {org.email_domains.length ? (
-            <ul className="mt-2 flex flex-wrap gap-1.5 font-mono text-xs">
-              {org.email_domains.map((d) => <li key={d} className="rounded bg-surface-2 px-2 py-1 text-muted">@{d}</li>)}
-            </ul>
+            <DomainChips domains={org.email_domains} className="mt-2" />
           ) : (
             <p className="mt-1 text-muted">None registered{status !== "verified" ? " (domains take effect only after verification)" : ""}.</p>
           )}
@@ -206,14 +224,33 @@ function VerificationCard({ org }: { org: OrgDetail }) {
 export default function OrgSettingsPage() {
   const org = useAdminOrg();
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-fg">Settings</h1>
-        <p className="mt-1 text-sm text-muted">The organization type and address (slug) can’t be changed.</p>
-      </div>
-      <ProfileForm org={org} />
-      <LogoCard org={org} />
-      <VerificationCard org={org} />
+    <div className="space-y-8">
+      <AdminPageHeader
+        eyebrow="Organization"
+        title="Settings"
+        description="The organization type and address (slug) can’t be changed."
+        meta={
+          <>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-eyebrow">Type</span>
+              <span className="font-medium text-muted">{titleCase(org.type)}</span>
+            </span>
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <span className="text-eyebrow">Address</span>
+              <span className="truncate font-mono text-muted">/orgs/{org.slug}</span>
+            </span>
+          </>
+        }
+      />
+      <SettingsSection id="settings-profile" title="Profile" description="Shown on your public organization page and in search.">
+        <ProfileForm org={org} />
+      </SettingsSection>
+      <SettingsSection id="settings-logo" title="Logo" description="Square images work best. It’s cropped to a square and resized to 512 px.">
+        <LogoCard org={org} />
+      </SettingsSection>
+      <SettingsSection id="settings-verification" title="Verification" description="Confirms your organization is who it says it is.">
+        <VerificationCard org={org} />
+      </SettingsSection>
     </div>
   );
 }

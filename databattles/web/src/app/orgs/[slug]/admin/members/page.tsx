@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 
 import { UserLink } from "@/components/domain/cards";
 import { useAdminOrg, viewerIsOwnerLevel } from "@/components/orgs/org-admin-context";
+import { AdminPageHeader } from "@/components/orgs/org-visuals";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS, RoleBadge, VERIFICATION_METHOD_LABELS } from "@/components/orgs/org-ui";
 import type { OrgDetail, OrgRole, RosterRow } from "@/components/orgs/types";
 import { Badge, SelfDeclaredBadge, StatusBadge, VerifiedBadge } from "@/components/ui/badge";
@@ -16,6 +17,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { EmptyState, ErrorState, NoResults, SkeletonRows } from "@/components/ui/states";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { API_BASE, get, post, put } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { formatDate, formatNumber, titleCase } from "@/lib/format";
 import { useApiMutation, useDebounced, useMe } from "@/lib/hooks";
 import type { Page } from "@/lib/types";
@@ -65,18 +67,18 @@ function ReviewDialog({ org, row }: { org: OrgDetail; row: RosterRow }) {
         </>
       }
     >
-      <dl className="space-y-3 text-sm">
-        <div>
-          <dt className="text-xs text-subtle">Applicant</dt>
-          <dd className="mt-1"><UserLink user={row.user} /></dd>
+      <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-md)] border border-border bg-border text-sm">
+        <div className="bg-bg-elevated px-3.5 py-2.5">
+          <dt className="text-eyebrow text-subtle">Applicant</dt>
+          <dd className="mt-1.5"><UserLink user={row.user} /></dd>
         </div>
-        <div>
-          <dt className="text-xs text-subtle">Department</dt>
-          <dd className="mt-0.5 text-fg">{row.department ?? "Not specified"}</dd>
+        <div className="bg-bg-elevated px-3.5 py-2.5">
+          <dt className="text-eyebrow text-subtle">Department</dt>
+          <dd className="mt-1 text-fg">{row.department ?? "Not specified"}</dd>
         </div>
-        <div>
-          <dt className="text-xs text-subtle">Their note</dt>
-          <dd className="mt-0.5 whitespace-pre-wrap text-fg">{row.request_note || <span className="text-subtle">No note.</span>}</dd>
+        <div className="bg-bg-elevated px-3.5 py-2.5">
+          <dt className="text-eyebrow text-subtle">Their note</dt>
+          <dd className="mt-1 whitespace-pre-wrap text-fg">{row.request_note || <span className="text-subtle">No note.</span>}</dd>
         </div>
       </dl>
       <Field label="Private review note" hint="Optional. Recorded in the audit log; never shown to the applicant." className="mt-4">
@@ -119,7 +121,11 @@ function RoleDialog({ org, row, allowed }: { org: OrgDetail; row: RosterRow; all
             return (
               <label
                 key={r}
-                className={`flex gap-3 rounded-[var(--radius-md)] border p-3 ${role === r ? "border-accent bg-accent-soft" : "border-border"} ${enabled ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+                className={cn(
+                  "flex gap-3 rounded-[var(--radius-md)] border p-3 transition-[background-color,border-color] duration-200 focus-within:ring-2 focus-within:ring-[var(--ring)]",
+                  role === r ? "border-[color-mix(in_oklab,var(--accent)_55%,var(--border))] bg-accent-soft" : "border-border",
+                  enabled ? "cursor-pointer hover:border-border-strong" : "cursor-not-allowed opacity-50",
+                )}
               >
                 <input type="radio" name={`role-${row.id}`} value={r} checked={role === r} disabled={!enabled} onChange={() => setRole(r)} className="mt-1 h-4 w-4 accent-[var(--accent)]" />
                 <span>
@@ -174,55 +180,70 @@ function Members() {
   );
 
   return (
-    <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-fg">Members</h1>
-          <p className="mt-1 text-sm text-muted">Handles, names and roles only — personal emails are never shown.</p>
-        </div>
-        {canAct ? (
-          <a
-            href={`${API_BASE}/orgs/${org.slug}/members.csv`}
-            download
-            className="inline-flex h-9 items-center gap-2 self-start rounded-[var(--radius-md)] border border-border bg-surface-2 px-3 text-sm font-medium text-fg hover:bg-surface-3"
+    <div className="space-y-5">
+      <AdminPageHeader
+        eyebrow="People"
+        title="Members"
+        description="Handles, names and roles only — personal emails are never shown."
+        actions={
+          canAct ? (
+            <a
+              href={`${API_BASE}/orgs/${org.slug}/members.csv`}
+              download
+              className="inline-flex h-9 items-center gap-2 self-start rounded-[var(--radius-md)] border border-border bg-surface-2 px-3 text-sm font-medium text-fg shadow-[inset_0_1px_0_var(--hairline-highlight)] transition-colors hover:border-border-strong hover:bg-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]"
+            >
+              <Download className="h-4 w-4" aria-hidden /> Export CSV
+            </a>
+          ) : null
+        }
+      />
+
+      <div className="rounded-[var(--radius-lg)] border border-border bg-surface/70 p-2.5 shadow-card">
+        {/* Status on its own row: the content column is capped (max-w-7xl minus the rail), so sharing a row with
+            the search and both selects squeezes the search field at every desktop width. */}
+        <div className="flex flex-col gap-2.5">
+          <div
+            className="inline-flex max-w-full shrink-0 items-center self-start gap-0.5 overflow-x-auto rounded-[var(--radius-md)] border border-border bg-bg-elevated p-0.5 [scrollbar-width:none]"
+            role="group"
+            aria-label="Membership status"
           >
-            <Download className="h-4 w-4" aria-hidden /> Export CSV
-          </a>
-        ) : null}
-      </div>
+            {STATUSES.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                aria-pressed={status === s.value}
+                onClick={() => setState({ status: s.value })}
+                className={cn(
+                  "inline-flex h-9 shrink-0 items-center rounded-[8px] px-3 text-[13px] font-medium transition-[background-color,color,box-shadow] duration-200",
+                  "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring)]",
+                  status === s.value ? "bg-surface-3 text-fg shadow-[inset_0_1px_0_var(--hairline-highlight),0_1px_2px_rgb(0_0_0/0.2)]" : "text-muted hover:text-fg",
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
 
-      <div className="mt-5 flex flex-wrap gap-1 border-b border-border" role="group" aria-label="Membership status">
-        {STATUSES.map((s) => (
-          <button
-            key={s.value}
-            type="button"
-            aria-pressed={status === s.value}
-            onClick={() => setState({ status: s.value })}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${status === s.value ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row" role="search">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle" aria-hidden />
-          <Input aria-label="Search members by handle or name" placeholder="Search handle or name" className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} maxLength={60} />
+          <div className="flex min-w-0 flex-1 flex-col gap-2.5 sm:flex-row" role="search">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle" aria-hidden />
+              <Input aria-label="Search members by handle or name" placeholder="Search handle or name" className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} maxLength={60} />
+            </div>
+            <Select aria-label="Filter by role" className="sm:w-40" value={state.role ?? ""} onChange={(e) => setState({ role: e.target.value })}>
+              <option value="">All roles</option>
+              {(["owner", "admin", "manager", "member"] as OrgRole[]).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            </Select>
+            {org.departments.length ? (
+              <Select aria-label="Filter by department" className="sm:w-52" value={state.department_id ?? ""} onChange={(e) => setState({ department_id: e.target.value })}>
+                <option value="">All departments</option>
+                {org.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </Select>
+            ) : null}
+          </div>
         </div>
-        <Select aria-label="Filter by role" className="sm:w-40" value={state.role ?? ""} onChange={(e) => setState({ role: e.target.value })}>
-          <option value="">All roles</option>
-          {(["owner", "admin", "manager", "member"] as OrgRole[]).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-        </Select>
-        {org.departments.length ? (
-          <Select aria-label="Filter by department" className="sm:w-52" value={state.department_id ?? ""} onChange={(e) => setState({ department_id: e.target.value })}>
-            <option value="">All departments</option>
-            {org.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </Select>
-        ) : null}
       </div>
 
-      <div className="mt-4">
+      <div>
         {roster.isPending ? (
           <SkeletonRows rows={6} />
         ) : roster.isError ? (
@@ -232,20 +253,23 @@ function Members() {
             <NoResults onReset={() => { setQ(""); reset(); }} />
           ) : (
             <EmptyState
-              icon={<Users className="h-5 w-5" />}
+              icon={<Users />}
               title={status === "pending" ? "No pending requests" : status === "active" ? "No members yet" : `No ${STATUSES.find((s) => s.value === status)?.label.toLowerCase()} memberships`}
               description={status === "pending" ? "New requests appear here and admins are notified." : status === "active" ? "Invite people or enable membership requests in settings." : undefined}
             />
           )
         ) : (
           <>
-            <p className="mb-2 text-sm text-muted" aria-live="polite">{formatNumber(roster.data.total)} {roster.data.total === 1 ? "membership" : "memberships"}</p>
-            <Table>
+            <p className="mb-3 text-sm text-muted" aria-live="polite">
+              <span className="tabular font-medium text-fg">{formatNumber(roster.data.total)}</span> {roster.data.total === 1 ? "membership" : "memberships"}
+              <span className="text-subtle"> · {STATUSES.find((s) => s.value === status)?.label.toLowerCase() ?? status}</span>
+            </p>
+            <Table className="relative">
               <THead>
                 <tr>
                   <TH>Member</TH>
                   <TH>Role</TH>
-                  <TH>Department</TH>
+                  <TH className="hidden 2xl:table-cell">Department</TH>
                   <TH>Verification</TH>
                   <TH>{status === "pending" ? "Requested" : "Joined"}</TH>
                   <TH className="text-right">Competitions</TH>
@@ -255,19 +279,24 @@ function Members() {
               <TBody>
                 {roster.data.items.map((row) => (
                   <TR key={row.id}>
-                    <TD>
+                    <TD className="min-w-56">
                       <div className="flex flex-col gap-1">
-                        <UserLink user={row.user} />
-                        <span className="text-xs text-subtle">
+                        <UserLink user={row.user} size={28} className="font-medium" />
+                        <span className="pl-9 font-mono text-[11px] text-subtle">
                           @{row.user.handle}
-                          {me && row.user.id === me.id ? " · you" : ""}
+                          {me && row.user.id === me.id ? <span className="font-sans text-accent-strong"> · you</span> : ""}
                         </span>
-                        {row.account_status !== "active" ? <Badge tone="danger" className="w-fit">Account {row.account_status}</Badge> : null}
-                        {status === "pending" && row.request_note ? <p className="max-w-xs text-xs text-muted line-clamp-2">“{row.request_note}”</p> : null}
+                        {/* Department moves under the name until the wide layout has room for its own column. */}
+                        <span className="pl-9 text-xs text-muted 2xl:hidden">
+                          <span className="sr-only">Department: </span>
+                          {row.department ?? <span className="text-subtle">No department</span>}
+                        </span>
+                        {row.account_status !== "active" ? <Badge tone="danger" className="ml-9 w-fit">Account {row.account_status}</Badge> : null}
+                        {status === "pending" && row.request_note ? <p className="ml-9 max-w-xs text-xs italic text-muted line-clamp-2">“{row.request_note}”</p> : null}
                       </div>
                     </TD>
                     <TD>{status === "pending" ? <StatusBadge status="pending" /> : <RoleBadge role={row.role} />}</TD>
-                    <TD className="text-muted">{row.department ?? "—"}</TD>
+                    <TD className="hidden whitespace-nowrap text-muted 2xl:table-cell">{row.department ?? "—"}</TD>
                     <TD>
                       {row.verified ? (
                         <VerifiedBadge label={VERIFICATION_METHOD_LABELS[row.verification_method] ?? titleCase(row.verification_method)} title="Verified membership" />
@@ -275,8 +304,8 @@ function Members() {
                         <SelfDeclaredBadge />
                       )}
                     </TD>
-                    <TD className="whitespace-nowrap text-muted">{formatDate(row.joined_at)}</TD>
-                    <TD className="text-right tabular-nums">{formatNumber(row.competitions_joined)}</TD>
+                    <TD className="tabular whitespace-nowrap text-muted">{formatDate(row.joined_at)}</TD>
+                    <TD className="tabular text-right">{formatNumber(row.competitions_joined)}</TD>
                     {canAct && (status === "active" || status === "pending") ? (
                       <TD>
                         <div className="flex justify-end gap-1">
