@@ -124,7 +124,7 @@ export default function AppearanceSettingsPage() {
                     aria-hidden
                     className={cn(
                       "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors duration-200",
-                      active ? "border-transparent bg-accent text-accent-fg" : "border-border-strong bg-surface",
+                      active ? "border-transparent bg-accent-fill text-accent-fg" : "border-border-strong bg-surface",
                     )}
                   >
                     {active ? <Check className="h-3 w-3 animate-pop" strokeWidth={3} /> : null}

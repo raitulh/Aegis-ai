@@ -18,10 +18,18 @@ type Mode = "fallback" | "loading" | "ready" | "failed";
 function hasWebGL(): boolean {
   try {
     const canvas = document.createElement("canvas");
-    return Boolean(window.WebGLRenderingContext && (canvas.getContext("webgl2") || canvas.getContext("webgl")));
+    const gl = (canvas.getContext("webgl2") || canvas.getContext("webgl")) as WebGLRenderingContext | null;
+    // Release the probe context straight away; browsers cap the number of live contexts.
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
+    return Boolean(window.WebGLRenderingContext && gl);
   } catch {
     return false;
   }
+}
+
+/** Synchronous read (the hook starts false until its effect runs) so we never probe WebGL for reduced-motion users. */
+function prefersReducedMotion(): boolean {
+  return document.documentElement.dataset.motion === "reduced" || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 class SceneBoundary extends Component<{ children: ReactNode; onError: () => void }, { failed: boolean }> {
@@ -57,7 +65,7 @@ export function DataOrbit({ className }: { className?: string }) {
   }, [active]);
 
   useEffect(() => {
-    if (reduced) return;
+    if (reduced || prefersReducedMotion()) return;
     if (!hasWebGL()) {
       setMode("failed");
       return;
@@ -85,7 +93,9 @@ export function DataOrbit({ className }: { className?: string }) {
   return (
     <div ref={ref} aria-hidden className={cn("relative isolate select-none", className)}>
       <DataOrbitFallback
-        className={cn("absolute inset-0 transition-opacity duration-700", sceneVisible && "opacity-0")}
+        theme={resolved}
+        // Once the WebGL scene is showing, the hidden SVG stops animating so it costs nothing.
+        className={cn("absolute inset-0 transition-opacity duration-700", sceneVisible && "opacity-0 [&_*]:[animation-play-state:paused]")}
         active={sceneVisible ? null : active}
         onActive={sceneVisible ? undefined : setActive}
       />
@@ -127,16 +137,16 @@ export function DataOrbit({ className }: { className?: string }) {
       ) : null}
 
       <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center px-4">
-        <div className="max-w-md rounded-full border border-border bg-glass px-3.5 py-1.5 text-center text-[11px] text-muted backdrop-blur-md">
+        <div className="max-w-full rounded-2xl border border-border bg-glass px-3.5 py-1.5 text-center text-[11px] text-muted backdrop-blur-md sm:max-w-md sm:rounded-full">
           {current ? (
             <span>
               <span className="font-mono tracking-[0.12em] text-fg">{current.label.toUpperCase()}</span> · {current.caption}
             </span>
           ) : (
-            <span className="font-mono tracking-[0.12em]">
+            <span className="flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5 font-mono tracking-[0.12em]">
               {ORBIT_CONCEPTS.map((c, i) => (
-                <span key={c.key}>
-                  {i ? <span className="mx-1 text-subtle">→</span> : null}
+                <span key={c.key} className="inline-flex items-center gap-1 whitespace-nowrap">
+                  {i ? <span className="text-subtle">→</span> : null}
                   {c.label.toUpperCase()}
                 </span>
               ))}

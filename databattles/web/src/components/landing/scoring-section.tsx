@@ -65,7 +65,18 @@ function LiveBoard({ comp }: { comp: CompetitionCard }) {
         </div>
       ) : lb.isError || lb.data?.hidden_reason || !rows.length ? (
         <p className="px-5 py-10 text-center text-sm text-muted">
-          {lb.data?.hidden_reason ? "This leaderboard is hidden right now." : "No scored entries on this leaderboard yet."}
+          {lb.isError ? (
+            <>
+              The leaderboard is unavailable right now.{" "}
+              <button type="button" className="font-medium text-accent-strong hover:underline" onClick={() => lb.refetch()}>
+                Try again
+              </button>
+            </>
+          ) : lb.data?.hidden_reason ? (
+            "This leaderboard is hidden right now."
+          ) : (
+            "No scored entries on this leaderboard yet."
+          )}
         </p>
       ) : (
         <table className="w-full text-sm">

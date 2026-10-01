@@ -15,7 +15,7 @@ import { SectionHeading } from "./section-heading";
  * Student projects in a staggered gallery (the middle column sits lower on desktop) and a swipeable
  * strip on phones — a portfolio wall rather than another uniform grid.
  */
-export function ProjectShowcase({ items, loading }: { items?: ProjectCardT[]; loading: boolean }) {
+export function ProjectShowcase({ items, loading, error = false }: { items?: ProjectCardT[]; loading: boolean; error?: boolean }) {
   const list = items ?? [];
   return (
     <section className="relative overflow-hidden py-20 sm:py-28" aria-label="Student projects">
@@ -47,6 +47,13 @@ export function ProjectShowcase({ items, loading }: { items?: ProjectCardT[]; lo
                 </Reveal>
               ))}
             </div>
+          ) : error ? (
+            <EmptyState
+              icon={<FolderGit2 />}
+              title="Featured projects are unavailable right now"
+              description="The live data couldn't be loaded. You can still browse every project."
+              action={<LinkButton href="/projects" variant="secondary">Browse projects</LinkButton>}
+            />
           ) : (
             <EmptyState
               icon={<FolderGit2 />}

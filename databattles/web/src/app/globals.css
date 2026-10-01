@@ -33,6 +33,9 @@
   --accent-strong: #a998ff;
   --accent-fg: #ffffff;
   --accent-soft: rgb(139 109 255 / 0.14);
+  /* Solid fills that carry white labels (≥ 4.5:1); the brighter --accent stays for glows, rings and text. */
+  --accent-fill: #6b4bff;
+  --danger-fill: #dc2626;
   --blue: #5b8cff;
   --cyan: #2dd4ef;
   --cyan-soft: rgb(45 212 239 / 0.12);
@@ -102,17 +105,19 @@
   --accent-strong: #4a2de0;
   --accent-fg: #ffffff;
   --accent-soft: rgb(91 61 245 / 0.09);
+  --accent-fill: #5b3df5;
+  --danger-fill: #dc2626;
   --blue: #2f6bff;
-  --cyan: #0891b2;
+  --cyan: #0e7490;
   --cyan-soft: rgb(8 145 178 / 0.09);
 
   --success: #047857;
   --success-soft: rgb(5 150 105 / 0.1);
-  --warning: #b45309;
+  --warning: #92400e;
   --warning-soft: rgb(180 83 9 / 0.1);
-  --danger: #dc2626;
+  --danger: #b91c1c;
   --danger-soft: rgb(220 38 38 / 0.08);
-  --info: #2563eb;
+  --info: #1d4ed8;
   --info-soft: rgb(37 99 235 / 0.08);
 
   --ring: rgb(91 61 245 / 0.45);
@@ -153,6 +158,8 @@
   --color-accent-strong: var(--accent-strong);
   --color-accent-fg: var(--accent-fg);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-fill: var(--accent-fill);
+  --color-danger-fill: var(--danger-fill);
   --color-blue: var(--blue);
   --color-cyan: var(--cyan);
   --color-cyan-soft: var(--cyan-soft);

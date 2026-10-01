@@ -26,11 +26,8 @@ export function Hero({ signedIn, demo }: { signedIn: boolean; demo: boolean }) {
       <Container className="relative grid grid-cols-1 items-center gap-6 pb-10 pt-10 sm:pt-14 lg:min-h-[calc(100dvh-5.5rem)] lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1fr)] lg:gap-4 lg:pb-16 lg:pt-6">
         <div className="relative z-10 max-w-2xl">
           <p className="inline-flex animate-rise items-center gap-2 rounded-full border border-border bg-glass py-1 pl-1.5 pr-3 text-xs text-muted shadow-[inset_0_1px_0_var(--hairline-highlight)] backdrop-blur-md">
-            <span className="flex items-center gap-1.5 rounded-full bg-success-soft px-2 py-0.5 font-medium text-success">
-              <span className="relative flex h-1.5 w-1.5" aria-hidden>
-                <span className="absolute inset-0 rounded-full bg-current motion-safe:animate-[ping_2.4s_cubic-bezier(0,0,0.2,1)_infinite]" />
-                <span className="relative h-1.5 w-1.5 rounded-full bg-current" />
-              </span>
+            <span className="flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 font-medium text-success">
+              <ShieldCheck className="h-3 w-3" aria-hidden />
               Evidence-backed
             </span>
             <span className="hidden min-[400px]:inline">Reproducible scoring · verifiable credentials</span>

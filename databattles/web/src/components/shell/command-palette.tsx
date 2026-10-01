@@ -31,7 +31,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { get } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -164,8 +164,13 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     staleTime: 30_000,
   });
 
+  // Remember what had focus when the palette opened so closing it returns focus there (it has no Radix trigger).
+  const restoreFocus = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (open) setRecent(readRecent());
+    if (open) {
+      restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setRecent(readRecent());
+    }
   }, [open]);
 
   const close = () => {
@@ -269,7 +274,15 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     >
       <RD.Portal>
         <RD.Overlay className="fixed inset-0 z-50 bg-[rgb(3_4_8/0.6)] backdrop-blur-[6px] data-[state=open]:animate-fade-in" />
-        <RD.Content className="fixed left-1/2 top-[10vh] z-50 w-[calc(100vw-1.5rem)] max-w-2xl -translate-x-1/2 overflow-hidden rounded-[var(--radius-xl)] border border-border-strong bg-surface/95 shadow-elevated outline-none backdrop-blur-xl data-[state=open]:animate-[menu-in_200ms_var(--ease-out)_both]">
+        <RD.Content
+          onCloseAutoFocus={(e) => {
+            const el = restoreFocus.current;
+            if (el && el.isConnected) {
+              e.preventDefault();
+              el.focus();
+            }
+          }}
+          className="fixed left-1/2 top-[10vh] z-50 w-[calc(100vw-1.5rem)] max-w-2xl -translate-x-1/2 overflow-hidden rounded-[var(--radius-xl)] border border-border-strong bg-surface/95 shadow-elevated outline-none backdrop-blur-xl data-[state=open]:animate-[menu-in_200ms_var(--ease-out)_both]">
           <RD.Title className="sr-only">Search and commands</RD.Title>
           <RD.Description className="sr-only">Search competitions, datasets, people and more, or jump to a page.</RD.Description>
           <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--accent),var(--cyan),transparent)] opacity-60" />

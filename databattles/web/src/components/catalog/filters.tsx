@@ -118,7 +118,7 @@ export function ToggleChip({
       aria-pressed={pressed}
       onClick={() => onChange(!pressed)}
       className={cn(
-        "inline-flex h-10 items-center gap-1.5 rounded-[var(--radius-md)] border px-3 text-sm font-medium transition-[background-color,border-color,color,box-shadow] duration-200",
+        "inline-flex h-10 items-center gap-1.5 rounded-[var(--radius-md)] border px-3 text-sm font-medium transition-[background-color,border-color,color,box-shadow,scale] duration-200",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] active:scale-[0.98]",
         pressed
           ? "border-[color-mix(in_oklab,var(--accent)_55%,transparent)] bg-accent-soft text-accent-strong shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_10%,transparent)]"

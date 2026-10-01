@@ -83,13 +83,24 @@ export function OrganizationSection({ universities }: { universities?: number })
                           {titleCase(o.type)}{o.city ? ` · ${o.city}` : ""} · {compactNumber(o.member_count)} members
                         </span>
                       </span>
-                      {o.is_demo ? <DemoBadge className="hidden sm:inline-flex" /> : null}
+                      {o.is_demo ? <DemoBadge className="shrink-0" /> : null}
                     </Link>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="relative mt-6 text-sm text-muted">No organizations listed yet.</p>
+              <p className="relative mt-6 text-sm text-muted">
+                {orgs.isError ? (
+                  <>
+                    Couldn&apos;t load organizations right now.{" "}
+                    <button type="button" className="font-medium text-accent-strong hover:underline" onClick={() => orgs.refetch()}>
+                      Try again
+                    </button>
+                  </>
+                ) : (
+                  "No organizations listed yet."
+                )}
+              </p>
             )}
             <Link href="/orgs" className="relative mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-accent-strong hover:underline">
               <University className="h-4 w-4" aria-hidden /> Find your university <ArrowRight className="h-3.5 w-3.5" aria-hidden />

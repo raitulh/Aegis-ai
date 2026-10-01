@@ -47,6 +47,12 @@ export function useSignOut() {
       await post("/auth/logout");
     } finally {
       qc.clear();
+      // Per-viewer conveniences must not leak to the next person on a shared machine.
+      try {
+        window.localStorage.removeItem("db-palette-recent");
+      } catch {
+        /* storage unavailable */
+      }
       router.push("/");
       router.refresh();
     }

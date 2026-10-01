@@ -42,9 +42,9 @@ export default function HomePage() {
         </Container>
       ) : null}
       <PlatformLoop handle={me?.handle} />
-      <CompetitionShowcase items={landing.data?.featured_competitions} loading={landing.isPending} />
+      <CompetitionShowcase items={landing.data?.featured_competitions} loading={landing.isPending} error={landing.isError} />
       <DatasetShowcase />
-      <ProjectShowcase items={landing.data?.featured_projects} loading={landing.isPending} />
+      <ProjectShowcase items={landing.data?.featured_projects} loading={landing.isPending} error={landing.isError} />
       <LearningSection />
       <OpenSourceSection />
       <VerificationSection />

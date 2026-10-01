@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, type KeyboardEvent, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -15,7 +15,8 @@ export function Kbd({ children, className }: { children: ReactNode; className?: 
 
 /**
  * Pill-style single-choice control for view switches and small filter sets (a radiogroup, not tabs —
- * use `Tabs`/`NavTabs` when it switches page sections).
+ * use `Tabs`/`NavTabs` when it switches page sections). Follows the ARIA radio-group pattern: one tab
+ * stop (the checked option) and arrow keys / Home / End move both focus and selection.
  */
 export function SegmentedControl<T extends string>({
   value,
@@ -32,16 +33,35 @@ export function SegmentedControl<T extends string>({
   size?: "sm" | "md";
   className?: string;
 }) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const current = Math.max(0, options.findIndex((o) => o.value === value));
+  const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
+    const last = options.length - 1;
+    let next = i;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = i === last ? 0 : i + 1;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = i === 0 ? last : i - 1;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = last;
+    else return;
+    e.preventDefault();
+    onChange(options[next].value);
+    refs.current[next]?.focus();
+  };
   return (
     <div role="radiogroup" aria-label={label} className={cn("inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-[var(--radius-md)] border border-border bg-bg-elevated p-0.5 [scrollbar-width:none]", className)}>
-      {options.map((o) => {
+      {options.map((o, i) => {
         const on = o.value === value;
         return (
           <button
             key={o.value}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
             type="button"
             role="radio"
             aria-checked={on}
+            tabIndex={i === current ? 0 : -1}
+            onKeyDown={(e) => onKeyDown(e, i)}
             onClick={() => onChange(o.value)}
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 rounded-[8px] font-medium transition-[background-color,color,box-shadow] duration-200 [&_svg]:h-3.5 [&_svg]:w-3.5",

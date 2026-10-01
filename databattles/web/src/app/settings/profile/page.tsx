@@ -377,7 +377,7 @@ function ProfileForm({ profile }: { profile: ProfileOut }) {
                 )}
               >
                 {form.cover_style === s ? (
-                  <span aria-hidden className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-fg shadow-[0_0_0_2px_rgb(0_0_0/0.25)] animate-pop">
+                  <span aria-hidden className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent-fill text-accent-fg shadow-[0_0_0_2px_rgb(0_0_0/0.25)] animate-pop">
                     <Check className="h-3 w-3" strokeWidth={3} />
                   </span>
                 ) : null}

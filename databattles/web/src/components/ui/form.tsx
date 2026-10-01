@@ -7,10 +7,10 @@ import { cn } from "@/lib/cn";
 const control =
   "w-full rounded-[var(--radius-md)] border border-border bg-bg-elevated px-3 text-sm text-fg placeholder:text-subtle " +
   "shadow-[inset_0_1px_2px_rgb(0_0_0/0.12)] transition-[border-color,box-shadow,background-color] duration-200 ease-out-expo " +
-  "hover:border-border-strong focus:border-[color-mix(in_oklab,var(--accent)_70%,var(--border-strong))] focus:outline-none " +
-  "focus:shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_22%,transparent),inset_0_1px_2px_rgb(0_0_0/0.1)] " +
+  "hover:border-border-strong focus:border-accent focus:outline-none " +
+  "focus:shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_38%,transparent),inset_0_1px_2px_rgb(0_0_0/0.1)] " +
   "disabled:cursor-not-allowed disabled:opacity-60 " +
-  "aria-[invalid=true]:border-danger aria-[invalid=true]:focus:shadow-[0_0_0_3px_color-mix(in_oklab,var(--danger)_22%,transparent)]";
+  "aria-[invalid=true]:border-danger aria-[invalid=true]:focus:shadow-[0_0_0_3px_color-mix(in_oklab,var(--danger)_38%,transparent)]";
 
 /** Native selects get a theme-neutral chevron (see `.select-chevron` in globals.css). */
 const selectChevron = "select-chevron";
@@ -134,7 +134,7 @@ export function Switch({
           "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-[background-color,border-color,box-shadow] duration-200 ease-out-expo disabled:cursor-not-allowed disabled:opacity-50",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]",
           checked
-            ? "border-transparent bg-accent shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_0_16px_-4px_color-mix(in_oklab,var(--accent)_70%,transparent)]"
+            ? "border-transparent bg-accent-fill shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_0_16px_-4px_color-mix(in_oklab,var(--accent)_70%,transparent)]"
             : "border-border-strong bg-surface-3",
         )}
       >

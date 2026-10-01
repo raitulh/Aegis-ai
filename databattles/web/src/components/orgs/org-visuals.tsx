@@ -112,7 +112,7 @@ export function Stepper({ steps, label, className }: { steps: { label: ReactNode
                 done
                   ? "bg-success-soft text-success ring-1 ring-inset ring-[color-mix(in_oklab,var(--success)_30%,transparent)]"
                   : current
-                    ? "bg-accent text-accent-fg shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_18%,transparent)]"
+                    ? "bg-accent-fill text-accent-fg shadow-[0_0_0_4px_color-mix(in_oklab,var(--accent)_18%,transparent)]"
                     : "bg-surface-3 text-subtle",
               )}
             >

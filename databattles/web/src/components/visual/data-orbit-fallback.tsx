@@ -22,10 +22,24 @@ function onEllipse(angle: number, rx = RX, ry = RY) {
  * 2.5D SVG rendition of the Data Orbit. It is the server-rendered first paint, the reduced-motion view and
  * the fallback when WebGL is unavailable or the GPU context is lost — so it has to stand on its own.
  */
-export function DataOrbitFallback({ className, active, onActive }: { className?: string; active?: number | null; onActive?: (i: number | null) => void }) {
+export function DataOrbitFallback({
+  className,
+  active,
+  onActive,
+  theme = "dark",
+}: {
+  className?: string;
+  active?: number | null;
+  onActive?: (i: number | null) => void;
+  theme?: "dark" | "light";
+}) {
   const id = useId().replace(/:/g, "");
   const n = ORBIT_CONCEPTS.length;
-  const nodes = ORBIT_CONCEPTS.map((c, i) => ({ ...c, ...onEllipse((i / n) * Math.PI * 2 - Math.PI / 2) }));
+  const nodes = ORBIT_CONCEPTS.map((c, i) => ({
+    ...c,
+    color: theme === "light" ? c.colorLight : c.color,
+    ...onEllipse((i / n) * Math.PI * 2 - Math.PI / 2),
+  }));
   const tiltDeg = (TILT * 180) / Math.PI;
   return (
     <svg viewBox="0 0 600 600" className={cn("h-full w-full", className)} aria-hidden fill="none">

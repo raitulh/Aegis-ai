@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Copy, UploadCloud } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
@@ -46,7 +46,7 @@ export function ProgressRing({ value, size = 44, stroke = 4 }: { value: number; 
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const v = Math.max(0, Math.min(100, value));
-  const gid = `pr-${size}-${stroke}`;
+  const gid = `pr${useId().replace(/:/g, "")}`;
   return (
     <svg width={size} height={size} role="img" aria-label={`${Math.round(v)}% complete`}>
       <defs>

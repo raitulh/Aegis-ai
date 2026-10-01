@@ -207,7 +207,7 @@ function SnapshotHistory({ slug }: { slug: string }) {
               aria-hidden
               className={cn(
                 "absolute -left-6 top-4 flex h-[15px] w-[15px] items-center justify-center rounded-full border-2",
-                s.is_current ? "border-transparent bg-accent text-accent-fg" : "border-border-strong bg-bg",
+                s.is_current ? "border-transparent bg-accent-fill text-accent-fg" : "border-border-strong bg-bg",
               )}
             >
               <GitCommitVertical className="h-2.5 w-2.5" />

@@ -359,7 +359,7 @@ export function QuizPanel({
                       aria-hidden
                       className={cn(
                         "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border font-mono text-[11px] font-medium transition-colors duration-200",
-                        checked ? "border-transparent bg-accent text-accent-fg" : "border-border-strong text-subtle group-hover:text-fg",
+                        checked ? "border-transparent bg-accent-fill text-accent-fg" : "border-border-strong text-subtle group-hover:text-fg",
                       )}
                     >
                       {letter(oi)}

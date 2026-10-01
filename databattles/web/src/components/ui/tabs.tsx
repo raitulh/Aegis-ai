@@ -12,9 +12,9 @@ import { cn } from "@/lib/cn";
  * soft pill. Works for Radix tabs (data-state) and route tabs (aria-current).
  */
 const TAB =
-  "relative -mb-px shrink-0 rounded-t-md px-3 py-2.5 text-sm font-medium text-muted transition-colors duration-200 hover:text-fg " +
+  "relative shrink-0 rounded-t-md px-3 py-2.5 text-sm font-medium text-muted transition-colors duration-200 hover:text-fg " +
   "before:absolute before:inset-x-1 before:inset-y-1.5 before:-z-10 before:rounded-md before:bg-surface-2 before:opacity-0 before:transition-opacity hover:before:opacity-100 " +
-  "after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-brand after:opacity-0 after:transition-[transform,opacity] after:duration-300 after:ease-out-expo after:scale-x-0 " +
+  "after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-brand after:opacity-0 after:transition-[scale,opacity] after:duration-300 after:ease-out-expo after:scale-x-0 " +
   "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)] isolate";
 
 export function Tabs({ value, onValueChange, defaultValue, tabs, children }: {
@@ -26,7 +26,7 @@ export function Tabs({ value, onValueChange, defaultValue, tabs, children }: {
 }) {
   return (
     <RT.Root value={value} onValueChange={onValueChange} defaultValue={defaultValue ?? tabs[0]?.value}>
-      <RT.List className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]" aria-label="Sections">
+      <RT.List className="flex gap-1 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none]" aria-label="Sections">
         {tabs.map((t) => (
           <RT.Trigger
             key={t.value}
@@ -34,7 +34,7 @@ export function Tabs({ value, onValueChange, defaultValue, tabs, children }: {
             className={cn(TAB, "data-[state=active]:text-fg data-[state=active]:after:scale-x-100 data-[state=active]:after:opacity-100")}
           >
             {t.label}
-            {t.count !== undefined ? <span className="tabular ml-1.5 rounded-full bg-surface-3 px-1.5 py-px text-[11px] text-subtle">{t.count}</span> : null}
+            {t.count !== undefined ? <span className="tabular ml-1.5 rounded-full bg-surface-2 px-1.5 py-px text-[11px] text-muted">{t.count}</span> : null}
           </RT.Trigger>
         ))}
       </RT.List>
@@ -66,7 +66,7 @@ export function NavTabs({
   return (
     <nav
       className={cn(
-        "flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]",
+        "flex gap-1 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none]",
         sticky && "sticky top-14 z-30 -mx-4 bg-[var(--glass-strong)] px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:top-[4.25rem] lg:mx-0 lg:rounded-t-[var(--radius-md)] lg:px-1",
         className,
       )}

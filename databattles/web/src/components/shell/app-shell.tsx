@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { Logo, LogoMark } from "@/components/brand/logo";
 import { Avatar } from "@/components/ui/avatar";
@@ -128,7 +128,7 @@ function NotificationBell() {
     >
       <Bell className="h-4 w-4" />
       {n > 0 ? (
-        <span className="tabular absolute right-0.5 top-0.5 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] font-semibold leading-4 text-accent-fg shadow-[0_0_0_2px_var(--bg)] animate-pop">
+        <span className="tabular absolute right-0.5 top-0.5 min-w-4 rounded-full bg-accent-fill px-1 text-center text-[10px] font-semibold leading-4 text-accent-fg shadow-[0_0_0_2px_var(--bg)] animate-pop">
           {n > 99 ? "99+" : n}
         </span>
       ) : null}
@@ -249,14 +249,32 @@ function DesktopNav({ pathname }: { pathname: string }) {
   );
 }
 
-function MobileNav({ open, onOpenChange, onSearch, pathname }: { open: boolean; onOpenChange: (o: boolean) => void; onSearch: () => void; pathname: string }) {
+function MobileNav({
+  open,
+  onOpenChange,
+  onSearch,
+  pathname,
+  returnFocusRef,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onSearch: () => void;
+  pathname: string;
+  returnFocusRef: RefObject<HTMLButtonElement | null>;
+}) {
   const me = useMe().data;
   const signOut = useSignOut();
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal>
         <RD.Overlay className="fixed inset-0 z-50 bg-[rgb(3_4_8/0.55)] backdrop-blur-sm data-[state=open]:animate-fade-in lg:hidden" />
-        <RD.Content className="fixed inset-x-2 top-2 z-50 max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-[var(--radius-xl)] border border-border-strong bg-surface/95 p-4 shadow-elevated backdrop-blur-xl outline-none data-[state=open]:animate-[menu-in_220ms_var(--ease-out)_both] lg:hidden">
+        <RD.Content
+          // The opener lives outside the dialog (no Radix trigger), so hand focus back to it explicitly.
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+          className="fixed inset-x-2 top-2 z-50 max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-[var(--radius-xl)] border border-border-strong bg-surface/95 p-4 shadow-elevated backdrop-blur-xl outline-none data-[state=open]:animate-[menu-in_220ms_var(--ease-out)_both] lg:hidden">
           <div className="flex items-center justify-between">
             <Logo />
             <RD.Close className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-fg" aria-label="Close menu">
@@ -354,6 +372,7 @@ function TopNav({ onSearch }: { onSearch: () => void }) {
   const me = useMe();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -406,12 +425,13 @@ function TopNav({ onSearch }: { onSearch: () => void }) {
             </>
           ) : (
             <>
-              <LinkButton href="/login" variant="ghost" size="sm" className="hidden min-[380px]:inline-flex">Sign in</LinkButton>
+              <LinkButton href="/login" variant="ghost" size="sm" className="px-2.5 min-[380px]:px-3">Sign in</LinkButton>
               <LinkButton href="/signup" size="sm" className="hidden sm:inline-flex">Get started</LinkButton>
             </>
           )}
           <button
-            className="ml-0.5 inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] text-muted transition-colors hover:bg-surface-2 hover:text-fg lg:hidden"
+            ref={menuButtonRef}
+            className="ml-0.5 inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] text-muted transition-colors hover:bg-surface-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)] lg:hidden"
             aria-label="Open menu"
             aria-expanded={open}
             onClick={() => setOpen(true)}
@@ -420,7 +440,7 @@ function TopNav({ onSearch }: { onSearch: () => void }) {
           </button>
         </div>
       </div>
-      <MobileNav open={open} onOpenChange={setOpen} onSearch={onSearch} pathname={pathname} />
+      <MobileNav open={open} onOpenChange={setOpen} onSearch={onSearch} pathname={pathname} returnFocusRef={menuButtonRef} />
     </header>
   );
 }

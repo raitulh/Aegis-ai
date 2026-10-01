@@ -36,7 +36,7 @@ export function DatasetShowcase() {
           index="03"
           eyebrow="Data"
           title="Versioned datasets, ready to train on."
-          description="Licensed, versioned and checksummed — with previews before you download. These are the most downloaded right now."
+          description="Licensed, versioned and checksummed — with previews before you download. Sorted by total downloads."
           action={
             <LinkButton href="/datasets" variant="secondary" icon={<ArrowRight className="h-4 w-4" />}>
               Browse datasets
@@ -88,9 +88,9 @@ export function DatasetShowcase() {
                         {String(i + 1).padStart(2, "0")}
                       </span>
                       <span className="min-w-0">
-                        <span className="flex items-center gap-2">
-                          <span className="truncate font-medium text-fg transition-colors group-hover:text-accent-strong">{d.title}</span>
-                          {d.is_demo ? <DemoBadge className="hidden sm:inline-flex" /> : null}
+                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="min-w-0 max-w-full truncate font-medium text-fg transition-colors group-hover:text-accent-strong">{d.title}</span>
+                          {d.is_demo ? <DemoBadge /> : null}
                         </span>
                         <span className="block truncate text-xs text-subtle">{d.subtitle ?? d.license_name}</span>
                       </span>

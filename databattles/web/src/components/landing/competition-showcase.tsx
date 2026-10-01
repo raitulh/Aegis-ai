@@ -13,7 +13,7 @@ import type { CompetitionCard as CompetitionCardT } from "@/lib/types";
 import { SectionHeading } from "./section-heading";
 
 /** Featured competitions as a bento: the lead event gets the large tile, the rest flank it. */
-export function CompetitionShowcase({ items, loading }: { items?: CompetitionCardT[]; loading: boolean }) {
+export function CompetitionShowcase({ items, loading, error = false }: { items?: CompetitionCardT[]; loading: boolean; error?: boolean }) {
   const list = items ?? [];
   const shown = list.slice(0, 5);
   const bento = shown.length >= 3;
@@ -68,6 +68,13 @@ export function CompetitionShowcase({ items, loading }: { items?: CompetitionCar
                 </Reveal>
               ) : null}
             </div>
+          ) : error ? (
+            <EmptyState
+              icon={<Trophy />}
+              title="Featured competitions are unavailable right now"
+              description="The live data couldn't be loaded. You can still browse every competition."
+              action={<LinkButton href="/competitions" variant="secondary">Browse competitions</LinkButton>}
+            />
           ) : (
             <EmptyState
               icon={<Trophy />}
