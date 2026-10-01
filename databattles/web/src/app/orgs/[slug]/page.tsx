@@ -244,7 +244,7 @@ function OrgHeader({ org }: { org: OrgDetail }) {
         <MetaItem icon={<Trophy />} label="Competitions">
           <ListCount n={org.competitions.length} />
           {org.sponsored_competitions.length ? (
-            <span className="tabular ml-1.5 text-xs font-normal text-subtle">+{org.sponsored_competitions.length} sponsored</span>
+            <span className="ml-1.5 text-xs font-normal text-subtle">+<ListCount n={org.sponsored_competitions.length} /> sponsored</span>
           ) : null}
         </MetaItem>
         <MetaItem icon={<BookOpen />} label="Courses">

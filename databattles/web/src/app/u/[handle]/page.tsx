@@ -187,7 +187,9 @@ const STATS: { key: keyof PublicProfile["stats"]; label: string; icon: LucideIco
 ];
 
 function Hero({ p }: { p: PublicProfile }) {
-  const uni = p.verified.university ?? p.self_declared.university;
+  // Only the verified university belongs in the identity line; a self-declared one stays in the About section,
+  // labelled as such, so verified and self-declared information never mix.
+  const uni = p.verified.university;
   return (
     <section aria-label="Profile summary" className="relative mt-6 overflow-hidden rounded-[var(--radius-2xl)] border border-border bg-surface shadow-elevated sm:mt-8">
       <Cover style={p.cover_style} className="h-28 sm:h-44">
@@ -217,7 +219,7 @@ function Hero({ p }: { p: PublicProfile }) {
                 <Link href={`/orgs/${uni.slug}`} className={cn("inline-flex min-w-0 items-center gap-1.5", linkCls)}>
                   <GraduationCap className="h-3.5 w-3.5 shrink-0 text-subtle" aria-hidden />
                   <span className="truncate">{uni.name}</span>
-                  {p.verified.university ? <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-success" aria-label="Verified member" /> : null}
+                  <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-success" aria-label="Verified member" />
                 </Link>
               </>
             ) : null}
@@ -757,7 +759,7 @@ function Profile({ p, privacy }: { p: PublicProfile; privacy: Record<string, boo
                   </PortfolioSection>
                 ) : null}
                 {p.badges.length ? (
-                  <PortfolioSection id="constellation" eyebrow="Achievement constellation" title="Badges earned" description="Awarded by the platform when the criteria were met.">
+                  <PortfolioSection id="constellation" eyebrow="Achievement constellation" title="Badges earned" description="Awarded automatically when criteria are met, or by organizers for manual badges.">
                     <BadgeShowcase p={p} />
                   </PortfolioSection>
                 ) : null}

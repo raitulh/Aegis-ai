@@ -202,7 +202,7 @@ export function EntitlementList({ entitlements, className }: { entitlements: Rec
 
 export function PlanPrice({ cents, size = "md" }: { cents: number; size?: "md" | "lg" }) {
   const big = size === "lg" ? "text-[2.5rem] leading-none tracking-[-0.04em]" : "text-2xl tracking-[-0.02em]";
-  // Zero-price plans show the amount too: the plan name (usually "Free") is already the heading right above it.
+  if (!cents) return <span className={cn("font-semibold text-fg", big)}>Free</span>;
   return (
     <span className="inline-flex items-baseline gap-1">
       <span className={cn("font-semibold tabular-nums text-fg", big)}>{formatMoney(cents)}</span>

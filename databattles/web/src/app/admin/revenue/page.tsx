@@ -49,7 +49,7 @@ export default function AdminRevenuePage() {
               </InlineNotice>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Stat label="Monthly recurring revenue" value={formatMoney(r.mrr_cents)} icon={<CreditCard className="h-4 w-4" />} hint="Sum of list prices × active subscriptions" />
-                <Stat label="Active subscriptions" accent="cyan" value={formatNumber(subs)} icon={<Building2 className="h-4 w-4" />} hint={`Across ${formatNumber(r.plans.length)} plans`} />
+                <Stat label="Active subscriptions" accent="cyan" value={formatNumber(subs)} icon={<Building2 className="h-4 w-4" />} hint={`Across ${formatNumber(r.plans.filter((p) => p.active_subscriptions > 0).length)} of ${formatNumber(r.plans.length)} plans`} />
                 <Stat
                   label="Payment failures"
                   accent={r.payment_failures ? "danger" : "success"}

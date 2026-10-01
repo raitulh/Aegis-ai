@@ -121,7 +121,7 @@ export default function AdminFlagsPage() {
   return (
     <div className="space-y-10">
       <div>
-        <AdminHeader eyebrow="Governance" icon={<Flag />} title="Feature flags" description="Toggles take effect immediately and are recorded in the audit log." />
+        <AdminHeader eyebrow="Governance" icon={<Flag />} title="Feature flags" description="Server-side checks update immediately; open browsers pick up public flags within a few minutes. Every change is recorded in the audit log." />
         <QueryState
           query={flags}
           loading={<SkeletonRows rows={5} />}

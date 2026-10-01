@@ -54,15 +54,28 @@ const STEP_ICONS = { basics: FileText, schedule: CalendarClock, participation: U
 const labelOf = (list: { value: string; label: string }[], v: string) => list.find((o) => o.value === v)?.label ?? v;
 
 /** Read-only recap of what has been entered so far (the organizer's own input, nothing else). */
-function DraftSummary({ form, hosts }: { form: CompetitionFormState; hosts: HostOption[] }) {
+function DraftSummary({ form, hosts, isAdmin, hostsLoading }: { form: CompetitionFormState; hosts: HostOption[]; isAdmin: boolean; hostsLoading: boolean }) {
   const tz = form.timezone || "UTC";
   const starts = zonedInputToUtc(form.starts_at, tz);
   const ends = zonedInputToUtc(form.ends_at, tz);
-  const host = hosts.find((h) => h.id === form.host_org_id)?.name;
+  // Same labels the host select uses, so the recap never contradicts the form.
+  const host = form.host_org_id
+    ? (hosts.find((h) => h.id === form.host_org_id)?.name ?? (hostsLoading ? "Loading…" : "Current host"))
+    : isAdmin
+      ? "No host (platform event)"
+      : hostsLoading
+        ? "Loading…"
+        : "Not chosen";
+  // Dates are shown in the event time zone the organizer typed them in.
   const rows: [string, string][] = [
     ["Type", `${labelOf(EVENT_TYPES, form.event_type)} · ${labelOf(TASK_TYPES, form.task_type)}`],
-    ["Host", host ?? "Not chosen"],
-    ["Window", starts && ends ? `${formatDate(starts, { month: "short", day: "numeric" })} → ${formatDate(ends, { month: "short", day: "numeric", year: "numeric" })}` : "Dates not set"],
+    ["Host", host],
+    [
+      "Window",
+      starts && ends
+        ? `${formatDate(starts, { month: "short", day: "numeric", timeZone: tz })} → ${formatDate(ends, { month: "short", day: "numeric", year: "numeric", timeZone: tz })} (${tz})`
+        : "Dates not set",
+    ],
     ["Visibility", labelOf(VISIBILITIES, form.visibility)],
     ["Scoring", labelOf(SCORING_MODES, form.scoring_mode)],
   ];
@@ -358,7 +371,7 @@ export default function NewCompetitionPage() {
             <p className="mt-3 hidden text-xs text-subtle lg:block">Your progress is saved automatically in this browser.</p>
           </nav>
           <div className="mt-5 hidden lg:block">
-            <DraftSummary form={form} hosts={hosts} />
+            <DraftSummary form={form} hosts={hosts} isAdmin={isAdmin} hostsLoading={memberships.isPending} />
           </div>
         </aside>
 

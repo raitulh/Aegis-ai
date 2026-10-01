@@ -225,7 +225,8 @@ function CustomizeDialog({ prefs }: { prefs: DashboardData["prefs"] }) {
     >
       <p className="mb-3 text-xs leading-relaxed text-muted">
         On phones and tablets, widgets appear in exactly this order. On wide screens, widgets tagged{" "}
-        <span className="font-medium text-fg">Side rail</span> stack beside the main column, keeping the same relative order.
+        <span className="font-medium text-fg">Side rail</span> stack beside the main column in the same relative order —
+        unless you move one above every main widget, which keeps it at the top of the main column.
       </p>
       <ol className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-bg-elevated/40" aria-label="Dashboard widgets">
         {order.map((id, i) => {
@@ -395,8 +396,11 @@ export default function DashboardPage() {
   }
   const d = dash.data;
   const visible = layout.order.filter((id) => !layout.hidden.includes(id));
-  const visibleMain = visible.filter((id) => WIDGET_META[id].zone === "main");
-  const visibleSide = visible.filter((id) => WIDGET_META[id].zone === "side");
+  // The saved order wins: a rail widget the user moved above every main widget stays at the top of the main column.
+  const firstMain = visible.findIndex((id) => WIDGET_META[id].zone === "main");
+  const inMain = (id: (typeof visible)[number], i: number) => WIDGET_META[id].zone === "main" || i < firstMain;
+  const visibleMain = visible.filter((id, i) => inMain(id, i));
+  const visibleSide = visible.filter((id, i) => !inMain(id, i));
   // If every main-column widget is hidden, the side widgets move into the main column instead of leaving it empty.
   const mainIds = visibleMain.length ? visibleMain : visibleSide;
   const sideIds = visibleMain.length ? visibleSide : [];

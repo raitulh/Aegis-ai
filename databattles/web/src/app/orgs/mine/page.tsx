@@ -143,7 +143,7 @@ export default function MyOrgsPage() {
         {(rows) => (
           <div className="space-y-8">
             <Group title="You manage" hint="Open the admin console to run members, invites and settings." rows={rows.filter((m) => m.status === "active" && isManagerRole(m.role))} />
-            <Group title="Member of" hint="Memberships shown on your profile." rows={rows.filter((m) => m.status === "active" && !isManagerRole(m.role))} />
+            <Group title="Member of" hint="Visible to you and each organization. A verified university membership can also appear on your profile." rows={rows.filter((m) => m.status === "active" && !isManagerRole(m.role))} />
             <Group title="Awaiting review" hint="An administrator reviews each request." rows={rows.filter((m) => m.status === "pending")} />
             <Group title="Past memberships" hint="Declined or removed." rows={rows.filter((m) => m.status !== "active" && m.status !== "pending")} />
           </div>

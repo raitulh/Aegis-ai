@@ -241,5 +241,6 @@ function CompareScroller({ planCount, children }: { planCount: number; children:
 }
 
 function PlanPriceInline({ cents }: { cents: number }) {
+  if (!cents) return <span>Free</span>;
   return <span className="tabular">{formatMoney(cents)}/mo</span>;
 }

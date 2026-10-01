@@ -21,6 +21,7 @@ import { CountUp } from "@/components/motion/count-up";
 import type { DashboardData, PublicProfile } from "@/components/profile/types";
 import { cn } from "@/lib/cn";
 import { formatNumber, relativeTime } from "@/lib/format";
+import { useNow } from "@/lib/hooks";
 import { COMPLETION_ITEMS } from "./widgets";
 
 // ----------------------------------------------------------------------------- greeting
@@ -58,6 +59,8 @@ interface Tile {
  * only ever shown as a lower bound — never as a total.
  */
 const LEARNING_LIST_CAP = 4;
+/** The profile's joined-competitions list is capped server-side; at the cap the count is a lower bound. */
+const JOINED_LIST_CAP = 30;
 
 const count = (n: number, one: string, many: string) => `${formatNumber(n)} ${n === 1 ? one : many}`;
 
@@ -78,13 +81,20 @@ export function MetricsStrip({ d, profile }: { d: DashboardData; profile?: Publi
       ? `${formatNumber(LEARNING_LIST_CAP)}+ in progress`
       : `${formatNumber(inProgress)} in progress`;
 
+  // The dashboard list holds every joined published competition (upcoming, active or ended): count the active ones.
+  const activeCount = d.active_competitions.filter((c) => c.status === "active").length;
+  const joined = stats
+    ? stats.competitions >= JOINED_LIST_CAP
+      ? `${formatNumber(JOINED_LIST_CAP)}+ joined`
+      : `${formatNumber(stats.competitions)} joined`
+    : null;
   const tiles: Tile[] = [
     {
       key: "competitions",
       label: "Competitions",
       icon: Trophy,
-      value: d.active_competitions.length,
-      hint: stats ? `active · ${formatNumber(stats.competitions)} joined in total` : "active now",
+      value: activeCount,
+      hint: joined ? `active now · ${joined}` : "active now",
       tone: "text-accent-strong",
     },
     {
@@ -173,7 +183,7 @@ interface NextAction {
 }
 
 /** Suggestions derived only from the dashboard payload — each points at a real place to act. */
-function nextActions(d: DashboardData): NextAction[] {
+function nextActions(d: DashboardData, now: number): NextAction[] {
   const out: NextAction[] = [];
   if (d.invitations.length) {
     const n = d.invitations.length;
@@ -185,7 +195,10 @@ function nextActions(d: DashboardData): NextAction[] {
       href: "/invites",
     });
   }
-  const closing = d.active_competitions.filter((c) => c.ends_at).sort((a, b) => String(a.ends_at).localeCompare(String(b.ends_at)))[0];
+  // Only competitions you can still submit to: active and not yet past their end.
+  const closing = d.active_competitions
+    .filter((c) => c.status === "active" && c.ends_at && new Date(c.ends_at).getTime() > now)
+    .sort((a, b) => String(a.ends_at).localeCompare(String(b.ends_at)))[0];
   if (closing) {
     out.push({
       key: "compete",
@@ -200,9 +213,15 @@ function nextActions(d: DashboardData): NextAction[] {
       href: `/competitions/${closing.slug}/submissions`,
     });
   } else if (d.recommended[0]) {
-    out.push({ key: "explore", icon: Compass, title: `Explore ${d.recommended[0].title}`, detail: "Recommended for you", href: `/competitions/${d.recommended[0].slug}` });
+    out.push({
+      key: "explore",
+      icon: Compass,
+      title: `Explore ${d.recommended[0].title}`,
+      detail: d.recommendation_basis === "declared_interests" ? "Matches your declared interests" : "Upcoming public competition",
+      href: `/competitions/${d.recommended[0].slug}`,
+    });
   } else {
-    out.push({ key: "browse", icon: Compass, title: "Find a competition to join", detail: "Beginner-friendly and solo events included", href: "/competitions" });
+    out.push({ key: "browse", icon: Compass, title: "Find a competition to join", detail: "Browse open competitions", href: "/competitions" });
   }
   const course = [...d.learning].filter((c) => c.progress_pct < 100).sort((a, b) => b.progress_pct - a.progress_pct)[0];
   if (course) {
@@ -213,13 +232,14 @@ function nextActions(d: DashboardData): NextAction[] {
     out.push({ key: "profile", icon: UserRoundCheck, title: missing.label, detail: `Profile ${Math.round(d.profile_completion.percent)}% complete`, href: missing.href });
   }
   if (!course && out.length < 4) {
-    out.push({ key: "course", icon: BookOpen, title: "Start a short course", detail: "Courses award certificates and badges", href: "/learn" });
+    out.push({ key: "course", icon: BookOpen, title: "Start a short course", detail: "Short practical courses", href: "/learn" });
   }
   return out.slice(0, 4);
 }
 
 export function UpNext({ d, className }: { d: DashboardData; className?: string }) {
-  const items = nextActions(d);
+  const now = useNow(60_000).getTime();
+  const items = nextActions(d, now);
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className={cn("relative", className)}>

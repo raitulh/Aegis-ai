@@ -113,10 +113,14 @@ function useIsLg() {
   return useSyncExternalStore(subscribeLg, () => window.matchMedia(LG_QUERY).matches, () => false);
 }
 
+/** Matches the backend's `.limit(50)` on GET /auth/dev/mailbox. */
+const MAILBOX_LIMIT = 50;
+
 /** Development-only view of the email outbox (the API returns 404 in production). */
 export default function DevMailboxPage() {
   const q = useQuery({ queryKey: ["dev-mailbox"], queryFn: () => get<Mail[]>("/auth/dev/mailbox"), refetchInterval: 5000 });
   const [selected, setSelected] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
   const isLg = useIsLg();
   return (
     <Container size="xl" className="pb-20">
@@ -130,7 +134,14 @@ export default function DevMailboxPage() {
             {q.data ? (
               <span className="inline-flex items-center gap-1.5">
                 <MailIcon className="h-3.5 w-3.5" aria-hidden />
-                <span className="tabular">{formatNumber(q.data.length)}</span> {q.data.length === 1 ? "message" : "messages"}
+                {/* The API returns at most the 50 newest outbox rows, so at the cap this is a window, not a total. */}
+                {q.data.length >= MAILBOX_LIMIT ? (
+                  <>Latest <span className="tabular">{formatNumber(MAILBOX_LIMIT)}</span> messages</>
+                ) : (
+                  <>
+                    <span className="tabular">{formatNumber(q.data.length)}</span> {q.data.length === 1 ? "message" : "messages"}
+                  </>
+                )}
               </span>
             ) : null}
             <span className="inline-flex items-center gap-1.5">
@@ -158,12 +169,21 @@ export default function DevMailboxPage() {
                 <ul className="divide-y divide-border lg:max-h-[calc(100dvh-16rem)] lg:overflow-y-auto">
                   {mails.map((m) => {
                     const on = m.id === current.id;
+                    const firstLink = bodyLinks(m.text_body)[0];
                     return (
                       <li key={m.id} className="min-w-0">
                         <button
                           type="button"
                           aria-pressed={on}
-                          onClick={() => setSelected(m.id)}
+                          aria-expanded={!isLg ? on && !collapsed : undefined}
+                          onClick={() => {
+                            // On small screens a second tap on the open message collapses its inline reader.
+                            if (on && !isLg) setCollapsed((c) => !c);
+                            else {
+                              setSelected(m.id);
+                              setCollapsed(false);
+                            }
+                          }}
                           className={cn(
                             "relative block w-full min-w-0 px-4 py-3 text-left transition-colors",
                             "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]",
@@ -182,7 +202,17 @@ export default function DevMailboxPage() {
                             <span className="shrink-0">{titleCase(m.status)}</span>
                           </span>
                         </button>
-                        {on && !isLg ? (
+                        {firstLink ? (
+                          // Links stay one click away for every message (as in the original list), without changing selection.
+                          <a
+                            href={firstLink.href}
+                            className="mx-4 mb-3 -mt-1 flex min-w-0 items-center gap-1.5 truncate font-mono text-[11px] text-accent-strong hover:underline"
+                          >
+                            <ArrowUpRight className="h-3 w-3 shrink-0" aria-hidden />
+                            <span className="truncate">{firstLink.href}</span>
+                          </a>
+                        ) : null}
+                        {on && !isLg && !collapsed ? (
                           <div className="border-t border-border bg-bg-elevated/50 px-4 py-5 lg:hidden">
                             <MessageView m={m} />
                           </div>

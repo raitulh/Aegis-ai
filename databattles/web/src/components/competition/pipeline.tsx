@@ -41,7 +41,8 @@ function stepStates(status: string): { states: StepState[]; resultLabel: string 
     case "failed":
       return { states: ["done", "unknown", "unknown", "failed"], resultLabel: "Failed" };
     case "canceled":
-      return { states: ["failed", "skipped", "skipped", "skipped"], resultLabel: "Canceled" };
+      // Canceling is a deliberate choice while queued, not a pipeline failure: neutral, never red.
+      return { states: ["done", "skipped", "skipped", "skipped"], resultLabel: "Canceled" };
     default:
       return { states: ["idle", "idle", "idle", "idle"], resultLabel: "Scored" };
   }
@@ -93,7 +94,7 @@ export function SubmissionPipeline({ status, className }: { status: string; clas
               )}
             >
               {label}
-              <span className="sr-only">: {STATE_TEXT[state]}</span>
+              <span className="sr-only">: {status === "canceled" && i === STEPS.length - 1 ? "canceled" : STATE_TEXT[state]}</span>
             </span>
           </li>
         );

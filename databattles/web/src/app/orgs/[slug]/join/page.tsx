@@ -203,7 +203,7 @@ export default function JoinOrgPage() {
     },
     {
       label: "Verified membership",
-      hint: active && v.verified ? "Shown as verified on your profile." : pending ? "Waiting for an administrator." : "Confirm the link or get approved.",
+      hint: active && v.verified ? "Your membership is verified." : pending ? "Waiting for an administrator." : "Confirm the link or get approved.",
       state: active && v.verified ? "done" : pending || active ? "current" : "upcoming",
     },
   ];

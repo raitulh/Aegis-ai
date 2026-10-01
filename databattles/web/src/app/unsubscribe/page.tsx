@@ -79,7 +79,8 @@ function UnsubscribeInner() {
     return (
       <Panel footer={me.data === null ? <p className="text-center">You&apos;ll need to sign in to change other preferences.</p> : SECURITY_NOTE}>
         <span aria-hidden className="relative mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success-soft text-success ring-1 ring-inset ring-[color-mix(in_oklab,var(--success)_30%,transparent)] animate-pop">
-          <span className="absolute inset-0 rounded-full motion-safe:animate-pulse-ring" />
+          {/* One restrained pulse, not an endless loop. */}
+          <span className="absolute inset-0 rounded-full motion-safe:animate-pulse-ring" style={{ animationIterationCount: 1 }} />
           <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12.5l4.5 4.5L19 7.5" strokeDasharray="24" className="motion-safe:animate-check" />
           </svg>

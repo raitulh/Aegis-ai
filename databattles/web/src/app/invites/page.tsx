@@ -10,7 +10,7 @@ import { LinkButton } from "@/components/ui/button";
 import { Container, PageHeader } from "@/components/ui/page";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/states";
 import { get } from "@/lib/api";
-import { useRequireAuth } from "@/lib/hooks";
+import { useNow, useRequireAuth } from "@/lib/hooks";
 
 function InvitesSkeleton() {
   return (
@@ -42,7 +42,9 @@ export default function InvitesPage() {
     queryFn: () => get<Invitation[]>("/me/team-invitations"),
     enabled: signedIn,
   });
-  const count = query.data?.length;
+  const now = useNow(60_000).getTime();
+  // The API returns every pending invitation, including expired ones (the cards label those "Expired").
+  const count = query.data?.filter((i) => new Date(i.expires_at).getTime() > now).length;
 
   return (
     <Container size="md" className="pb-16">

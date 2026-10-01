@@ -326,14 +326,23 @@ function NotificationsInner() {
             <div className="space-y-8">
               {groups.map((g, gi) => {
                 const unreadInGroup = g.items.filter((n) => !n.read_at).length;
+                // While more pages exist, the last loaded day may be cut at a page boundary: show its counts as "N+".
+                const partial = gi === groups.length - 1 && Boolean(list.hasNextPage);
+                const plus = partial ? "+" : "";
                 return (
                   <section key={g.key} aria-labelledby={`day-${g.key}`} className={gi < 2 ? "animate-rise" : undefined} style={gi < 2 ? { animationDelay: `${gi * 60}ms` } : undefined}>
                     <div className="mb-2.5 flex items-center gap-3">
                       <h2 id={`day-${g.key}`} className="text-eyebrow text-fg">{g.label}</h2>
                       <span aria-hidden className="h-px flex-1 bg-border" />
                       <span className="tabular text-xs text-subtle">
-                        {g.items.length} {g.items.length === 1 ? "update" : "updates"}
-                        {unreadInGroup ? <span className="text-accent-strong"> · {unreadInGroup} unread</span> : null}
+                        {g.items.length}
+                        {plus} {g.items.length === 1 && !partial ? "update" : "updates"}
+                        {unreadInGroup ? (
+                          <span className="text-accent-strong">
+                            {" "}· {unreadInGroup}
+                            {plus} unread
+                          </span>
+                        ) : null}
                       </span>
                     </div>
                     <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen shadow-card">
