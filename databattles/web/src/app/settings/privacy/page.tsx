@@ -1,23 +1,24 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink } from "lucide-react";
+import { Award, ExternalLink, Globe, Lock, Trophy, UserRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Switch } from "@/components/ui/form";
-import { ErrorState, InlineNotice, SkeletonRows } from "@/components/ui/states";
+import { ErrorState, InlineNotice } from "@/components/ui/states";
 import { errorMessage, get, patch } from "@/lib/api";
 import { useRequireAuth } from "@/lib/hooks";
 import { qk } from "@/lib/query";
+import { SaveStatus, SettingsPageHeading, SettingsSection, SettingsSkeleton } from "../_components/settings-ui";
 
 type Privacy = Record<string, boolean>;
 const PRIVACY_KEY = ["me", "privacy"] as const;
 
-const GROUPS: { title: string; description: string; items: { key: string; label: string; description: string }[] }[] = [
+const GROUPS: { title: string; description: string; icon: LucideIcon; items: { key: string; label: string; description: string }[] }[] = [
   {
     title: "Profile details",
+    icon: UserRound,
     description: "Self-declared and verified details on your public profile.",
     items: [
       {
@@ -32,6 +33,7 @@ const GROUPS: { title: string; description: string; items: { key: string; label:
   },
   {
     title: "Activity & achievements",
+    icon: Award,
     description: "What others can see about what you've done on the platform.",
     items: [
       {
@@ -58,6 +60,7 @@ const GROUPS: { title: string; description: string; items: { key: string; label:
   },
   {
     title: "Leaderboards",
+    icon: Trophy,
     description: "How you appear next to your scores.",
     items: [
       {
@@ -69,6 +72,7 @@ const GROUPS: { title: string; description: string; items: { key: string; label:
   },
   {
     title: "Search engines",
+    icon: Globe,
     description: "Discoverability outside DataBattles.",
     items: [
       {
@@ -105,12 +109,20 @@ export default function PrivacySettingsPage() {
     },
   });
 
-  if (privacy.isPending) return <SkeletonRows rows={8} />;
-  if (privacy.isError) return <ErrorState error={privacy.error} onRetry={() => privacy.refetch()} />;
+  const description = "Decide what others can see on your public profile, on leaderboards and in search engines.";
+  if (privacy.isPending) return <SettingsSkeleton sections={3} rows={3} />;
+  if (privacy.isError)
+    return (
+      <div className="space-y-8">
+        <SettingsPageHeading icon={<Lock />} title="Privacy" description={description} />
+        <ErrorState error={privacy.error} onRetry={() => privacy.refetch()} />
+      </div>
+    );
   const values = privacy.data;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
+      <SettingsPageHeading icon={<Lock />} title="Privacy" description={description} actions={<SaveStatus state={update.status} idleLabel="All changes saved" />} />
       <InlineNotice
         tone="info"
         action={
@@ -123,12 +135,29 @@ export default function PrivacySettingsPage() {
       >
         Changes save instantly. Your email address is never shown publicly. Competition results stay on leaderboards regardless of these settings.
       </InlineNotice>
-      {GROUPS.map((g) => (
-        <Card key={g.title}>
-          <CardHeader title={g.title} description={g.description} />
-          <CardBody className="divide-y divide-border py-0">
+      {GROUPS.map((g) => {
+        const on = g.items.filter((item) => Boolean(values[item.key])).length;
+        return (
+          <SettingsSection
+            key={g.title}
+            title={
+              <span className="inline-flex items-center gap-2">
+                <g.icon className="h-4 w-4 text-subtle" aria-hidden />
+                {g.title}
+              </span>
+            }
+            description={g.description}
+            action={
+              g.items.length > 1 ? (
+                <span className="tabular font-mono text-[11px] uppercase tracking-[0.12em] text-subtle">
+                  {on}/{g.items.length} visible
+                </span>
+              ) : undefined
+            }
+            flush
+          >
             {g.items.map((item) => (
-              <div key={item.key} className="py-4">
+              <div key={item.key} className="px-5 py-4 transition-colors duration-150 hover:bg-surface-2/40 sm:px-6">
                 <Switch
                   checked={Boolean(values[item.key])}
                   disabled={update.isPending && update.variables && item.key in update.variables}
@@ -138,9 +167,9 @@ export default function PrivacySettingsPage() {
                 />
               </div>
             ))}
-          </CardBody>
-        </Card>
-      ))}
+          </SettingsSection>
+        );
+      })}
       <p className="text-xs text-subtle">
         Individual certificates, badges and results can also be hidden from{" "}
         <Link href="/settings/achievements" className="text-accent-strong hover:underline">achievement settings</Link>.

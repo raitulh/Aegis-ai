@@ -1,16 +1,15 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { GitBranch, KeyRound, ShieldCheck } from "lucide-react";
+import { GitBranch, KeyRound, Plug, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
 
 import type { GitHubAccountStatus } from "@/components/profile/types";
 import { Avatar } from "@/components/ui/avatar";
-import { VerifiedBadge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Badge, VerifiedBadge } from "@/components/ui/badge";
+import { Button, LinkButton } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { ErrorState, InlineNotice, SkeletonRows, Spinner } from "@/components/ui/states";
 import { API_BASE, del, get } from "@/lib/api";
@@ -18,6 +17,7 @@ import { formatDateTime, relativeTime } from "@/lib/format";
 import { useApiMutation, useRequireAuth } from "@/lib/hooks";
 import { qk } from "@/lib/query";
 import type { Message } from "@/lib/types";
+import { SettingsPageHeading } from "../_components/settings-ui";
 
 const ACCOUNT_KEY = ["opensource", "github", "account"] as const;
 
@@ -82,28 +82,57 @@ function GitHubCard() {
   });
 
   return (
-    <Card>
-      <CardHeader
-        title={<span className="inline-flex items-center gap-2"><GitBranch className="h-4 w-4" aria-hidden />GitHub</span>}
-        description="Link your GitHub account to have merged pull requests attributed to your profile and to verify you maintain your project repositories."
-      />
-      <CardBody>
+    <section aria-labelledby="integration-github" className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface surface-sheen shadow-card">
+      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+        <div className="flex min-w-0 items-start gap-4">
+          <span
+            aria-hidden
+            className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border-strong bg-surface-3 text-fg shadow-[inset_0_1px_0_var(--hairline-highlight)]"
+          >
+            <GitBranch className="h-5 w-5" />
+            {account.data?.connected ? (
+              <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-surface ring-2 ring-surface">
+                <span className="h-2.5 w-2.5 rounded-full bg-success shadow-[0_0_8px_var(--success)]" />
+              </span>
+            ) : null}
+          </span>
+          <div className="min-w-0">
+            <h3 id="integration-github" className="text-base font-semibold tracking-[-0.015em] text-fg">GitHub</h3>
+            <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-muted">
+              Link your GitHub account to have merged pull requests attributed to your profile and to verify you maintain your project repositories.
+            </p>
+          </div>
+        </div>
+        {account.data ? (
+          <div className="shrink-0 pl-16 sm:pl-0">
+            {account.data.connected ? (
+              <Badge tone="success">Connected</Badge>
+            ) : account.data.oauth_enabled ? (
+              <Badge tone="outline">Not connected</Badge>
+            ) : (
+              <Badge tone="warning">Unavailable</Badge>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="border-t border-border bg-bg-elevated/40 px-5 py-5 sm:px-6">
         {account.isPending ? (
           <SkeletonRows rows={2} />
         ) : account.isError ? (
           <ErrorState error={account.error} onRetry={() => account.refetch()} />
         ) : account.data.connected ? (
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <Avatar name={account.data.login ?? "GitHub"} src={account.data.avatar_url} size={44} />
-              <div>
+              <div className="min-w-0">
                 <p className="flex flex-wrap items-center gap-2 font-medium text-fg">
                   <a href={`https://github.com/${account.data.login}`} target="_blank" rel="noopener noreferrer" className="hover:text-accent-strong">
                     @{account.data.login}
                   </a>
                   <VerifiedBadge label="Linked via OAuth" />
                 </p>
-                <p className="text-xs text-muted">
+                <p className="mt-0.5 text-xs text-muted">
                   {account.data.connected_at ? (
                     <>Connected <span title={formatDateTime(account.data.connected_at)}>{relativeTime(account.data.connected_at)}</span></>
                   ) : "Connected"}
@@ -122,14 +151,18 @@ function GitHubCard() {
         ) : account.data.oauth_enabled ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted">Not connected. You&apos;ll be sent to GitHub to approve access, then returned here.</p>
-            {/* Full page navigation: the API sets a signed state cookie and redirects to GitHub. */}
-            <a
+            {/* Full page navigation: the API sets a signed state cookie and redirects to GitHub. `external` makes LinkButton
+                render a plain <a> (no client-side routing or prefetch); target/rel are reset so it stays in this tab. */}
+            <LinkButton
+              external
               href={`${API_BASE}/opensource/github/connect`}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-accent px-4 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]"
+              target="_self"
+              rel={undefined}
+              className="shrink-0"
+              icon={<GitBranch className="h-4 w-4" aria-hidden />}
             >
-              <GitBranch className="h-4 w-4" aria-hidden />
               Connect GitHub
-            </a>
+            </LinkButton>
           </div>
         ) : (
           <InlineNotice tone="warning" title="GitHub sign-in isn't configured on this deployment">
@@ -137,44 +170,56 @@ function GitHubCard() {
             open-source contributions can&apos;t be attributed until then.
           </InlineNotice>
         )}
+      </div>
 
-        <div className="mt-6 grid gap-4 border-t border-border pt-5 text-sm sm:grid-cols-2">
-          <div className="flex gap-3">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
-            <div>
-              <p className="font-medium text-fg">Least-privilege access</p>
-              <p className="mt-0.5 text-muted">
-                We request only the <span className="font-mono text-fg">read:user</span> scope — read-only access to your GitHub profile. No
-                repository access and no write permissions.
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
-            <div>
-              <p className="font-medium text-fg">Tokens stay on the server</p>
-              <p className="mt-0.5 text-muted">
-                Your access token is encrypted at rest and never sent to the browser. Disconnecting deletes it immediately.
-              </p>
-            </div>
+      <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2">
+        <div className="flex gap-3 bg-surface px-5 py-4 text-sm sm:px-6">
+          <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-success/25 bg-success-soft text-success">
+            <ShieldCheck className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="font-medium text-fg">Least-privilege access</p>
+            <p className="mt-0.5 text-[13px] leading-relaxed text-muted">
+              We request only the <span className="font-mono text-fg">read:user</span> scope — read-only access to your GitHub profile. No
+              repository access and no write permissions.
+            </p>
           </div>
         </div>
-        <p className="mt-4 text-xs text-subtle">
-          Only accounts linked here count — a GitHub username typed into a profile is never used for attribution. See the{" "}
-          <Link href="/open-source" className="text-accent-strong hover:underline">open-source hub</Link> for registered repositories.
-        </p>
-      </CardBody>
-    </Card>
+        <div className="flex gap-3 bg-surface px-5 py-4 text-sm sm:px-6">
+          <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-success/25 bg-success-soft text-success">
+            <KeyRound className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="font-medium text-fg">Tokens stay on the server</p>
+            <p className="mt-0.5 text-[13px] leading-relaxed text-muted">
+              Your access token is encrypted at rest and never sent to the browser. Disconnecting deletes it immediately.
+            </p>
+          </div>
+        </div>
+      </div>
+      <p className="border-t border-border bg-bg-elevated/50 px-5 py-3.5 text-xs leading-relaxed text-subtle sm:px-6">
+        Only accounts linked here count — a GitHub username typed into a profile is never used for attribution. See the{" "}
+        <Link href="/open-source" className="text-accent-strong hover:underline">open-source hub</Link> for registered repositories.
+      </p>
+    </section>
   );
 }
 
 export default function IntegrationsSettingsPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      <SettingsPageHeading
+        icon={<Plug />}
+        title="Integrations"
+        description="Connect outside accounts so your verified work counts on DataBattles."
+      />
       <Suspense fallback={<Spinner />}>
         <ResultNotice />
       </Suspense>
-      <GitHubCard />
+      <div>
+        <p className="mb-3 text-eyebrow text-subtle">Code hosting</p>
+        <GitHubCard />
+      </div>
     </div>
   );
 }
