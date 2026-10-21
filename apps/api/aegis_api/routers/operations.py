@@ -77,6 +77,18 @@ def ingest_trace(
     return AgentTraceOut.model_validate(agent_trace_service.ingest_trace(db, principal.organization_id, body))
 
 
+@router.post("/traces/opentelemetry", response_model=AgentTraceOut, status_code=201)
+def ingest_opentelemetry(
+    system_id: uuid.UUID,
+    payload: dict,
+    principal: Principal = Depends(require("traces:write")),
+    db: Session = Depends(get_db),
+) -> AgentTraceOut:
+    """Ingest OpenTelemetry OTLP / ResourceSpans format traces from LangChain, LlamaIndex, or CrewAI."""
+    trace = agent_trace_service.ingest_opentelemetry_trace(db, principal.organization_id, system_id, payload)
+    return AgentTraceOut.model_validate(trace)
+
+
 # --- red team ----------------------------------------------------------------------------------
 @router.get("/redteam/runs", response_model=Page[RedTeamRunOut])
 def list_redteam(

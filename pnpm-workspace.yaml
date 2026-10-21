@@ -1,8 +1,6 @@
 packages:
   - "apps/web"
-  - "packages/ui"
   - "packages/types"
-  - "packages/config"
 
 onlyBuiltDependencies:
   - esbuild

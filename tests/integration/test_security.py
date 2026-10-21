@@ -76,6 +76,33 @@ def test_api_key_revocation(client):
     assert client.get("/api/v1/overview", headers=headers).status_code == 401
 
 
+def test_api_key_rotation_and_update(client):
+    ws = signup(client, org="Rotation Org")
+    created = ws.post("/api/v1/api-keys", json={"name": "ci-key", "role": "analyst", "scopes": ["read"]}).json()
+    key_id = created["api_key"]["id"]
+    old_key = created["plaintext"]
+
+    # 1. Verify get API key
+    get_res = ws.get(f"/api/v1/api-keys/{key_id}")
+    assert get_res.status_code == 200
+    assert get_res.json()["name"] == "ci-key"
+
+    # 2. Update API key name
+    patch_res = ws.patch(f"/api/v1/api-keys/{key_id}", json={"name": "updated-ci-key"})
+    assert patch_res.status_code == 200
+    assert patch_res.json()["name"] == "updated-ci-key"
+
+    # 3. Rotate API key
+    rotated = ws.post(f"/api/v1/api-keys/{key_id}/rotate").json()
+    new_key = rotated["plaintext"]
+    assert new_key != old_key
+
+    # Old key is now revoked (401)
+    assert client.get("/api/v1/overview", headers={"Authorization": f"Bearer {old_key}"}).status_code == 401
+    # New key works (200)
+    assert client.get("/api/v1/overview", headers={"Authorization": f"Bearer {new_key}"}).status_code == 200
+
+
 def test_upload_rejects_wrong_type(workspace):
     policy = workspace.post("/api/v1/policies", json={"name": "P", "key": "PX"}).json()
     files = {"file": ("evil.exe", io.BytesIO(b"MZ\x90\x00binary"), "application/octet-stream")}

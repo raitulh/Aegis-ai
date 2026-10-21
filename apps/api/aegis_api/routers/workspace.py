@@ -26,7 +26,15 @@ from aegis_api.models import (
 )
 from aegis_api.models.enums import OPEN_FINDING_STATUSES, IntegrationKind, Role
 from aegis_api.routers._helpers import paginate
-from aegis_api.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut, InviteCreate, MemberOut, RoleUpdate
+from aegis_api.schemas.auth import (
+    ApiKeyCreate,
+    ApiKeyCreated,
+    ApiKeyOut,
+    ApiKeyUpdate,
+    InviteCreate,
+    MemberOut,
+    RoleUpdate,
+)
 from aegis_api.schemas.common import Message, Page, PageParams
 from aegis_api.schemas.findings import IntegrationOut, NotificationOut, OverviewStats, SearchResponse, SearchResult
 from aegis_api.security.context import Principal
@@ -369,6 +377,55 @@ def revoke_api_key(
         principal=principal,
     )
     return Message(message="API key revoked")
+
+
+@router.get("/api-keys/{key_id}", response_model=ApiKeyOut)
+def get_api_key(
+    key_id: uuid.UUID, principal: Principal = Depends(require("api_keys:manage")), db: Session = Depends(get_db)
+) -> ApiKeyOut:
+    key = api_key_service.get_api_key(db, key_id, principal.organization_id)
+    if key is None:
+        raise NotFound("API key not found")
+    return ApiKeyOut.model_validate(key)
+
+
+@router.patch("/api-keys/{key_id}", response_model=ApiKeyOut)
+def update_api_key(
+    key_id: uuid.UUID,
+    body: ApiKeyUpdate,
+    principal: Principal = Depends(require("api_keys:manage")),
+    db: Session = Depends(get_db),
+) -> ApiKeyOut:
+    updated = api_key_service.update_api_key(db, key_id, principal.organization_id, name=body.name, scopes=body.scopes)
+    if updated is None:
+        raise NotFound("API key not found")
+    audit_log.record(
+        db,
+        organization_id=principal.organization_id,
+        action="api_key.updated",
+        resource_type="api_key",
+        resource_id=key_id,
+        principal=principal,
+    )
+    return ApiKeyOut.model_validate(updated)
+
+
+@router.post("/api-keys/{key_id}/rotate", response_model=ApiKeyCreated)
+def rotate_api_key(
+    key_id: uuid.UUID, principal: Principal = Depends(require("api_keys:manage")), db: Session = Depends(get_db)
+) -> ApiKeyCreated:
+    issued = api_key_service.rotate_api_key(db, key_id, principal.organization_id, created_by_id=principal.user_id)
+    if issued is None:
+        raise NotFound("API key not found or already revoked")
+    audit_log.record(
+        db,
+        organization_id=principal.organization_id,
+        action="api_key.rotated",
+        resource_type="api_key",
+        resource_id=issued.api_key.id,
+        principal=principal,
+    )
+    return ApiKeyCreated(api_key=ApiKeyOut.model_validate(issued.api_key), plaintext=issued.plaintext)
 
 
 # --- integrations ------------------------------------------------------------------------------

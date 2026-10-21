@@ -17,6 +17,7 @@ from typing import Any
 
 from engines.evaluation.base import SystemInvocation, ToolCallRecord
 from engines.privacy.detectors import DEFAULT_DETECTOR, PIIDetector
+from engines.security.sanitizer import inspect_payload
 
 EMAIL = re.compile(r"[\w.+-]+@([\w-]+\.[\w.-]+)")
 
@@ -85,9 +86,23 @@ def evaluate_tool_call(
             }
         )
 
+    # Check for indirect prompt injection signatures in tool arguments
+    arg_inspection = inspect_payload(str(call.arguments))
+    if arg_inspection.threats_detected:
+        for threat in arg_inspection.threats:
+            violations.append(
+                {
+                    "code": "indirect_prompt_injection",
+                    "message": f"'{call.name}' arguments contain {threat.category} ({threat.severity}): '{threat.sample}'",
+                }
+            )
+
     highest = (
         "critical"
-        if any(v["code"] in ("destination_not_allowed", "sensitive_data_in_tool_call") for v in violations)
+        if any(
+            v["code"] in ("destination_not_allowed", "sensitive_data_in_tool_call", "indirect_prompt_injection")
+            for v in violations
+        )
         else "high"
         if violations
         else "info"

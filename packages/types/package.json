@@ -1,0 +1,9 @@
+{
+  "name": "@aegis/types",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "echo 'Generated types from openapi.json'"
+  }
+}

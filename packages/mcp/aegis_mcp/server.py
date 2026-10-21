@@ -96,6 +96,12 @@ def aegis_check_policy(policy_id: str) -> str:
     return _run(lambda c: c.policies.compile(policy_id))
 
 
+@mcp.tool()
+def aegis_list_api_keys() -> str:
+    """List API keys configured for programmatic access to the workspace."""
+    return _run(lambda c: {"api_keys": c.api_keys.list()})
+
+
 def main() -> None:
     mcp.run()
 

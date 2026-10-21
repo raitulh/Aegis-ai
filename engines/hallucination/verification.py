@@ -16,6 +16,7 @@ from engines.common.text import content_tokens, split_sentences, stable_hash, tr
 from engines.common.types import ClaimStatus
 from engines.evaluation.base import ClaimResult, ModelJudgment, RetrievedDoc
 from engines.hallucination.claims import ExtractedClaim, parse_numbers
+from engines.providers.embeddings import Embedder, cosine
 
 NEGATION = re.compile(r"\b(not|never|no|none|cannot|can't|isn't|aren't|wasn't|doesn't|don't|without)\b", re.I)
 FREE_WORDS = re.compile(r"\b(free|no extra cost|at no cost|no charge|included at no)\b", re.I)
@@ -50,13 +51,14 @@ def _numbers_match(claim_numbers: list[float], source_numbers: list[float]) -> b
     return all(any(abs(c - s) < 1e-9 for s in source_numbers) for c in claim_numbers)
 
 
-def verify_claim(claim: ExtractedClaim, docs: list[RetrievedDoc]) -> Verification:
+def verify_claim(claim: ExtractedClaim, docs: list[RetrievedDoc], embedder: Embedder | None = None) -> Verification:
     claim_tokens = set(content_tokens(claim.resolved))
     if not docs or not claim_tokens:
         return Verification(
             ClaimStatus.UNVERIFIABLE, 0.0, 0.0, "No evidence sources were available for this claim.", None
         )
     claim_non_numeric = {t for t in claim_tokens if not re.fullmatch(r"[\d.,]+", t)}
+    claim_vec = embedder.embed([claim.resolved])[0] if embedder is not None else None
     best_support: tuple[float, SourceSentence | None, str] = (0.0, None, "")
     best_contra: tuple[float, SourceSentence | None, str] = (0.0, None, "")
     for sent in _sentences(docs):
@@ -64,6 +66,10 @@ def verify_claim(claim: ExtractedClaim, docs: list[RetrievedDoc]) -> Verificatio
         if not sent_tokens:
             continue
         coverage = len(claim_non_numeric & sent_tokens) / max(len(claim_non_numeric), 1)
+        if claim_vec is not None and embedder is not None:
+            sent_vec = embedder.embed([sent.text])[0]
+            semantic_sim = max(0.0, cosine(claim_vec, sent_vec))
+            coverage = max(coverage, 0.65 * semantic_sim + 0.35 * coverage)
         source_numbers = parse_numbers(sent.text)
         support = coverage
         contradiction = 0.0

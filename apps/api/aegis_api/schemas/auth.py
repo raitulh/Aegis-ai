@@ -67,6 +67,11 @@ class ApiKeyCreate(BaseModel):
     test: bool = False
 
 
+class ApiKeyUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    scopes: list[str] | None = None
+
+
 class ApiKeyOut(ORMModel):
     id: str
     name: str

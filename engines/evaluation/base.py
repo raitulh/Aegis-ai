@@ -215,6 +215,7 @@ class EvaluationContext:
     system: SystemProfile = field(default_factory=SystemProfile)
     controls: dict[str, ControlSpec] = field(default_factory=dict)
     retriever: Retriever | None = None
+    embedder: Any | None = None  # engines.providers.embeddings.Embedder (optional semantic embedder)
     judge: Any | None = None  # engines.providers.router.ModelRouter (optional; never the sole signal)
     seed: int = 1337
     now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))

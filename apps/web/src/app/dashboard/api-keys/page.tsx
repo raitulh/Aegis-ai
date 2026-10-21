@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Copy, KeyRound, Plus, Trash2 } from "lucide-react";
+import { Copy, KeyRound, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { QueryBoundary } from "@/components/dashboard/query-boundary";
@@ -20,6 +20,18 @@ export default function ApiKeysPage() {
   async function revoke(id: string) {
     await api.delete(`/api-keys/${id}`).catch(() => {});
     invalidate("apiKeys");
+  }
+
+  async function rotate(id: string) {
+    if (!confirm("Rotating this key will revoke the old key immediately and issue a replacement. Continue?")) return;
+    try {
+      const res = await api.post<{ plaintext: string }>(`/api-keys/${id}/rotate`);
+      setCreated(res.plaintext);
+      invalidate("apiKeys");
+      toast.success("API key rotated. Copy your new key.");
+    } catch {
+      toast.error("Failed to rotate API key");
+    }
   }
 
   return (
@@ -50,7 +62,18 @@ export default function ApiKeysPage() {
                     <TD className="text-[var(--color-text-muted)]">{titleCase(k.role)}</TD>
                     <TD>{k.scopes.map((s) => <Badge key={s}>{s}</Badge>)}</TD>
                     <TD className="text-[var(--color-text-subtle)]">{k.last_used_at ? timeAgo(k.last_used_at) : "never"}</TD>
-                    <TD>{!k.revoked_at ? <button onClick={() => revoke(k.id)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-critical)]"><Trash2 className="h-4 w-4" /></button> : null}</TD>
+                    <TD>
+                      {!k.revoked_at ? (
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => rotate(k.id)} title="Rotate key" className="text-[var(--color-text-subtle)] hover:text-[var(--color-accent)]">
+                            <RefreshCw className="h-4 w-4" />
+                          </button>
+                          <button onClick={() => revoke(k.id)} title="Revoke key" className="text-[var(--color-text-subtle)] hover:text-[var(--color-critical)]">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : null}
+                    </TD>
                   </TR>
                 ))}
               </tbody>

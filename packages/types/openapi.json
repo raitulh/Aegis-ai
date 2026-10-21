@@ -3349,6 +3349,62 @@
         }
       }
     },
+    "/api/v1/traces/opentelemetry": {
+      "post": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Ingest Opentelemetry",
+        "description": "Ingest OpenTelemetry OTLP / ResourceSpans format traces from LangChain, LlamaIndex, or CrewAI.",
+        "operationId": "ingest_opentelemetry_api_v1_traces_opentelemetry_post",
+        "parameters": [
+          {
+            "name": "system_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "System Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTraceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/redteam/runs": {
       "get": {
         "tags": [
@@ -5066,6 +5122,25 @@
             "type": "boolean",
             "title": "Use Model Judge",
             "default": true
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Seed",
+            "default": 1337
+          },
+          "corpus": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Corpus"
+          },
+          "corpus_name": {
+            "type": "string",
+            "title": "Corpus Name",
+            "default": "custom"
           }
         },
         "type": "object",
@@ -6097,6 +6172,28 @@
             ],
             "title": "Test Type"
           },
+          "evaluator_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluator Key"
+          },
+          "evaluator_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluator Version"
+          },
           "confidence": {
             "type": "number",
             "title": "Confidence"
@@ -6210,6 +6307,8 @@
           "control_ref",
           "policy_id",
           "test_type",
+          "evaluator_key",
+          "evaluator_version",
           "confidence",
           "impact",
           "risk_level",
@@ -6257,6 +6356,10 @@
             "type": "string",
             "title": "Category"
           },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
           "severity": {
             "type": "string",
             "title": "Severity"
@@ -6269,9 +6372,28 @@
             "type": "string",
             "title": "Risk Level"
           },
+          "risk_score": {
+            "type": "number",
+            "title": "Risk Score"
+          },
           "system_id": {
             "type": "string",
             "title": "System Id"
+          },
+          "control_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Ref"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
           },
           "occurrences": {
             "type": "integer",
@@ -6293,10 +6415,13 @@
           "number",
           "title",
           "category",
+          "dimension",
           "severity",
           "status",
           "risk_level",
+          "risk_score",
           "system_id",
+          "confidence",
           "occurrences",
           "sample_size",
           "created_at"

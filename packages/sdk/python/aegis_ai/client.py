@@ -310,6 +310,54 @@ class Providers(_Resource):
         return self._t.request("POST", f"/api/v1/providers/{provider_id}/test")
 
 
+class ApiKeys(_Resource):
+    def list(self) -> JsonList:
+        """List all API keys for the workspace."""
+        return self._t.request("GET", "/api/v1/api-keys")
+
+    def create(
+        self,
+        name: str,
+        role: str = "analyst",
+        scopes: Sequence[str] | None = None,
+        expires_in_days: int | None = None,
+        test: bool = False,
+    ) -> dict[str, Any]:
+        """Issue a new API key."""
+        return self._t.request(
+            "POST",
+            "/api/v1/api-keys",
+            json={
+                "name": name,
+                "role": role,
+                "scopes": list(scopes) if scopes is not None else ["read"],
+                "expires_in_days": expires_in_days,
+                "test": test,
+            },
+        )
+
+    def get(self, key_id: str) -> dict[str, Any]:
+        """Retrieve details of an API key."""
+        return self._t.request("GET", f"/api/v1/api-keys/{key_id}")
+
+    def update(self, key_id: str, *, name: str | None = None, scopes: Sequence[str] | None = None) -> dict[str, Any]:
+        """Update an API key's name or scopes."""
+        payload: dict[str, Any] = {}
+        if name is not None:
+            payload["name"] = name
+        if scopes is not None:
+            payload["scopes"] = list(scopes)
+        return self._t.request("PATCH", f"/api/v1/api-keys/{key_id}", json=payload)
+
+    def rotate(self, key_id: str) -> dict[str, Any]:
+        """Rotate an API key: revokes the old key and returns a new plaintext key."""
+        return self._t.request("POST", f"/api/v1/api-keys/{key_id}/rotate")
+
+    def revoke(self, key_id: str) -> dict[str, Any]:
+        """Revoke an API key."""
+        return self._t.request("DELETE", f"/api/v1/api-keys/{key_id}")
+
+
 class Aegis:
     """Synchronous Aegis API client."""
 
@@ -326,6 +374,7 @@ class Aegis:
         self.agents = Agents(self._t)
         self.monitoring = Monitoring(self._t)
         self.providers = Providers(self._t)
+        self.api_keys = ApiKeys(self._t)
 
     def overview(self) -> dict[str, Any]:
         return self._t.request("GET", "/api/v1/overview")

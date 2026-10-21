@@ -77,7 +77,7 @@ class ClaimEvaluator(Evaluator):
                 sources_used.setdefault(s.doc_id, s)
             inv_claims: list[ClaimResult] = []
             for claim in extract_claims(inv.output):
-                verification = verify_claim(claim, sources)
+                verification = verify_claim(claim, sources, embedder=getattr(ctx, "embedder", None))
                 judgment = None
                 ambiguous = verification.status in (ClaimStatus.PARTIALLY_SUPPORTED, ClaimStatus.UNSUPPORTED)
                 if ambiguous and verification.best is not None and case.params.get("use_model_judge", True):
