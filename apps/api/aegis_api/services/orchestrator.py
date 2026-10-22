@@ -13,6 +13,7 @@ Design choices:
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -127,12 +128,15 @@ class AuditRunner:
         self._seq += 1
         if progress is not None:
             self.audit.progress = progress
+        if stage is not None:
+            self.audit.stage = stage if isinstance(stage, str) else stage.value
+        stage_val = self.audit.stage or stage
         event = AuditEvent(
             organization_id=self.org_id,
             audit_id=self.audit.id,
             seq=self._seq,
             type=type_,
-            stage=stage,
+            stage=stage_val,
             level=level,
             message=message,
             progress=self.audit.progress,
@@ -140,6 +144,8 @@ class AuditRunner:
         )
         self.session.add(event)
         self.session.flush()
+        with contextlib.suppress(Exception):
+            self.session.commit()
 
     def _on_model_call(self, task: str, result: Any, error: str | None) -> None:
         if error:
